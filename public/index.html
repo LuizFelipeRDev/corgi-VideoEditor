@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+  <title>CORGI-EDITOR</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            retro: {
+              bg: '#b5dff5',
+              box: '#f5f0d0',
+              black: '#1a1a1a',
+              accent: '#2d8cf0',
+            }
+          },
+          fontFamily: {
+            pixel: ['"Press Start 2P"', 'monospace'],
+          },
+          boxShadow: {
+            retro: '4px 4px 0px #1a1a1a',
+            'retro-sm': '2px 2px 0px #1a1a1a',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; user-select: none; }
+    .btn-retro:active { box-shadow: 0 0 #1a1a1a; transform: translate(2px, 2px); }
+    .drag-over { background-color: #d4edda !important; border-color: #28a745 !important; }
+    .progress-fill { transition: width 0.3s ease; }
+  </style>
+</head>
+<body class="bg-retro-black flex items-center justify-center p-2">
+
+  <!-- JANELA -->
+  <div class="w-[620px] h-[390px] flex flex-col border-[4px] border-retro-black bg-retro-box rounded">
+
+    <!-- TITLE BAR -->
+    <div class="bg-retro-box border-b-2 border-retro-black px-3 py-1.5 flex items-center justify-between shrink-0" style="-webkit-app-region: drag">
+      <h1 class="font-pixel text-[10px] text-retro-black">CORGI-EDITOR</h1>
+      <div class="flex gap-1.5" style="-webkit-app-region: no-drag">
+        <button id="btnMinimize" class="btn-retro w-6 h-6 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm flex items-center justify-center text-[10px] font-bold hover:bg-gray-200">—</button>
+        <button id="btnClose" class="btn-retro w-6 h-6 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm flex items-center justify-center text-[10px] font-bold hover:bg-red-200">✕</button>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="flex flex-1 min-h-0">
+
+      <!-- LEFT: DROP ZONE + INFO -->
+      <div class="w-1/2 p-4 border-r-2 border-retro-black flex flex-col">
+
+        <!-- DROP ZONE -->
+        <div id="dropZone"
+             class="border-2 border-dashed border-retro-black rounded-lg bg-retro-bg shadow-retro p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-green-50 flex-1 relative">
+          <button id="btnClearFile" class="hidden absolute top-1 right-1 w-5 h-5 bg-red-500 border border-red-700 rounded text-white text-[10px] font-bold hover:bg-red-600 z-10" title="Limpar">✕</button>
+          <div id="dropContent">
+            <svg class="w-10 h-10 mx-auto mb-2 text-retro-black opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+            </svg>
+            <p class="font-pixel text-[8px] text-retro-black text-center leading-loose">
+              DROP AUDIO / VIDEO<br>
+              <span class="text-[7px] opacity-60">ou clique aqui</span>
+            </p>
+          </div>
+          <div id="dropLoaded" class="hidden text-center">
+            <svg class="w-8 h-8 mx-auto mb-1 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <p class="font-pixel text-[7px] text-green-700" id="loadedFileName"></p>
+          </div>
+        </div>
+
+        <input type="file" id="fileInput" class="hidden" accept="audio/*,video/*,.mp4,.mp3,.wav,.mkv,.avi,.mov,.webm,.flac,.ogg">
+
+        <!-- FILE INFO -->
+        <div class="mt-3 space-y-1.5 shrink-0">
+          <div class="flex justify-between items-center border-b border-retro-black/20 pb-1">
+            <span class="font-pixel text-[7px] text-retro-black/60">NOME:</span>
+            <span class="font-pixel text-[7px] text-retro-black" id="fileName">—</span>
+          </div>
+          <div class="flex justify-between items-center border-b border-retro-black/20 pb-1">
+            <span class="font-pixel text-[7px] text-retro-black/60">DURAÇÃO:</span>
+            <span class="font-pixel text-[7px] text-retro-black" id="fileDuration">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: CONTROLS -->
+      <div class="w-1/2 p-4 flex flex-col justify-center">
+
+        <!-- VOLUME MINIMO -->
+        <div class="mb-4">
+          <label class="font-pixel text-[7px] text-retro-black uppercase block mb-2">VOLUME MÍNIMO</label>
+          <div class="flex items-center gap-2">
+            <input type="number" id="threshold" value="-35" step="0.5" min="-80" max="0"
+                   class="w-20 h-9 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[9px] text-retro-black outline-none focus:border-retro-accent">
+            <span class="font-pixel text-[8px] text-retro-black">dB</span>
+          </div>
+        </div>
+
+        <!-- MARGEM -->
+        <div class="mb-4">
+          <label class="font-pixel text-[7px] text-retro-black uppercase block mb-2">MARGEM</label>
+          <div class="flex items-center gap-2">
+            <input type="number" id="margin" value="0.1" step="0.1" min="0" max="10"
+                   class="w-20 h-9 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[9px] text-retro-black outline-none focus:border-retro-accent">
+            <span class="font-pixel text-[8px] text-retro-black">sec</span>
+          </div>
+        </div>
+
+        <!-- EXPORTAR -->
+        <button id="btnExport" disabled
+                class="btn-retro w-full h-10 bg-retro-bg border-2 border-retro-black rounded shadow-retro font-pixel text-[9px] text-retro-black uppercase tracking-wider hover:bg-yellow-50 disabled:opacity-40 disabled:cursor-not-allowed">
+          EXPORTAR
+        </button>
+
+        <!-- PROGRESS BAR -->
+        <div class="w-full h-10 mt-3 bg-retro-bg border-2 border-retro-black rounded shadow-retro overflow-hidden relative">
+          <div id="progressFill" class="progress-fill h-full bg-green-500/80" style="width: 0%"></div>
+          <span id="progressText" class="absolute inset-0 flex items-center justify-center font-pixel text-[7px] text-retro-black">0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM BAR -->
+    <div class="bg-retro-bg border-t-2 border-retro-black px-3 py-1.5 shrink-0 flex items-center justify-between">
+      <span class="font-pixel text-[7px] text-retro-black/60 truncate flex-1" id="outputPath">PASTA: MESMA DO ARQUIVO</span>
+      <button id="btnSettings" class="btn-retro w-6 h-6 bg-retro-box border-2 border-retro-black rounded-full shadow-retro-sm flex items-center justify-center text-[9px] hover:bg-gray-200 shrink-0 ml-2" title="Configurações">⚙</button>
+    </div>
+
+  </div>
+
+  <!-- MODAL CONFIGURAÇÕES -->
+  <div id="modalOverlay" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro w-80 p-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-pixel text-[9px] text-retro-black">CONFIGURAÇÕES</h2>
+        <button id="btnCloseModal" class="btn-retro w-6 h-6 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm flex items-center justify-center text-[10px] font-bold hover:bg-red-200">✕</button>
+      </div>
+      <div class="mb-4">
+        <label class="font-pixel text-[7px] text-retro-black uppercase block mb-2">PASTA DE DESTINO</label>
+        <div class="flex gap-2">
+          <input type="text" id="outputPathInput" readonly placeholder="Mesma pasta do arquivo"
+                 class="flex-1 h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none truncate">
+          <button id="btnSelectFolder" class="btn-retro h-8 px-3 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[7px] hover:bg-gray-200">...</button>
+        </div>
+      </div>
+      <button id="btnSaveSettings" class="btn-retro w-full h-9 bg-retro-bg border-2 border-retro-black rounded shadow-retro font-pixel text-[8px] text-retro-black uppercase hover:bg-green-100">
+        SALVAR
+      </button>
+    </div>
+  </div>
+
+  <script src="../src/renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "name": "corgi-editor",
+  "version": "0.1.0",
+  "description": "CORGI-EDITOR - Edição automática de vídeo/áudio",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "author": "Luiz",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.corgi.editor",
+    "productName": "CORGI-EDITOR",
+    "files": [
+      "src/**/*",
+      "public/**/*",
+      "bin/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/",
+        "to": "bin/"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": null
+    }
+  }
+}
