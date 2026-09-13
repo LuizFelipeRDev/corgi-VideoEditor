@@ -1,21 +1,21 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
 const isDev = !app.isPackaged;
-const ROOT = isDev ? __dirname : path.dirname(app.getPath('exe'));
-const resourcesPath = isDev ? __dirname : process.resourcesPath;
+const resourcesPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
 const configPath = path.join(resourcesPath, 'config.ini');
 
 function getBinPath() {
-  const devPath = path.join(__dirname, '..', 'bin', 'auto-editor.exe');
-  if (fs.existsSync(devPath)) return devPath;
-  return path.join(resourcesPath, 'bin', 'auto-editor.exe');
+  if (!isDev) {
+    return path.join(process.resourcesPath, 'bin', 'auto-editor.exe');
+  }
+  return path.join(__dirname, '..', 'bin', 'auto-editor.exe');
 }
 
 function readConfig() {
-  const defaults = { threshold: '-35', margin: '0.1', output_folder: '' };
+  const defaults = { threshold: '-35', margin: '0.1', output_folder: '', output_format: 'mp3' };
   if (!fs.existsSync(configPath)) return defaults;
   try {
     const content = fs.readFileSync(configPath, 'utf-8');
@@ -32,7 +32,7 @@ function readConfig() {
 
 function writeConfig(config) {
   fs.writeFileSync(configPath,
-    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\n`, 'utf-8');
+    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\n`, 'utf-8');
 }
 
 let mainWindow;
@@ -44,13 +44,14 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false,
     },
   });
 
   if (isDev) {
-    mainWindow.loadFile(path.join(__dirname, '..', 'public', 'index.html'));
+    mainWindow.loadURL('http://localhost:5173');
   } else {
-    mainWindow.loadFile(path.join(process.resourcesPath, 'public', 'index.html'));
+    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 }
 
@@ -82,29 +83,50 @@ ipcMain.handle('join-path', (e, dir, filename) => {
   return path.join(dir, filename);
 });
 
+ipcMain.handle('open-folder', async (e, folderPath) => {
+  if (folderPath && fs.existsSync(folderPath)) {
+    await shell.openPath(folderPath);
+  }
+});
+
 ipcMain.handle('run-auto-editor', async (event, args) => {
   const binPath = getBinPath();
   if (!fs.existsSync(binPath)) return { success: false, error: 'Não encontrado' };
 
   return new Promise((resolve) => {
-    const proc = spawn(binPath, args);
+    let stderrData = '';
+    const proc = spawn(binPath, args, {
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      cwd: path.dirname(binPath),
+    });
 
     proc.stdout.on('data', (d) => {
-      mainWindow?.webContents.send('auto-editor-output', d.toString());
+      mainWindow?.webContents.send('auto-editor-output', d.toString('utf-8'));
     });
 
     proc.stderr.on('data', (d) => {
-      mainWindow?.webContents.send('auto-editor-output', d.toString());
+      const text = d.toString('utf-8');
+      stderrData += text;
+      mainWindow?.webContents.send('auto-editor-output', text);
     });
 
     proc.on('close', (code) => {
-      mainWindow?.webContents.send('auto-editor-done', code === 0);
-      resolve({ success: code === 0, code });
+      if (code === 0) {
+        mainWindow?.webContents.send('auto-editor-done', true);
+        resolve({ success: true, code });
+      } else {
+        const errorMsg = stderrData.trim() || `Processo finalizou com código ${code}`;
+        mainWindow?.webContents.send('auto-editor-error', errorMsg);
+        mainWindow?.webContents.send('auto-editor-done', false);
+        resolve({ success: false, code, error: errorMsg });
+      }
     });
 
-    proc.on('error', () => {
+    proc.on('error', (err) => {
+      const errorMsg = `Falha ao executar: ${err.message}`;
+      mainWindow?.webContents.send('auto-editor-error', errorMsg);
       mainWindow?.webContents.send('auto-editor-done', false);
-      resolve({ success: false });
+      resolve({ success: false, error: errorMsg });
     });
   });
 });
