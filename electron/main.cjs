@@ -15,7 +15,7 @@ function getBinPath() {
 }
 
 function readConfig() {
-  const defaults = { threshold: '-35', margin: '0.1', output_folder: '', output_format: 'mp3' };
+  const defaults = { threshold: '-30', margin: '0.5', output_folder: '', output_format: 'mp3' };
   if (!fs.existsSync(configPath)) return defaults;
   try {
     const content = fs.readFileSync(configPath, 'utf-8');

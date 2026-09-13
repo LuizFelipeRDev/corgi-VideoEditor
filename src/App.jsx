@@ -11,8 +11,8 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null)
   const [outputFolder, setOutputFolder] = useState('')
   const [outputFormat, setOutputFormat] = useState('mp3')
-  const [threshold, setThreshold] = useState('-35')
-  const [marginVal, setMarginVal] = useState('0.1')
+  const [threshold, setThreshold] = useState('-30')
+  const [marginVal, setMarginVal] = useState('0.5')
   const [processing, setProcessing] = useState(false)
   const [progress, setProgress] = useState({ pct: 0, text: '0%' })
   const [showSettings, setShowSettings] = useState(false)
@@ -122,6 +122,7 @@ function App() {
           processing={processing}
           onExport={handleExport}
           progress={progress}
+          onSaveConfig={handleSaveSettings}
         />
       </div>
       <BottomBar

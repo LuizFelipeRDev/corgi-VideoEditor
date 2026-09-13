@@ -1,4 +1,7 @@
-function Controls({ threshold, setThreshold, marginVal, setMarginVal, processing, onExport, progress }) {
+function Controls({ threshold, setThreshold, marginVal, setMarginVal, processing, onExport, progress, onSaveConfig }) {
+  const handleBlur = () => {
+    onSaveConfig({ threshold, margin: marginVal })
+  }
   return (
     <div className="w-1/2 p-4 flex flex-col justify-center">
       <div className="mb-4">
@@ -10,6 +13,7 @@ function Controls({ threshold, setThreshold, marginVal, setMarginVal, processing
               inputMode="decimal"
               value={threshold}
               onChange={(e) => setThreshold(e.target.value)}
+              onBlur={handleBlur}
               className="w-full px-2 font-pixel text-[9px] text-retro-black outline-none bg-transparent translate-y-[2px]"
             />
           </div>
@@ -26,6 +30,7 @@ function Controls({ threshold, setThreshold, marginVal, setMarginVal, processing
               inputMode="decimal"
               value={marginVal}
               onChange={(e) => setMarginVal(e.target.value)}
+              onBlur={handleBlur}
               className="w-full px-2 font-pixel text-[9px] text-retro-black outline-none bg-transparent translate-y-[2px]"
             />
           </div>
