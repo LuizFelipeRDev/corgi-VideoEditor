@@ -40,6 +40,7 @@ let mainWindow;
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 640, height: 420, resizable: false, frame: false, transparent: false,
+    icon: path.join(__dirname, '..', 'assets', 'logo.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

@@ -1,4 +1,4 @@
-function BottomBar({ outputFolder, selectedFile, onOpenSettings }) {
+function BottomBar({ outputFolder, selectedFile, onOpenSettings, onOpenAbout }) {
   const handleOpenFolder = async () => {
     if (outputFolder) {
       await window.api.openFolder(outputFolder)
@@ -12,6 +12,13 @@ function BottomBar({ outputFolder, selectedFile, onOpenSettings }) {
       <span className="font-pixel text-[7px] text-retro-black/60 truncate flex-1">
         PASTA: {outputFolder || 'MESMA DO ARQUIVO'}
       </span>
+      <button
+        onClick={onOpenAbout}
+        className="btn-retro w-6 h-6 bg-retro-box border-2 border-retro-black rounded-full shadow-retro-sm flex items-center justify-center hover:bg-gray-200 shrink-0 ml-2"
+        title="Sobre"
+      >
+        ?
+      </button>
       <button
         onClick={handleOpenFolder}
         className="btn-retro w-6 h-6 bg-retro-box border-2 border-retro-black rounded-full shadow-retro-sm flex items-center justify-center hover:bg-gray-200 shrink-0 ml-2"

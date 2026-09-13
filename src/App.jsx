@@ -5,6 +5,7 @@ import Controls from './components/Controls'
 import BottomBar from './components/BottomBar'
 import SettingsModal from './components/SettingsModal'
 import ErrorModal from './components/ErrorModal'
+import AboutModal from './components/AboutModal'
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null)
@@ -16,6 +17,7 @@ function App() {
   const [progress, setProgress] = useState({ pct: 0, text: '0%' })
   const [showSettings, setShowSettings] = useState(false)
   const [showError, setShowError] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const errorBuffer = useRef('')
   const lastPct = useRef(0)
@@ -126,6 +128,7 @@ function App() {
         outputFolder={outputFolder}
         selectedFile={selectedFile}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenAbout={() => setShowAbout(true)}
       />
       {showSettings && (
         <SettingsModal
@@ -140,6 +143,9 @@ function App() {
           message={errorMessage}
           onClose={() => setShowError(false)}
         />
+      )}
+      {showAbout && (
+        <AboutModal onClose={() => setShowAbout(false)} />
       )}
     </div>
   )

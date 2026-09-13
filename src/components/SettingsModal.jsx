@@ -35,7 +35,7 @@ function SettingsModal({ outputFolder, outputFormat, onClose, onSave }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro w-80 p-4"
+        className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro h-50 w-80 p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex gap-0 mb-4">
@@ -43,7 +43,7 @@ function SettingsModal({ outputFolder, outputFormat, onClose, onSave }) {
             onClick={() => setTab('geral')}
             className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${
               tab === 'geral'
-                ? 'bg-retro-bg text-retro-black border-b-0 z-10'
+                ? 'bg-retro-bg text-retro-black z-10'
                 : 'bg-retro-box text-retro-black/50'
             }`}
           >
@@ -53,7 +53,7 @@ function SettingsModal({ outputFolder, outputFormat, onClose, onSave }) {
             onClick={() => setTab('saida')}
             className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${
               tab === 'saida'
-                ? 'bg-retro-bg text-retro-black border-b-0 z-10'
+                ? 'bg-retro-bg text-retro-black z-10'
                 : 'bg-retro-box text-retro-black/50'
             }`}
           >
@@ -77,13 +77,19 @@ function SettingsModal({ outputFolder, outputFormat, onClose, onSave }) {
                   readOnly
                   value={localFolder}
                   placeholder="Mesma pasta do arquivo"
-                  className="flex-1 h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none truncate"
+                  className="flex-1 h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black placeholder-retro-black outline-none truncate"
                 />
                 <button
                   onClick={handleSelectFolder}
                   className="btn-retro h-8 px-3 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[7px] hover:bg-gray-200"
                 >
                   ...
+                </button>
+                <button
+                  onClick={() => setLocalFolder('')}
+                  className="btn-retro h-8 w-8 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm flex items-center justify-center text-[10px] font-bold hover:bg-red-200 shrink-0"
+                >
+                  ✕
                 </button>
               </div>
             </div>
@@ -103,7 +109,7 @@ function SettingsModal({ outputFolder, outputFormat, onClose, onSave }) {
               <select
                 value={localFormat}
                 onChange={(e) => setLocalFormat(e.target.value)}
-                className="w-full h-9 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer"
+                className="w-full h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer"
               >
                 {OUTPUT_FORMATS.map((f) => (
                   <option key={f.value} value={f.value}>{f.label}</option>
