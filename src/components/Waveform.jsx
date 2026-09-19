@@ -10,7 +10,14 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef }) {
   const [playing, setPlaying] = useState(false)
 
   useEffect(() => {
-    if (!selectedFile || !containerRef.current) return
+    if (!selectedFile || !containerRef.current) {
+      if (wsRef.current) {
+        wsRef.current.pause()
+        wsRef.current.destroy()
+        wsRef.current = null
+      }
+      return
+    }
 
     setReady(false)
     setShowReady(false)
@@ -56,6 +63,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef }) {
     wsRef.current = ws
 
     return () => {
+      ws.pause()
       ws.destroy()
       wsRef.current = null
     }

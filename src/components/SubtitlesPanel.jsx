@@ -333,6 +333,20 @@ function SubtitlesPanel({
             >
               + ADICIONAR LEGENDA
             </button>
+
+            {subtitles.length > 0 && (
+              <button
+                onClick={onGenerate}
+                disabled={generating}
+                className={`btn-retro w-full h-7 border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[6px] uppercase mt-1 ${
+                  generating
+                    ? 'bg-retro-bg text-retro-black/40 cursor-not-allowed'
+                    : 'bg-retro-bg text-retro-black hover:bg-yellow-100'
+                }`}
+              >
+                {generating ? 'REGERANDO...' : 'REGERAR LEGENDA'}
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -34,6 +34,7 @@ function App() {
   const lastPct = useRef(0)
   const videoDurationRef = useRef(0)
   const videoRef = useRef(null)
+  const exportingRef = useRef(false)
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
   const [subtitleModel, setSubtitleModel] = useState('small')
@@ -90,7 +91,7 @@ function App() {
     })
 
     window.api.onDone((ok) => {
-      setProcessing(false)
+      if (!exportingRef.current) setProcessing(false)
       if (ok) {
         setProgress({ pct: 100, text: '100%' })
       } else {
@@ -195,6 +196,7 @@ function App() {
 
   const handleExport = async () => {
     if (!selectedFile || processing) return
+    exportingRef.current = true
     setProcessing(true)
     errorBuffer.current = ''
     lastPct.current = 0
@@ -227,6 +229,7 @@ function App() {
     const result = await window.api.runAutoEditor(args)
 
     if (!result.success) {
+      exportingRef.current = false
       setProcessing(false)
       return
     }
@@ -264,12 +267,14 @@ function App() {
         if (shouldBurn) {
           assPath = await window.api.joinPath(outputDir, 'corgi_sub.ass')
           const styleCfg = subtitleConfigs[subtitleStyle] || {}
+          const videoW = videoRef.current?.videoWidth || 1920
+          const videoH = videoRef.current?.videoHeight || 1080
           const assContent = generateAssContent(
             subtitles,
             subtitleStyle,
             subtitlePosition,
-            1920,
-            1080,
+            videoW,
+            videoH,
             styleCfg.wordsPerLine || wordsPerLine,
             styleCfg.linesCount || linesCount,
             styleCfg.primaryColor || undefined,
@@ -315,6 +320,7 @@ function App() {
       setProgress({ pct: 100, text: '100%' })
     } finally {
       await window.api.deleteFile(tempOutPath)
+      exportingRef.current = false
       setProcessing(false)
     }
   }
@@ -380,7 +386,12 @@ function App() {
       console.log('[subtitle] SRT file content:', wordsText ? wordsText.substring(0, 200) : 'EMPTY')
       if (wordsText) {
         const wordTimings = parseSrt(wordsText)
-        const enriched = groupWordsIntoSegments(wordTimings, wordsPerLine, linesCount)
+        const styleCfg = subtitleConfigs[subtitleStyle] || {}
+        const enriched = groupWordsIntoSegments(
+          wordTimings,
+          styleCfg.wordsPerLine || wordsPerLine,
+          styleCfg.linesCount || linesCount
+        )
         setSubtitles(enriched)
       }
       setGeneratingSubtitles(false)

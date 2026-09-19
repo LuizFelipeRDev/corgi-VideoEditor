@@ -38,6 +38,11 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
 
   const clearFile = (e) => {
     e.stopPropagation()
+    if (videoRef.current) {
+      videoRef.current.pause()
+      videoRef.current.removeAttribute('src')
+      videoRef.current.load()
+    }
     setSelectedFile(null)
     if (onClear) onClear()
   }
@@ -55,7 +60,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg shadow-retro p-4 flex flex-col items-center justify-center cursor-pointer transition-all flex-1 relative ${
+        className={`border-2 border-dashed rounded-lg shadow-retro p-4 flex flex-col items-center justify-center cursor-pointer transition-all flex-1 relative overflow-hidden ${
           isDragOver
             ? 'drag-over'
             : selectedFile
@@ -84,11 +89,12 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             </p>
           </div>
         ) : isVideo ? (
-          <div className="w-full h-full flex flex-col items-center justify-center">
+          <div className="w-full h-full min-h-0 flex flex-col items-center justify-center overflow-hidden">
             <video
               ref={videoRef}
               src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
               onTimeUpdate={handleTimeUpdate}
+              muted
               className="max-w-full max-h-full object-contain rounded"
             />
           </div>

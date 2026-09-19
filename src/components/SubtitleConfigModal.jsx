@@ -10,6 +10,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
   const [localWordsPerLine, setLocalWordsPerLine] = useState(config.wordsPerLine || defaultWordsPerLine)
   const [localLinesCount, setLocalLinesCount] = useState(config.linesCount || defaultLinesCount)
   const [localFont, setLocalFont] = useState(config.fontId || defaultFont)
+  const [useGlobalConfig, setUseGlobalConfig] = useState(config.useGlobalConfig ?? true)
 
   const handleReset = () => {
     setLocalPrimary(styleConfig.primaryColor)
@@ -23,9 +24,10 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
     onSave({
       primaryColor: localPrimary,
       highlightColor: localHighlight,
-      wordsPerLine: localWordsPerLine,
-      linesCount: localLinesCount,
+      wordsPerLine: useGlobalConfig ? undefined : localWordsPerLine,
+      linesCount: useGlobalConfig ? undefined : localLinesCount,
       fontId: localFont,
+      useGlobalConfig,
     })
   }
 
@@ -77,12 +79,20 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
             </div>
           </div>
 
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setUseGlobalConfig(!useGlobalConfig)}>
+            <div className={`w-4 h-4 border-2 border-retro-black rounded flex items-center justify-center ${useGlobalConfig ? 'bg-retro-black' : 'bg-retro-bg'}`}>
+              {useGlobalConfig && <span className="text-retro-bg text-[8px] leading-none">✓</span>}
+            </div>
+            <span className="font-pixel text-[6px] text-retro-black uppercase">Usar configuracoes globais</span>
+          </div>
+
           <div>
             <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Palavras por linha</label>
             <select
               value={localWordsPerLine}
               onChange={(e) => setLocalWordsPerLine(Number(e.target.value))}
-              className="w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none appearance-none cursor-pointer"
+              disabled={useGlobalConfig}
+              className={`w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none appearance-none cursor-pointer ${useGlobalConfig ? 'opacity-40 cursor-not-allowed' : ''}`}
             >
               {[3, 4, 5, 6].map((n) => (
                 <option key={n} value={n}>{n}</option>
@@ -95,7 +105,8 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
             <select
               value={localLinesCount}
               onChange={(e) => setLocalLinesCount(Number(e.target.value))}
-              className="w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none appearance-none cursor-pointer"
+              disabled={useGlobalConfig}
+              className={`w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none appearance-none cursor-pointer ${useGlobalConfig ? 'opacity-40 cursor-not-allowed' : ''}`}
             >
               {[1, 2, 3].map((n) => (
                 <option key={n} value={n}>{n}</option>
