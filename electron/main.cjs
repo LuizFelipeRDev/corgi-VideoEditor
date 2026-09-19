@@ -113,7 +113,7 @@ function createWindow() {
     resizable: windowConfig.WINDOW_OPTIONS.resizable,
     frame: windowConfig.WINDOW_OPTIONS.frame,
     transparent: windowConfig.WINDOW_OPTIONS.transparent,
-    ...(isDev ? { icon: path.join(devRoot, 'assets', 'logo.ico') } : {}),
+    ...(isDev ? { icon: path.join(devRoot, 'assets', 'novaLogo.ico') } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

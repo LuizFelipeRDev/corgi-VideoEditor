@@ -65,14 +65,14 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/logo.ico",
+      "icon": "assets/novaLogo.ico",
       "signExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "assets/logo.ico",
-      "uninstallerIcon": "assets/logo.ico"
+      "installerIcon": "assets/novaLogo.ico",
+      "uninstallerIcon": "assets/novaLogo.ico"
     }
   }
 }
