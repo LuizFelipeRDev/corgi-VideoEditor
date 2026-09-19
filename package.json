@@ -64,9 +64,15 @@
       }
     ],
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "icon": "assets/logo.ico",
       "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/logo.ico",
+      "uninstallerIcon": "assets/logo.ico"
     }
   }
 }

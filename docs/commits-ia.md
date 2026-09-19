@@ -26,6 +26,7 @@
 - Downloads salvos em `%APPDATA%/corgi-editor/bin/whisper/`
 
 ### Estrutura de diretorios em producao
+```
 %APPDATA%/corgi-editor/
   config.ini
   bin/
@@ -41,164 +42,174 @@
       ...                    (outros modelos downloads)
   fonts/
     *.ttf
-Acoes necessarias
-1. Criar AGENTS.md na raiz do projeto com as regras acima
-2. Criar GitHub Release v1.0.0 e fazer upload de whisper-cuda.zip
-3. Atualizar URL em electron/main.cjs:678
-4. Rebuild e testar
+```
 
+### Build target
+- **NSIS installer** (`dist/CORGI-EDITOR-Setup-*.exe`)
+- Instalador uma vez em `C:\Program Files\CORGI-EDITOR\`
+- App roda da pasta de instalacao — abre instantaneamente
+- NAO usar `portable` (extrai a cada execucao, sempre lento)
 
-# Git — Commit, Tag e Release
+# Git — Commit, Tag and Release
 
-Suba as alterações para o GitHub seguindo **rigorosamente** as convenções abaixo.
+Push the changes to GitHub following ****strictly**** the conventions below.
 
-> **IMPORTANTE:** Não invente informações, versões, funcionalidades, correções ou arquivos.
-> Use somente informações comprovadamente presentes nas alterações realizadas no projeto ou informadas pelo usuário.
+*>* ****IMPORTANT:**** *Do not invent information, versions, features, fixes, or files.*
+
+*> Use only information demonstrably present in the changes made to the project or provided by the user.*
 
 ---
 
 ## Commits
 
-Faça o commit das alterações.
+Commit the changes.
 
-### Formato da mensagem
+### Message Format
 
-A mensagem deve ser **curta e objetiva**, seguindo:
+The message must be ****short and objective****, following:
 
-`<tipo>: <versão> - descrição curta das alterações`
+`<type>: <version> - short description of the changes`
 
-Exemplo:
+Example:
 
 `feat: v1.3.0 - playlist subfolder, show-filesize option, deploy docs`
 
-### Tipos permitidos
+### Allowed Types
 
-Use somente um dos tipos abaixo:
+Use only one of the following types:
 
-- `feat` — nova funcionalidade
-- `docs` — documentação
-- `chore` — tarefas de manutenção
-- `fix` — correção de problema
-- `bugfix` — correção de bug
-- `perf` — melhoria de desempenho
-- `refactor` — refatoração sem alteração de comportamento
-- `style` — alterações de estilo/formatação
-- `test` — testes
-- `revert` — reversão de alteração
-- `ci` — integração/automação
-- `build` — alterações relacionadas ao build
+* `feat` — new feature
+* `docs` — documentation
+* `chore` — maintenance tasks
+* `fix` — problem fix
+* `bugfix` — bug fix
+* `perf` — performance improvement
+* `refactor` — refactoring without behavior changes
+* `style` — style/formatting changes
+* `test` — tests
+* `revert` — reverting a change
+* `ci` — integration/automation
+* `build` — build-related changes
 
-### Regras importantes
+### Important Rules
 
-- **Todas as mensagens de commit, release e tag DEVEM ser escritas em INGLÊS.**
-- Não invente o tipo do commit.
-- Analise as alterações reais (`git diff`, `git status`) antes de definir o tipo.
-- Não descreva funcionalidades que não estejam presentes nas alterações.
-- Não inclua alterações não relacionadas ao objetivo do commit.
-- Não faça `git add .` automaticamente se isso puder incluir arquivos não relacionados.
-- Verifique quais arquivos serão incluídos antes do commit.
-- Não altere arquivos apenas para justificar uma mensagem de commit.
-- Se houver alterações não relacionadas, pergunte ao usuário se elas devem ser incluídas.
-- A mensagem deve representar **somente o que realmente foi alterado**.
+* ****All commit, release, and tag messages MUST be written in ENGLISH.****
+* Do not invent the commit type.
+* Analyze the actual changes (`git diff`, `git status`) before determining the type.
+* Do not describe features that are not present in the changes.
+* Do not include changes unrelated to the purpose of the commit.
+* Do not automatically run `git add .` if this could include unrelated files.
+* Check which files will be included before committing.
+* Do not modify files just to justify a commit message.
+* If there are unrelated changes, ask the user whether they should be included.
+* The message must represent ****only what was actually changed****.
 
 ---
 
-## Versões
+## Versions
 
-A versão deve seguir:
+The version must follow:
 
-- `v1.0.0` = primeira versão estável
-- `v0.1.0` = implementação de módulo, funcionalidade relevante, refatoração ou alteração significativa
-- `v0.0.1` = correções, bugfixes, pequenos ajustes etc.
+* `v1.0.0` = first stable release
+* `v0.1.0` = module implementation, significant feature, refactoring, or significant change
+* `v0.0.1` = fixes, bugfixes, small adjustments, etc.
 
-### Regra obrigatória
+### Mandatory Rule
 
-**A versão NÃO deve ser inventada ou inferida automaticamente.**
+****The version MUST NOT be invented or automatically inferred.****
 
-- O usuário deve informar qual versão deseja utilizar.
-- Se o usuário **não informar a versão**, PARE e pergunte qual versão deve ser utilizada.
-- Não escolha `v0.0.1`, `v0.1.0` ou qualquer outra versão por conta própria.
-- Não altere `package.json`, `package-lock.json`, `version`, manifestos ou outros arquivos de versão, a menos que o usuário tenha solicitado.
-- Não crie uma nova versão baseado apenas na quantidade ou importância das alterações.
+* The user must specify which version they want to use.
+* If the user ****does not provide the version****, STOP and ask which version should be used.
+* Do not choose `v0.0.1`, `v0.1.0`, or any other version on your own.
+* Do not modify `package.json`, `package-lock.json`, `version`, manifests, or other version-related files unless the user explicitly requested it.
+* Do not create a new version based solely on the quantity or importance of the changes.
 
 ---
 
 ## Tags
 
-Depois do commit, crie e suba a tag correspondente à versão informada pelo usuário.
+After the commit, create and push the tag corresponding to the version provided by the user.
 
-### Formato da tag
+### Tag Format
 
-A tag deve seguir:
+The tag must follow:
 
 `v1.3.0`
 
-E a mensagem da tag deve seguir:
+And the tag message must follow:
 
 `Release v1.3.0`
 
-### Regras obrigatórias
+### Mandatory Rules
 
-- O usuário deve informar a versão.
-- Se a versão não tiver sido informada, **pergunte antes de continuar**.
-- Não invente a versão.
-- Não crie tags adicionais.
-- Não altere ou sobrescreva uma tag existente sem autorização explícita do usuário.
-- Antes de criar a tag, verifique se ela já existe.
-- A tag deve apontar para o commit criado nesta operação.
-- Depois de criar a tag, faça o push da tag para o GitHub.
-
+* The user must provide the version.
+* If the version has not been provided, ****ask before continuing****.
+* Do not invent the version.
+* Do not create additional tags.
+* Do not modify or overwrite an existing tag without the user's explicit authorization.
+* Before creating the tag, check whether it already exists.
+* The tag must point to the commit created in this operation.
+* After creating the tag, push the tag to GitHub.
 
 ---
 
 ## Release
 
-Crie a Release correspondente à tag criada.
+Create the Release corresponding to the created tag.
 
-### Título
+### Title
 
-O título da Release deve ser:
+The Release title must be:
 
 `Release v1.3.0`
 
-Substitua `v1.3.0` pela versão informada pelo usuário.
+Replace `v1.3.0` with the version provided by the user.
 
-### Corpo da Release
+### Release Body
 
-O corpo deve conter:
+The body must contain:
 
-1. A versão.
-2. Um resumo das alterações realizadas.
-3. As alterações organizadas de acordo com o `commit info`.
-4. Somente informações comprovadas pelas alterações realizadas.
+1. The version.
+2. A summary of the changes made.
+3. The changes organized according to the `commit info`.
+4. Only information verified by the changes made.
 
-Exemplo:
+Example:
 
 ```commit
+
 ## feat: v1.3.0 - playlist subfolder, show-filesize option, deploy docs
 
 ### Features
 
 - **Rename**: YtCorgiDown → CorgiDown
-- **Multiplatform**: Suporte a Facebook, Dailymotion, Bilibili e outros sites via yt-dlp
-- **Crop thumbnail 1:1**: Capas de música cortadas em proporção quadrada (center crop)
-- **Aviso de metadados**: Mensagem quando não consegue obter informações do link (5 segundos)
+
+- **Multiplatform**: Support for Facebook, Dailymotion, Bilibili, and other sites via yt-dlp
+
+- **Crop thumbnail 1:1**: Music covers cropped to a square aspect ratio (center crop)
+
+- **Metadata warning**: Message when link information cannot be retrieved (5 seconds)
 
 ### Fix
 
-- Mensagem "Salvo em:" agora mostra o caminho correto do arquivo
-- Formato de vídeo com fallbacks para compatibilidade com mais sites
-- Caminho do ffmpeg corrigido para crop de thumbnail
-- Limpeza automática de arquivos `.jpg` residuais
-- Erro detalhado com `stderr` do yt-dlp
+- "Saved to:" message now displays the correct file path
+
+- Video format with fallbacks for compatibility with more sites
+
+- ffmpeg path corrected for thumbnail cropping
+
+- Automatic cleanup of residual `.jpg` files
+
+- Detailed error including yt-dlp `stderr`
 
 ### Stack
 
 - Electron 44 + Vite 6 + React 19 + Tailwind CSS 4
+
 - yt-dlp + ffmpeg + Deno
 
 ```
 
-### Regras Obrigatorias do Release
+### Mandatory Release Rules
 
-- Se o usuario pedir pra anexar a build no release do programa, gere uma nova build e coloque ele em ZIP
+* If the user asks to attach the program build to the Release, generate a new build and place it in a ZIP file.
