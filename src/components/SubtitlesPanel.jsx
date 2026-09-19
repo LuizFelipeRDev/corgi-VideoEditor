@@ -1,27 +1,35 @@
 import { useState, useRef, useEffect } from 'react'
 import { SUBTITLE_STYLE_LIST, SUBTITLE_POSITION_LIST } from '../lib/subtitleStyles'
+import SubtitleConfigModal from './SubtitleConfigModal'
 
 function SubtitlesPanel({
   subtitles,
   onGenerate,
   generating,
+  onStop,
   selectedFile,
   subtitlesEnabled,
   onUpdateSubtitle,
   onDeleteSubtitle,
-  onSplitSubtitle,
   onAddSubtitle,
   onSeekTo,
   currentTime,
   subtitleStyle,
   subtitlePosition,
+  wordsPerLine,
+  linesCount,
+  subtitleConfigs,
   onStyleChange,
   onPositionChange,
+  onConfigSave,
+  hasChanges,
+  onSave,
 }) {
   const [hoveredIndex, setHoveredIndex] = useState(null)
   const [editingText, setEditingText] = useState(null)
   const [editingStart, setEditingStart] = useState(null)
   const [editingEnd, setEditingEnd] = useState(null)
+  const [showConfig, setShowConfig] = useState(false)
   const textRef = useRef(null)
   const startRef = useRef(null)
   const endRef = useRef(null)
@@ -159,6 +167,13 @@ function SubtitlesPanel({
               ))}
             </div>
           </div>
+
+          <button
+            onClick={() => setShowConfig(true)}
+            className="mt-3 w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm font-pixel text-[6px] text-retro-black uppercase hover:bg-gray-200"
+          >
+            CONFIGURACAO LEGENDA
+          </button>
         </div>
       )}
 
@@ -191,6 +206,12 @@ function SubtitlesPanel({
             <div className="w-full h-4 border-2 border-retro-black rounded bg-retro-box overflow-hidden">
               <div className="h-full bg-retro-black/30 animate-pulse" />
             </div>
+            <button
+              onClick={onStop}
+              className="w-full h-8 border-2 border-red-700 rounded bg-red-500 shadow-retro-sm font-pixel text-[7px] text-white uppercase hover:bg-red-600"
+            >
+              PARAR
+            </button>
           </div>
         )}
 
@@ -263,28 +284,23 @@ function SubtitlesPanel({
                       rows={2}
                       className="w-full px-1 py-1 border border-retro-black rounded bg-retro-bg text-[7px] font-pixel text-retro-black outline-none resize-none"
                     />
-                  ) : (
+                   ) : (
                     <div
-                      className="font-pixel text-[7px] min-h-[20px] px-1 rounded"
+                      className="font-pixel text-[7px] min-h-[20px] px-1 rounded text-retro-black"
                       onClick={(e) => { e.stopPropagation(); setEditingText(index) }}
                     >
-                      {isActive && sub.words && sub.words.length > 0 ? (
-                        sub.words.map((word, wi) => {
-                          const wordStartMs = parseSrtTime(word.start)
-                          const wordEndMs = parseSrtTime(word.end)
-                          const nowMs = currentTime * 1000
-                          const isWordActive = nowMs >= wordStartMs && nowMs <= wordEndMs
+                      {sub.words && sub.words.length > 0 ? (
+                        sub.words.slice(0, (wordsPerLine || 4) * (linesCount || 2)).map((word, wi) => {
+                          const showBreak = wordsPerLine && (wi + 1) % wordsPerLine === 0 && wi < Math.min(sub.words.length, (wordsPerLine || 4) * (linesCount || 2)) - 1
                           return (
-                            <span
-                              key={wi}
-                              style={{ color: isWordActive ? '#FFD700' : '#000000', transition: 'color 0.1s' }}
-                            >
-                              {word.text}{' '}
+                            <span key={wi}>
+                              <span>{word.text} </span>
+                              {showBreak && <br />}
                             </span>
                           )
                         })
                       ) : (
-                        <span className="text-retro-black">{sub.text}</span>
+                        <span>{sub.text}</span>
                       )}
                     </div>
                   )}
@@ -292,16 +308,18 @@ function SubtitlesPanel({
                   {hoveredIndex === index && (
                     <div className="flex gap-1 mt-1 pt-1 border-t border-retro-black/20">
                       <button
-                        onClick={(e) => { e.stopPropagation(); onSplitSubtitle(index) }}
-                        className="btn-retro flex-1 h-5 bg-retro-bg border border-retro-black rounded font-pixel text-[5px] text-retro-black hover:bg-blue-100"
-                      >
-                        DIVIDIR
-                      </button>
-                      <button
                         onClick={(e) => { e.stopPropagation(); onDeleteSubtitle(index) }}
                         className="btn-retro flex-1 h-5 bg-retro-bg border border-retro-black rounded font-pixel text-[5px] text-retro-black hover:bg-red-200"
                       >
                         EXCLUIR
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onSave() }}
+                        className={`btn-retro flex-1 h-5 border border-retro-black rounded font-pixel text-[5px] text-retro-black ${
+                          hasChanges ? 'bg-yellow-100 hover:bg-yellow-200' : 'bg-retro-bg opacity-30 cursor-not-allowed'
+                        }`}
+                      >
+                        SALVAR
                       </button>
                     </div>
                   )}
@@ -318,6 +336,21 @@ function SubtitlesPanel({
           </div>
         )}
       </div>
+
+      {showConfig && (
+        <SubtitleConfigModal
+          subtitleStyle={subtitleStyle}
+          config={subtitleConfigs[subtitleStyle] || {}}
+          defaultWordsPerLine={wordsPerLine}
+          defaultLinesCount={linesCount}
+          onSave={(styleConfig) => {
+            const newConfigs = { ...subtitleConfigs, [subtitleStyle]: styleConfig }
+            onConfigSave(newConfigs)
+            setShowConfig(false)
+          }}
+          onClose={() => setShowConfig(false)}
+        />
+      )}
     </div>
   )
 }

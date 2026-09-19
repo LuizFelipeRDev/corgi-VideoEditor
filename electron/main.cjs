@@ -2,23 +2,63 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
+const https = require('https');
+const windowConfig = require('../src/global_config/window.js');
 
 const isDev = !app.isPackaged;
-const resourcesPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-const configPath = path.join(resourcesPath, 'config.ini');
+const devRoot = app.getAppPath();
+const bundledPath = isDev ? devRoot : process.resourcesPath;
+const userDataPath = app.getPath('userData');
+const configPath = path.join(userDataPath, 'config.ini');
+
+function copyBundledFiles() {
+  if (isDev) return;
+  const srcBin = path.join(process.resourcesPath, 'bin');
+  const dstBin = path.join(userDataPath, 'bin');
+  if (fs.existsSync(dstBin)) return;
+  fs.mkdirSync(dstBin, { recursive: true });
+  fs.cpSync(srcBin, dstBin, { recursive: true });
+  const srcFonts = path.join(process.resourcesPath, 'fonts');
+  const dstFonts = path.join(userDataPath, 'fonts');
+  if (fs.existsSync(dstFonts)) return;
+  fs.mkdirSync(dstFonts, { recursive: true });
+  fs.cpSync(srcFonts, dstFonts, { recursive: true });
+  console.log('[setup] bundled files copied to userData');
+}
 
 function getBinPath() {
   if (!isDev) {
-    return path.join(process.resourcesPath, 'bin', 'auto-editor.exe');
+    return path.join(userDataPath, 'bin', 'auto-editor.exe');
   }
-  return path.join(__dirname, '..', 'bin', 'auto-editor.exe');
+  return path.join(devRoot, 'bin', 'auto-editor.exe');
 }
 
 function getFfmpegPath() {
   if (!isDev) {
-    return path.join(process.resourcesPath, 'bin', 'ffmpeg.exe');
+    return path.join(userDataPath, 'bin', 'ffmpeg.exe');
   }
-  return path.join(__dirname, '..', 'bin', 'ffmpeg.exe');
+  return path.join(devRoot, 'bin', 'ffmpeg.exe');
+}
+
+function getWhisperCliPath() {
+  if (!isDev) {
+    return path.join(userDataPath, 'bin', 'whisper', 'whisper-cli.exe');
+  }
+  return path.join(devRoot, 'bin', 'whisper', 'whisper-cli.exe');
+}
+
+function getWhisperDir() {
+  if (!isDev) {
+    return path.join(userDataPath, 'bin', 'whisper');
+  }
+  return path.join(devRoot, 'bin', 'whisper');
+}
+
+function getFontsDir() {
+  if (!isDev) {
+    return path.join(userDataPath, 'fonts');
+  }
+  return path.join(devRoot, 'src', 'global_config', 'fonts');
 }
 
 function readConfig() {
@@ -28,11 +68,14 @@ function readConfig() {
     output_folder: '',
     output_format: 'mp3',
     subtitles: 'false',
-    subtitle_model: 'tiny',
+    subtitle_model: 'small',
     subtitle_position: 'bottom',
     subtitle_style: 'hormozi',
     green_screen: 'false',
     burn_subtitles: 'true',
+    words_per_line: '4',
+    lines_count: '2',
+    subtitle_configs: '{}',
   };
   if (!fs.existsSync(configPath)) return defaults;
   try {
@@ -50,15 +93,27 @@ function readConfig() {
 
 function writeConfig(config) {
   fs.writeFileSync(configPath,
-    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\n`, 'utf-8');
+    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\n`, 'utf-8');
 }
 
 let mainWindow;
+let whisperCliProc = null;
+let whisperCliStopped = false;
+let whisperCliHandled = false;
 
 function createWindow() {
+  const config = readConfig();
+  const initialWidth = config.subtitles === 'true'
+    ? windowConfig.WINDOW_SUBTITLES_WIDTH
+    : windowConfig.WINDOW_NO_SUBTITLES_WIDTH;
+
   mainWindow = new BrowserWindow({
-    width: 640, height: 420, resizable: false, frame: false, transparent: false,
-    icon: path.join(__dirname, '..', 'assets', 'logo.ico'),
+    width: initialWidth,
+    height: windowConfig.WINDOW_DEFAULT_HEIGHT,
+    resizable: windowConfig.WINDOW_OPTIONS.resizable,
+    frame: windowConfig.WINDOW_OPTIONS.frame,
+    transparent: windowConfig.WINDOW_OPTIONS.transparent,
+    ...(isDev ? { icon: path.join(devRoot, 'assets', 'logo.ico') } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -70,20 +125,29 @@ function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => { copyBundledFiles(); createWindow(); });
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => {
+  if (whisperCliProc) {
+    whisperCliProc.kill('SIGTERM');
+    whisperCliProc = null;
+  }
+});
 
 ipcMain.handle('minimize', () => mainWindow?.minimize());
 ipcMain.handle('close', () => mainWindow?.close());
 ipcMain.handle('get-config', () => readConfig());
 ipcMain.handle('save-config', (e, config) => writeConfig(config));
+ipcMain.handle('get-fonts-path', () => getFontsDir());
+ipcMain.handle('get-whisper-dir', () => getWhisperDir());
 
 ipcMain.handle('resize-window', (e, width, height) => {
   if (mainWindow) {
+    mainWindow.setMinimumSize(width, height)
     mainWindow.setSize(width, height)
   }
 });
@@ -176,10 +240,12 @@ ipcMain.handle('run-whisper', async (event, args) => {
 
   const resolvedArgs = args.map((arg, i) => {
     if (i === 2) {
-      const modelPath = path.join(binDir, arg)
-      if (fs.existsSync(modelPath)) return modelPath
-      const modelPathBin = path.join(binDir, arg + '.bin')
-      if (fs.existsSync(modelPathBin)) return modelPathBin
+      const direct = path.join(binDir, arg)
+      if (fs.existsSync(direct)) return arg
+      const withBin = path.join(binDir, arg + '.bin')
+      if (fs.existsSync(withBin)) return arg + '.bin'
+      const withGgml = path.join(binDir, 'ggml-' + arg + '.bin')
+      if (fs.existsSync(withGgml)) return 'ggml-' + arg + '.bin'
     }
     return arg
   });
@@ -218,6 +284,224 @@ ipcMain.handle('run-whisper', async (event, args) => {
       mainWindow?.webContents.send('whisper-error', errorMsg);
       mainWindow?.webContents.send('whisper-done', false);
       resolve({ success: false, error: errorMsg });
+    });
+  });
+});
+
+ipcMain.handle('stop-whisper-cli', () => {
+  if (whisperCliProc) {
+    whisperCliStopped = true;
+    whisperCliProc.kill('SIGTERM');
+    whisperCliProc = null;
+    return true;
+  }
+  return false;
+});
+
+function parseJsonAndResolve(jsonFile, code, cudaDetected, resolve) {
+  try {
+    const jsonData = JSON.parse(fs.readFileSync(jsonFile, 'utf-8'));
+
+    const words = [];
+    for (const segment of jsonData.transcription || []) {
+      for (const token of segment.tokens || []) {
+        const text = token.text;
+        if (text === '[_BEG_]' || text.includes('[_TT_')) continue;
+
+        const from = token.timestamps.from;
+        const to = token.timestamps.to;
+
+        if (text.startsWith(' ')) {
+          words.push({ text: text.trim(), from, to });
+        } else if (words.length > 0) {
+          words[words.length - 1].text += text;
+          words[words.length - 1].to = to;
+        }
+      }
+    }
+
+    const outputBase = jsonFile.replace(/\.json$/, '');
+    const srtLines = [];
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      srtLines.push(String(i + 1));
+      srtLines.push(`${w.from} --> ${w.to}`);
+      srtLines.push(w.text);
+      srtLines.push('');
+    }
+
+    const srtFile = outputBase + '.srt';
+    fs.writeFileSync(srtFile, srtLines.join('\n'), 'utf-8');
+    console.log(`[whisper-cli] word-level SRT written: ${words.length} words → ${srtFile}`);
+
+    mainWindow?.webContents.send('whisper-cli-done', true);
+    resolve({ success: true, cuda: cudaDetected, code });
+  } catch (err) {
+    console.error('[whisper-cli] JSON parse error:', err.message);
+    mainWindow?.webContents.send('whisper-cli-error', `Erro ao processar JSON: ${err.message}`);
+    mainWindow?.webContents.send('whisper-cli-done', false);
+    resolve({ success: false, code, error: err.message, cuda: cudaDetected });
+  }
+}
+
+ipcMain.handle('run-whisper-cli', async (event, { audioFile, model, output, language, splitWords }) => {
+  const whisperCliPath = getWhisperCliPath();
+  const whisperDir = getWhisperDir();
+
+  if (!fs.existsSync(whisperCliPath)) {
+    return { success: false, error: 'whisper-cli.exe não encontrado em: ' + whisperCliPath };
+  }
+
+  let modelFile = path.join(whisperDir, `ggml-${model}.bin`);
+  if (!fs.existsSync(modelFile)) {
+    const fallbackBinDir = path.dirname(getBinPath());
+    modelFile = path.join(fallbackBinDir, `ggml-${model}.bin`);
+  }
+  if (!fs.existsSync(modelFile)) {
+    return { success: false, error: `Modelo não encontrado: ggml-${model}.bin` };
+  }
+
+  const ext = path.extname(audioFile).toLowerCase();
+  let wavFile = audioFile;
+  let tempWav = null;
+
+  if (ext !== '.wav') {
+    tempWav = audioFile.replace(/\.[^.]+$/, '_temp_whisper.wav');
+    const ffmpegPath = getFfmpegPath();
+    if (!fs.existsSync(ffmpegPath)) {
+      return { success: false, error: 'ffmpeg.exe não encontrado' };
+    }
+    console.log('[whisper-cli] converting to WAV:', audioFile, '->', tempWav);
+    await new Promise((resolve, reject) => {
+      exec(`"${ffmpegPath}" -y -i "${audioFile}" -ar 16000 -ac 1 -c:a pcm_s16le "${tempWav}"`, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    wavFile = tempWav;
+    console.log('[whisper-cli] WAV conversion done');
+  }
+
+  const args = [
+    '-m', modelFile,
+    '-f', wavFile,
+    '-ojf',
+    '-of', output,
+    '-l', language || 'pt',
+    '-pp',
+  ];
+
+  if (splitWords) {
+    args.push('-sow');
+  }
+
+  console.log('[whisper-cli] bin:', whisperCliPath);
+  console.log('[whisper-cli] args:', JSON.stringify(args));
+
+  whisperCliStopped = false;
+
+  return new Promise((resolve) => {
+    let stdoutData = '';
+    let stderrData = '';
+    let cudaDetected = false;
+
+    const proc = spawn(whisperCliPath, args, {
+      cwd: whisperDir,
+    });
+    whisperCliProc = proc;
+
+    proc.stdout.on('data', (d) => {
+      const text = d.toString('utf-8');
+      stdoutData += text;
+      if (text.includes('CUDA: yes') || text.includes('CUDA devices')) {
+        cudaDetected = true;
+      }
+      mainWindow?.webContents.send('whisper-cli-output', text);
+    });
+
+    proc.stderr.on('data', (d) => {
+      const text = d.toString('utf-8');
+      stderrData += text;
+      if (text.includes('CUDA: yes') || text.includes('CUDA devices')) {
+        cudaDetected = true;
+      }
+      mainWindow?.webContents.send('whisper-cli-output', text);
+    });
+
+    proc.on('close', (code) => {
+      const stopped = whisperCliStopped;
+      const isCurrentProcess = whisperCliProc === proc;
+      whisperCliProc = null;
+      console.log('[whisper-cli] close event - code:', code, 'stopped:', stopped, 'isCurrentProcess:', isCurrentProcess, 'procId:', proc.pid);
+
+      if (stopped || !isCurrentProcess) {
+        console.log('[whisper-cli] close: suppressed IPC (stopped or not current)');
+        if (tempWav && fs.existsSync(tempWav)) fs.unlinkSync(tempWav);
+        resolve({ success: false, code, error: 'Cancelado pelo usuario', cuda: cudaDetected, stopped: true });
+        return;
+      }
+
+      if (code === 0) {
+        const jsonFile = output + '.json';
+        console.log('[whisper-cli] looking for JSON:', jsonFile);
+        console.log('[whisper-cli] output dir exists:', fs.existsSync(path.dirname(jsonFile)));
+
+        const tryParseJson = (attempt) => {
+          if (fs.existsSync(jsonFile)) {
+            if (tempWav && fs.existsSync(tempWav)) fs.unlinkSync(tempWav);
+            parseJsonAndResolve(jsonFile, code, cudaDetected, resolve);
+            return;
+          }
+
+          const whisperJson = path.join(whisperDir, path.basename(jsonFile));
+          if (!attempt && fs.existsSync(whisperJson)) {
+            console.log('[whisper-cli] found in whisper dir, copying...');
+            fs.copyFileSync(whisperJson, jsonFile);
+            if (tempWav && fs.existsSync(tempWav)) fs.unlinkSync(tempWav);
+            parseJsonAndResolve(jsonFile, code, cudaDetected, resolve);
+            return;
+          }
+
+          if (attempt < 10) {
+            setTimeout(() => tryParseJson(attempt + 1), 500);
+            return;
+          }
+
+          if (tempWav && fs.existsSync(tempWav)) fs.unlinkSync(tempWav);
+          const dirContents = fs.readdirSync(path.dirname(jsonFile));
+          console.log('[whisper-cli] dir contents:', dirContents);
+          const errorMsg = `JSON nao encontrado: ${jsonFile}`;
+          console.error('[whisper-cli] JSON parse error:', errorMsg);
+          mainWindow?.webContents.send('whisper-cli-error', errorMsg);
+          mainWindow?.webContents.send('whisper-cli-done', false);
+          resolve({ success: false, code, error: errorMsg, cuda: cudaDetected });
+        };
+
+        tryParseJson(0);
+      } else {
+        if (tempWav && fs.existsSync(tempWav)) fs.unlinkSync(tempWav);
+        const errorMsg = stderrData.trim() || `Processo finalizou com código ${code}`;
+        console.log('[whisper-cli] error:', errorMsg.slice(0, 500));
+        mainWindow?.webContents.send('whisper-cli-error', errorMsg);
+        mainWindow?.webContents.send('whisper-cli-done', false);
+        resolve({ success: false, code, error: errorMsg, cuda: cudaDetected });
+      }
+    });
+
+    proc.on('error', (err) => {
+      const isCurrentProcess = whisperCliProc === proc;
+      console.log('[whisper-cli] error event - isCurrentProcess:', isCurrentProcess, 'stopped:', whisperCliStopped, 'procId:', proc.pid);
+      whisperCliProc = null;
+      if (whisperCliStopped || !isCurrentProcess) {
+        console.log('[whisper-cli] error: suppressed IPC');
+        resolve({ success: false, error: 'Cancelado pelo usuario', cuda: false, stopped: true });
+        return;
+      }
+      const errorMsg = `Falha ao executar whisper-cli: ${err.message}`;
+      console.log('[whisper-cli] spawn error:', errorMsg);
+      mainWindow?.webContents.send('whisper-cli-error', errorMsg);
+      mainWindow?.webContents.send('whisper-cli-done', false);
+      resolve({ success: false, error: errorMsg, cuda: false });
     });
   });
 });
@@ -310,4 +594,186 @@ ipcMain.handle('rename-file', async (e, oldPath, newPath) => {
 
 ipcMain.handle('get-temp-dir', async () => {
   return app.getPath('temp');
+});
+
+ipcMain.handle('check-model', async (e, modelName) => {
+  const whisperDir = getWhisperDir();
+  const modelFile = path.join(whisperDir, `ggml-${modelName}.bin`);
+  if (fs.existsSync(modelFile)) return true;
+  const binPath = getBinPath();
+  const binDir = path.dirname(binPath);
+  const oldModelFile = path.join(binDir, `ggml-${modelName}.bin`);
+  return fs.existsSync(oldModelFile);
+});
+
+ipcMain.handle('download-model', async (e, modelName) => {
+  const whisperDir = getWhisperDir();
+  const modelFile = path.join(whisperDir, `ggml-${modelName}.bin`);
+  const tempFile = modelFile + '.downloading';
+
+  if (fs.existsSync(modelFile)) return { success: true };
+
+  const url = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${modelName}.bin`;
+
+  return new Promise((resolve) => {
+    const file = fs.createWriteStream(tempFile);
+    let downloadedBytes = 0;
+
+    const request = https.get(url, (response) => {
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        https.get(response.headers.location, (redirectResponse) => {
+          const totalBytes = parseInt(redirectResponse.headers['content-length'], 10) || 0;
+
+          redirectResponse.on('data', (chunk) => {
+            downloadedBytes += chunk.length;
+            const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
+            mainWindow?.webContents.send('model-download-progress', {
+              model: modelName,
+              progress,
+              downloadedBytes,
+              totalBytes,
+            });
+          });
+
+          redirectResponse.pipe(file);
+
+          file.on('finish', () => {
+            file.close();
+            fs.renameSync(tempFile, modelFile);
+            resolve({ success: true });
+          });
+        }).on('error', (err) => {
+          fs.unlinkSync(tempFile);
+          resolve({ success: false, error: err.message });
+        });
+        return;
+      }
+
+      const totalBytes = parseInt(response.headers['content-length'], 10) || 0;
+
+      response.on('data', (chunk) => {
+        downloadedBytes += chunk.length;
+        const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
+        mainWindow?.webContents.send('model-download-progress', {
+          model: modelName,
+          progress,
+          downloadedBytes,
+          totalBytes,
+        });
+      });
+
+      response.pipe(file);
+
+      file.on('finish', () => {
+        file.close();
+        fs.renameSync(tempFile, modelFile);
+        resolve({ success: true });
+      });
+    });
+
+    request.on('error', (err) => {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+      resolve({ success: false, error: err.message });
+    });
+  });
+});
+
+ipcMain.handle('check-whisper-cli', () => {
+  const whisperCliPath = getWhisperCliPath();
+  return fs.existsSync(whisperCliPath);
+});
+
+ipcMain.handle('download-cuda', async () => {
+  const whisperDir = getWhisperDir();
+  const AdmZip = require('adm-zip');
+  const os = require('os');
+  const tempDir = os.tmpdir();
+  const zipPath = path.join(tempDir, 'whisper-cuda.zip');
+
+  const url = isDev
+    ? 'http://localhost:18923/whisper-cuda.zip'
+    : 'https://github.com/LuizFelipeRDev/corgi-editor/releases/download/v1.0.0/whisper-cuda.zip';
+
+  console.log('[CUDA] download-cuda handler called, url:', url);
+  console.log('[CUDA] whisperDir:', whisperDir);
+
+  if (!fs.existsSync(whisperDir)) {
+    fs.mkdirSync(whisperDir, { recursive: true });
+  }
+
+  return new Promise((resolve) => {
+    const file = fs.createWriteStream(zipPath);
+    let downloadedBytes = 0;
+
+    const client = url.startsWith('https') ? https : require('http');
+    const request = client.get(url, (response) => {
+      console.log('[CUDA] response status:', response.statusCode);
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        const redirectClient = response.headers.location.startsWith('https') ? https : require('http');
+        redirectClient.get(response.headers.location, (redirectResponse) => {
+          const totalBytes = parseInt(redirectResponse.headers['content-length'], 10) || 0;
+
+          redirectResponse.on('data', (chunk) => {
+            downloadedBytes += chunk.length;
+            const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
+            mainWindow?.webContents.send('cuda-download-progress', { progress });
+          });
+
+          redirectResponse.pipe(file);
+
+          file.on('finish', () => {
+            file.close();
+            try {
+              const zip = new AdmZip(zipPath);
+              zip.extractAllTo(whisperDir, true);
+              fs.unlinkSync(zipPath);
+              resolve({ success: true });
+            } catch (err) {
+              resolve({ success: false, error: err.message });
+            }
+          });
+        }).on('error', (err) => {
+          if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+          resolve({ success: false, error: err.message });
+        });
+        return;
+      }
+
+      const totalBytes = parseInt(response.headers['content-length'], 10) || 0;
+      console.log('[CUDA] totalBytes:', totalBytes);
+
+      response.on('data', (chunk) => {
+        downloadedBytes += chunk.length;
+        const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
+        if (progress % 10 === 0 || progress === 100) {
+          console.log('[CUDA] progress:', progress);
+        }
+        mainWindow?.webContents.send('cuda-download-progress', { progress });
+      });
+
+      response.pipe(file);
+
+      file.on('finish', () => {
+        file.close();
+        console.log('[CUDA] download finished, extracting...');
+        try {
+          const zip = new AdmZip(zipPath);
+          zip.extractAllTo(whisperDir, true);
+          console.log('[CUDA] extraction done, cleaning up zip');
+          fs.unlinkSync(zipPath);
+          console.log('[CUDA] resolve success');
+          resolve({ success: true });
+        } catch (err) {
+          console.error('[CUDA] extraction error:', err.message);
+          resolve({ success: false, error: err.message });
+        }
+      });
+    });
+
+    request.on('error', (err) => {
+      console.error('[CUDA] request error:', err.message);
+      if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+      resolve({ success: false, error: err.message });
+    });
+  });
 });

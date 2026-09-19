@@ -5,9 +5,13 @@ import Controls from './components/Controls'
 import BottomBar from './components/BottomBar'
 import SettingsModal from './components/SettingsModal'
 import ErrorModal from './components/ErrorModal'
+import InfoModal from './components/InfoModal'
 import AboutModal from './components/AboutModal'
+import CudaDownloadModal from './components/CudaDownloadModal'
 import SubtitlesPanel from './components/SubtitlesPanel'
-import { generateAssContent } from './lib/subtitleRender'
+import Waveform from './components/Waveform'
+import { generateAssContent, groupWordsIntoSegments } from './lib/subtitleRender'
+import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null)
@@ -19,14 +23,20 @@ function App() {
   const [progress, setProgress] = useState({ pct: 0, text: '0%' })
   const [showSettings, setShowSettings] = useState(false)
   const [showError, setShowError] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
+  const whisperStoppingRef = useRef(false)
+  const whisperGenRef = useRef(0)
   const [showAbout, setShowAbout] = useState(false)
+  const [showCudaModal, setShowCudaModal] = useState(false)
+  const [whisperCliInstalled, setWhisperCliInstalled] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const errorBuffer = useRef('')
   const lastPct = useRef(0)
   const videoDurationRef = useRef(0)
+  const videoRef = useRef(null)
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
-  const [subtitleModel, setSubtitleModel] = useState('tiny')
+  const [subtitleModel, setSubtitleModel] = useState('small')
   const [subtitlePosition, setSubtitlePosition] = useState('bottom')
   const [subtitleStyle, setSubtitleStyle] = useState('hormozi')
   const [greenScreen, setGreenScreen] = useState(false)
@@ -35,6 +45,10 @@ function App() {
   const [generatingSubtitles, setGeneratingSubtitles] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [seekTo, setSeekTo] = useState(null)
+  const [wordsPerLine, setWordsPerLine] = useState(4)
+  const [linesCount, setLinesCount] = useState(2)
+  const [subtitleConfigs, setSubtitleConfigs] = useState({})
+  const [subtitlesEdited, setSubtitlesEdited] = useState(false)
 
   useEffect(() => {
     window.api.getConfig().then((c) => {
@@ -43,12 +57,17 @@ function App() {
       setOutputFormat(c.output_format || 'mp3')
       if (c.output_folder) setOutputFolder(c.output_folder)
       setSubtitlesEnabled(c.subtitles === 'true')
-      setSubtitleModel(c.subtitle_model || 'tiny')
+      setSubtitleModel(c.subtitle_model || 'small')
       setSubtitlePosition(c.subtitle_position || 'bottom')
       setSubtitleStyle(c.subtitle_style || 'hormozi')
       setGreenScreen(c.green_screen === 'true')
       setBurnSubtitles(c.burn_subtitles !== 'false')
+      setWordsPerLine(Number(c.words_per_line) || 4)
+      setLinesCount(Number(c.lines_count) || 2)
+      try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
     })
+
+    window.api.checkWhisperCli().then(setWhisperCliInstalled)
 
     window.api.onOutput((raw) => {
       const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\[\?[0-9]*[a-zA-Z]/g, '')
@@ -66,14 +85,14 @@ function App() {
         }
         return
       }
-      if (clean.includes('Finished')) setProgress({ pct: 100, text: 'PRONTO' })
+      if (clean.includes('Finished')) setProgress({ pct: 100, text: '100%' })
       errorBuffer.current += raw
     })
 
     window.api.onDone((ok) => {
       setProcessing(false)
       if (ok) {
-        setProgress({ pct: 100, text: 'PRONTO' })
+        setProgress({ pct: 100, text: '100%' })
       } else {
         setProgress({ pct: 0, text: 'ERRO' })
         if (errorBuffer.current.trim()) {
@@ -107,6 +126,37 @@ function App() {
       setShowError(true)
     })
 
+    window.api.onWhisperCliOutput((raw) => {
+      console.log('Whisper CLI output:', raw)
+      if (raw.includes('CUDA: no') || raw.includes('CUDA devices: 0')) {
+        console.log('CUDA não detectado, usando CPU')
+      }
+    })
+
+    window.api.onWhisperCliDone((ok) => {
+      if (whisperStoppingRef.current) {
+        setGeneratingSubtitles(false)
+        return
+      }
+      setGeneratingSubtitles(false)
+      if (!ok) {
+        setErrorMessage('Erro ao gerar legendas com whisper.cpp')
+        setShowError(true)
+      }
+    })
+
+    window.api.onWhisperCliError((msg) => {
+      if (whisperStoppingRef.current || (msg && msg.toLowerCase().includes('cancelado'))) {
+        setGeneratingSubtitles(false)
+        return
+      }
+      setGeneratingSubtitles(false)
+      if (msg) {
+        setErrorMessage(msg)
+        setShowError(true)
+      }
+    })
+
     window.api.onFfmpegOutput((raw) => {
       if (videoDurationRef.current > 0) {
         const timeMatch = raw.match(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})/)
@@ -137,9 +187,9 @@ function App() {
 
   useEffect(() => {
     if (subtitlesEnabled) {
-      window.api.resizeWindow(900, 420)
+      window.api.resizeWindow(WINDOW_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT)
     } else {
-      window.api.resizeWindow(640, 420)
+      window.api.resizeWindow(WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT)
     }
   }, [subtitlesEnabled])
 
@@ -189,36 +239,52 @@ function App() {
       let assPath = null
 
       if (needsVideo) {
-        const bgColor = greenScreen ? 'green' : 'black'
         const duration = hasSubtitles
           ? parseSrtTime(subtitles[subtitles.length - 1].end) / 1000
           : 3600
 
         videoDurationRef.current = duration
 
-        const ffmpegArgs = [
-          '-y',
-          '-f', 'lavfi',
-          '-i', `color=c=${bgColor}:s=1920x1080:d=${duration}`,
-          '-i', tempOutPath,
-        ]
+        let ffmpegArgs
+        if (isVideoInput) {
+          ffmpegArgs = [
+            '-y',
+            '-i', tempOutPath,
+          ]
+        } else {
+          const bgColor = greenScreen ? 'green' : 'black'
+          ffmpegArgs = [
+            '-y',
+            '-f', 'lavfi',
+            '-i', `color=c=${bgColor}:s=1920x1080:d=${duration}`,
+            '-i', tempOutPath,
+          ]
+        }
 
         if (shouldBurn) {
           assPath = await window.api.joinPath(outputDir, 'corgi_sub.ass')
+          const styleCfg = subtitleConfigs[subtitleStyle] || {}
           const assContent = generateAssContent(
             subtitles,
             subtitleStyle,
             subtitlePosition,
             1920,
-            1080
+            1080,
+            styleCfg.wordsPerLine || wordsPerLine,
+            styleCfg.linesCount || linesCount,
+            styleCfg.primaryColor || undefined,
+            styleCfg.highlightColor || undefined,
+            styleCfg.fontId || undefined
           )
           if (assContent) {
             await window.api.writeFile(assPath, assContent)
 
             setProgress({ pct: 95, text: 'Imbutindo legenda...' })
 
+            const fontsDir = await window.api.getFontsPath()
+            const escapedFontsDir = fontsDir.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\\\:')
             ffmpegArgs.push(
-              '-vf', 'ass=corgi_sub.ass',
+              '-vf', `ass=corgi_sub.ass:fontsdir=${escapedFontsDir}`,
             )
           }
         }
@@ -246,69 +312,85 @@ function App() {
 
       videoDurationRef.current = 0
       lastPct.current = 0
-      setProgress({ pct: 100, text: 'CONCLUÍDO' })
+      setProgress({ pct: 100, text: '100%' })
     } finally {
       await window.api.deleteFile(tempOutPath)
-      setTimeout(() => {
-        setProcessing(false)
-        setProgress({ pct: 0, text: '' })
-      }, 1500)
+      setProcessing(false)
     }
   }
 
   const handleGenerateSubtitles = async () => {
     if (!selectedFile || generatingSubtitles) return
+    whisperGenRef.current++
+    whisperStoppingRef.current = false
     setGeneratingSubtitles(true)
     setSubtitles([])
+    setSubtitlesEdited(false)
 
-    const baseName = selectedFile.name.replace(/\.[^.]+$/, '')
-    const srtPath = await window.api.joinPath(selectedFile.folder, `${baseName}.srt`)
-    const wordsSrtPath = await window.api.joinPath(selectedFile.folder, `${baseName}_words.srt`)
+    try {
+      const modelExists = await window.api.checkModel(subtitleModel)
+      if (!modelExists) {
+        setGeneratingSubtitles(false)
+        setErrorMessage(`O modelo "${subtitleModel}" não está instalado.\n\nVá em Configurações (ícone de engrenagem) > Geral e baixe o modelo.`)
+        setShowError(true)
+        return
+      }
 
-    const args = [
-      'whisper',
-      selectedFile.path,
-      subtitleModel,
-      '--format', 'srt',
-      '--output', srtPath,
-      '--language', 'pt'
-    ]
+      const baseName = selectedFile.name.replace(/\.[^.]+$/, '')
+      const wordsSrtPath = await window.api.joinPath(selectedFile.folder, `${baseName}_words`)
 
-    await window.api.runWhisper(args)
+      console.log('[subtitle] Starting whisper-cli with:', {
+        audioFile: selectedFile.path,
+        model: subtitleModel,
+        output: wordsSrtPath,
+        language: 'pt',
+        splitWords: true
+      })
 
-    const wordsArgs = [
-      'whisper',
-      selectedFile.path,
-      subtitleModel,
-      '--format', 'srt',
-      '--split-word',
-      '--output', wordsSrtPath,
-      '--language', 'pt'
-    ]
+      const result = await window.api.runWhisperCli({
+        audioFile: selectedFile.path,
+        model: subtitleModel,
+        output: wordsSrtPath,
+        language: 'pt',
+        splitWords: true
+      })
 
-    await window.api.runWhisper(wordsArgs)
+      console.log('[subtitle] whisper-cli result:', result)
+
+      if (result.stopped) {
+        setGeneratingSubtitles(false)
+        return
+      }
+
+      if (!result.success) {
+        setGeneratingSubtitles(false)
+        if (result.error) {
+          setErrorMessage(result.error)
+          setShowError(true)
+        }
+        return
+      }
+
+      if (result.cuda === false) {
+        console.log('CUDA não disponível, usando CPU (pode ser mais lento)')
+      }
 
     setTimeout(async () => {
-      const text = await window.api.readFile(srtPath)
-      const wordsText = await window.api.readFile(wordsSrtPath)
-      if (text) {
-        const parsed = parseSrt(text)
-        const wordTimings = wordsText ? parseSrt(wordsText) : []
-        const enriched = parsed.map((sub) => {
-          const subStart = parseSrtTimeMs(sub.start)
-          const subEnd = parseSrtTimeMs(sub.end)
-          const matchingWords = wordTimings.filter((w) => {
-            const wStart = parseSrtTimeMs(w.start)
-            const wEnd = parseSrtTimeMs(w.end)
-            return wStart >= subStart - 50 && wEnd <= subEnd + 50
-          })
-          return { ...sub, words: matchingWords.map((w) => ({ text: w.text, start: w.start, end: w.end })) }
-        })
+      const wordsText = await window.api.readFile(wordsSrtPath + '.srt')
+      console.log('[subtitle] SRT file content:', wordsText ? wordsText.substring(0, 200) : 'EMPTY')
+      if (wordsText) {
+        const wordTimings = parseSrt(wordsText)
+        const enriched = groupWordsIntoSegments(wordTimings, wordsPerLine, linesCount)
         setSubtitles(enriched)
       }
-      await window.api.deleteFile(wordsSrtPath)
       setGeneratingSubtitles(false)
     }, 1000)
+    } catch (err) {
+      console.error('[subtitle] Error:', err)
+      setGeneratingSubtitles(false)
+      setErrorMessage(err.message || 'Erro desconhecido ao gerar legendas')
+      setShowError(true)
+    }
   }
 
   const parseSrtTimeMs = (timeStr) => {
@@ -336,40 +418,24 @@ function App() {
   }
 
   const handleUpdateSubtitle = (index, updates) => {
+    setSubtitlesEdited(true)
     setSubtitles((prev) => {
       const next = [...prev]
       next[index] = { ...next[index], ...updates }
+      if (updates.text !== undefined) {
+        next[index].words = []
+      }
       return next
     })
   }
 
   const handleDeleteSubtitle = (index) => {
+    setSubtitlesEdited(true)
     setSubtitles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleSplitSubtitle = (index) => {
-    setSubtitles((prev) => {
-      const sub = prev[index]
-      const startTime = parseSrtTime(sub.start)
-      const endTime = parseSrtTime(sub.end)
-      const midTime = (startTime + endTime) / 2
-      const midStr = formatSrtTime(midTime)
-
-      const words = sub.text.split(' ')
-      const midWordIndex = Math.ceil(words.length / 2)
-      const text1 = words.slice(0, midWordIndex).join(' ')
-      const text2 = words.slice(midWordIndex).join(' ')
-
-      const newSub1 = { start: sub.start, end: midStr, text: text1 }
-      const newSub2 = { start: midStr, end: sub.end, text: text2 }
-
-      const next = [...prev]
-      next.splice(index, 1, newSub1, newSub2)
-      return next
-    })
-  }
-
   const handleAddSubtitle = () => {
+    setSubtitlesEdited(true)
     setSubtitles((prev) => {
       let lastEnd = '00:00:00,000'
       if (prev.length > 0) {
@@ -386,6 +452,21 @@ function App() {
         },
       ]
     })
+  }
+
+  const handleSaveSubtitles = async () => {
+    const baseName = selectedFile.name.replace(/\.[^.]+$/, '')
+    const srtPath = await window.api.joinPath(selectedFile.folder, `${baseName}_words.srt`)
+    const lines = []
+    subtitles.forEach((sub, i) => {
+      lines.push(String(i + 1))
+      lines.push(`${sub.start} --> ${sub.end}`)
+      lines.push(sub.text)
+      lines.push('')
+    })
+    const srtContent = lines.join('\n')
+    await window.api.writeFile(srtPath, srtContent)
+    setSubtitlesEdited(false)
   }
 
   const parseSrtTime = (timeStr) => {
@@ -413,12 +494,15 @@ function App() {
     if (newConfig.margin !== undefined) setMarginVal(newConfig.margin)
     if (newConfig.output_folder !== undefined) setOutputFolder(newConfig.output_folder)
     if (newConfig.output_format !== undefined) setOutputFormat(newConfig.output_format)
-    if (newConfig.subtitles !== undefined) setSubtitlesEnabled(newConfig.subtitles)
+    if (newConfig.subtitles !== undefined) setSubtitlesEnabled(newConfig.subtitles === true || newConfig.subtitles === 'true')
     if (newConfig.subtitle_model !== undefined) setSubtitleModel(newConfig.subtitle_model)
     if (newConfig.subtitle_position !== undefined) setSubtitlePosition(newConfig.subtitle_position)
     if (newConfig.subtitle_style !== undefined) setSubtitleStyle(newConfig.subtitle_style)
     if (newConfig.green_screen !== undefined) setGreenScreen(newConfig.green_screen)
     if (newConfig.burn_subtitles !== undefined) setBurnSubtitles(newConfig.burn_subtitles)
+    if (newConfig.words_per_line !== undefined) setWordsPerLine(newConfig.words_per_line)
+    if (newConfig.lines_count !== undefined) setLinesCount(newConfig.lines_count)
+    if (newConfig.subtitle_configs !== undefined) setSubtitleConfigs(newConfig.subtitle_configs)
 
     await window.api.saveConfig({
       threshold: newConfig.threshold ?? threshold,
@@ -431,6 +515,9 @@ function App() {
       subtitle_style: newConfig.subtitle_style ?? subtitleStyle,
       green_screen: String(newConfig.green_screen ?? greenScreen),
       burn_subtitles: String(newConfig.burn_subtitles ?? burnSubtitles),
+      words_per_line: String(newConfig.words_per_line ?? wordsPerLine),
+      lines_count: String(newConfig.lines_count ?? linesCount),
+      subtitle_configs: JSON.stringify(newConfig.subtitle_configs ?? subtitleConfigs),
     })
   }
 
@@ -446,40 +533,68 @@ function App() {
     <div className="w-full h-full flex flex-col border-[4px] border-retro-black bg-retro-box">
       <TitleBar />
       <div className="flex flex-1 min-h-0">
-        <DropZone
-          selectedFile={selectedFile}
-          setSelectedFile={setSelectedFile}
-          processing={processing}
-          onTimeUpdate={handleTimeUpdate}
-          seekTo={seekTo}
-        />
-        <Controls
-          threshold={threshold}
-          setThreshold={setThreshold}
-          marginVal={marginVal}
-          setMarginVal={setMarginVal}
-          processing={processing}
-          onExport={handleExport}
-          progress={progress}
-          onSaveConfig={handleSaveSettings}
-        />
-        <SubtitlesPanel
-          subtitles={subtitles}
-          onGenerate={handleGenerateSubtitles}
-          generating={generatingSubtitles}
-          selectedFile={selectedFile}
-          subtitlesEnabled={subtitlesEnabled}
-          onUpdateSubtitle={handleUpdateSubtitle}
-          onDeleteSubtitle={handleDeleteSubtitle}
-          onSplitSubtitle={handleSplitSubtitle}
-          onAddSubtitle={handleAddSubtitle}
-          onSeekTo={handleSeekTo}
-          currentTime={currentTime}
-          subtitleStyle={subtitleStyle}
-          subtitlePosition={subtitlePosition}
-          onStyleChange={(style) => handleSaveSettings({ subtitle_style: style })}
-          onPositionChange={(pos) => handleSaveSettings({ subtitle_position: pos })}
-        />
+        <div className={`flex flex-col min-w-0 ${subtitlesEnabled ? 'w-[75%]' : 'w-full'}`}>
+          <div className="flex flex-1 min-h-0">
+            <div className="flex flex-col w-[66.6%] min-w-0 border-r-2 border-retro-black">
+              <DropZone
+                selectedFile={selectedFile}
+                setSelectedFile={setSelectedFile}
+                processing={processing}
+                onTimeUpdate={handleTimeUpdate}
+                seekTo={seekTo}
+                onClear={() => setSubtitles([])}
+                videoRef={videoRef}
+              />
+            </div>
+            <Controls
+              threshold={threshold}
+              setThreshold={setThreshold}
+              marginVal={marginVal}
+              setMarginVal={setMarginVal}
+              processing={processing}
+              onExport={handleExport}
+              progress={progress}
+              onSaveConfig={handleSaveSettings}
+            />
+          </div>
+          <div className="px-4 pb-2 shrink-0">
+            <Waveform
+              selectedFile={selectedFile}
+              onTimeUpdate={handleTimeUpdate}
+              seekTo={seekTo}
+              videoRef={videoRef}
+            />
+          </div>
+        </div>
+        {subtitlesEnabled && (
+          <SubtitlesPanel
+            subtitles={subtitles}
+            onGenerate={handleGenerateSubtitles}
+            generating={generatingSubtitles}
+            onStop={() => {
+              whisperStoppingRef.current = true
+              window.api.stopWhisperCli()
+              setGeneratingSubtitles(false)
+            }}
+            selectedFile={selectedFile}
+            subtitlesEnabled={subtitlesEnabled}
+            onUpdateSubtitle={handleUpdateSubtitle}
+            onDeleteSubtitle={handleDeleteSubtitle}
+            onAddSubtitle={handleAddSubtitle}
+            onSeekTo={handleSeekTo}
+            currentTime={currentTime}
+            subtitleStyle={subtitleStyle}
+            subtitlePosition={subtitlePosition}
+            wordsPerLine={wordsPerLine}
+            linesCount={linesCount}
+            subtitleConfigs={subtitleConfigs}
+            onStyleChange={(style) => handleSaveSettings({ subtitle_style: style })}
+            onPositionChange={(pos) => handleSaveSettings({ subtitle_position: pos })}
+            onConfigSave={(cfg) => handleSaveSettings({ subtitle_configs: cfg })}
+            hasChanges={subtitlesEdited}
+            onSave={handleSaveSubtitles}
+          />
+        )}
       </div>
       <BottomBar
         outputFolder={outputFolder}
@@ -493,19 +608,32 @@ function App() {
           outputFormat={outputFormat}
           subtitles={subtitlesEnabled}
           subtitleModel={subtitleModel}
-          subtitlePosition={subtitlePosition}
-          subtitleStyle={subtitleStyle}
           greenScreen={greenScreen}
           burnSubtitles={burnSubtitles}
           selectedFile={selectedFile}
+          wordsPerLine={wordsPerLine}
+          linesCount={linesCount}
+          whisperCliInstalled={whisperCliInstalled}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
+          onRequestCudaDownload={() => setShowCudaModal(true)}
         />
       )}
-      {showError && (
+      <CudaDownloadModal
+        open={showCudaModal}
+        onClose={() => setShowCudaModal(false)}
+        onComplete={() => setWhisperCliInstalled(true)}
+      />
+      {showError && !whisperStoppingRef.current && (
         <ErrorModal
           message={errorMessage}
           onClose={() => setShowError(false)}
+        />
+      )}
+      {showInfo && (
+        <InfoModal
+          message={errorMessage}
+          onClose={() => setShowInfo(false)}
         />
       )}
       {showAbout && (

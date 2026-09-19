@@ -3,7 +3,7 @@ function Controls({ threshold, setThreshold, marginVal, setMarginVal, processing
     onSaveConfig({ threshold, margin: marginVal })
   }
   return (
-    <div className="w-1/2 p-4 flex flex-col justify-center">
+    <div className="w-[45%] min-w-[180px] p-4 flex flex-col justify-center  border-retro-black">
       <div className="mb-4">
         <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">VOLUME MÍNIMO</label>
         <div className="flex items-center gap-2">

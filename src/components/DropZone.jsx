@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 
-function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo }) {
+function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef }) {
   const [isDragOver, setIsDragOver] = useState(false)
-  const videoRef = useRef(null)
 
   const isVideo = selectedFile && /\.(mp4|mkv|mov|webm|avi)$/i.test(selectedFile.name)
   const isAudio = selectedFile && /\.(mp3|wav|flac|ogg|aac|m4a)$/i.test(selectedFile.name)
@@ -26,8 +25,9 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
     setIsDragOver(false)
     if (processing) return
     const f = e.dataTransfer.files
-    if (f.length > 0 && f[0].path) {
-      setSelectedFile({ path: f[0].path, name: f[0].name, folder: f[0].path.replace(/[\\/][^\\/]+$/, '') })
+    if (f.length > 0) {
+      const filePath = window.api.getPathForFile(f[0])
+      setSelectedFile({ path: filePath, name: f[0].name, folder: filePath.replace(/[\\/][^\\/]+$/, '') })
     } else {
       const p = await window.api.selectFile()
       if (p) {
@@ -39,6 +39,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
   const clearFile = (e) => {
     e.stopPropagation()
     setSelectedFile(null)
+    if (onClear) onClear()
   }
 
   const handleTimeUpdate = (e) => {
@@ -48,7 +49,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
   }
 
   return (
-    <div className="w-1/2 p-4 border-r-2 border-retro-black flex flex-col">
+    <div className="flex-1 p-4 flex flex-col min-h-0">
       <div
         onClick={!selectedFile ? handleClick : undefined}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
@@ -87,7 +88,6 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             <video
               ref={videoRef}
               src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
-              controls
               onTimeUpdate={handleTimeUpdate}
               className="max-w-full max-h-full object-contain rounded"
             />
@@ -97,13 +97,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             <svg className="w-12 h-12 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
             </svg>
-            <audio
-              ref={videoRef}
-              src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
-              controls
-              onTimeUpdate={handleTimeUpdate}
-              className="w-full"
-            />
+            <p className="font-pixel text-[8px] text-green-700">{selectedFile.name}</p>
+            <p className="font-pixel text-[6px] text-retro-black/40">Use o player abaixo</p>
           </div>
         ) : (
           <div className="text-center">

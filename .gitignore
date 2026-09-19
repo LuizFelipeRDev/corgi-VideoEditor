@@ -7,3 +7,11 @@ docs/
 .DS_Store
 Thumbs.db
 config.ini
+
+# Whisper models (mantém apenas tiny)
+bin/ggml-base*.bin
+bin/ggml-small*.bin
+bin/ggml-medium*.bin
+bin/ggml-large*.bin
+bin/whisper/*
+!bin/whisper/ggml-tiny.bin

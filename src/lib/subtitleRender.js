@@ -53,14 +53,14 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
   const playResX = videoWidth || 1920
   const playResY = videoHeight || 1080
   const dimensionScale = Math.max(playResY / 1080, 0.5)
 
-  const assFontName = styleConfig.fontFamily.split(',')[0].trim()
+  const assFontName = fontId || styleConfig.fontFamily.split(',')[0].trim()
   const fontScale = styleConfig.italic ? 0.9 : 1.0
   const scaledFontSize = Math.round(styleConfig.fontSize * fontScale * dimensionScale)
 
@@ -74,8 +74,10 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
     marginV = 0
   }
 
-  const primaryAss = hexToAss(styleConfig.primaryColor)
-  const highlightAss = hexToAss(styleConfig.highlightColor)
+  const effectivePrimary = primaryColorOverride || styleConfig.primaryColor
+  const effectiveHighlight = highlightColorOverride || styleConfig.highlightColor
+  const primaryAss = hexToAss(effectivePrimary)
+  const highlightAss = hexToAss(effectiveHighlight)
   const outlineAss = hexToAss(styleConfig.outlineColor, 0)
   const shadowAss = hexToAss(styleConfig.shadowColor, styleConfig.shadowAlpha)
 
@@ -128,56 +130,130 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   if (allWords.length === 0) return null
 
-  const blocks = groupWordsIntoBlocks(allWords, playResX, scaledFontSize, styleConfig)
+  const blocks = groupWordsIntoBlocks(allWords, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount)
 
   for (const block of blocks) {
     const blockWords = block.words
+
+    if (styleConfig.animationType === 'simple' || styleConfig.animationType === 'bounce') {
+      const useHighlight = styleConfig.animationType === 'bounce' && Math.random() > 0.5
+      const parts = []
+      let lastLineIdx = -1
+      for (const w of blockWords) {
+        if (w.lineIdx !== lastLineIdx && lastLineIdx !== -1) parts.push('\\N')
+        lastLineIdx = w.lineIdx
+        if (useHighlight) parts.push(`{\\c${highlightAss}}`)
+        if (styleConfig.animationType === 'bounce') {
+          parts.push('{\\fscx95\\fscy95\\t(0,100,\\fscx105\\fscy105)\\t(100,180,\\fscx100\\fscy100)}')
+        }
+        parts.push(w.text.toUpperCase())
+        if (useHighlight) parts.push(`{\\c${primaryAss}}`)
+        if (w !== blockWords[blockWords.length - 1] && blockWords[blockWords.indexOf(w) + 1]?.lineIdx === w.lineIdx) {
+          parts.push(' ')
+        }
+      }
+      assContent += `Dialogue: 0,${secondsToAssTime(blockWords[0].start)},${secondsToAssTime(block.end)},Default,,0,0,0,,${parts.join('')}\n`
+      continue
+    }
+
     for (let i = 0; i < blockWords.length; i++) {
       const word = blockWords[i]
       const nextStart = i < blockWords.length - 1 ? blockWords[i + 1].start : block.end
       const eventStart = word.start
       const eventEnd = nextStart
 
-      const lineText = buildBlockText(block, i, styleConfig, highlightAss)
-      const event = `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${lineText}`
-      assContent += event + '\n'
+      const parts = []
+      let lastLineIdx = -1
+
+      for (let j = 0; j < blockWords.length; j++) {
+        const w = blockWords[j]
+        const wUpper = w.text.toUpperCase()
+
+        if (w.lineIdx !== lastLineIdx && lastLineIdx !== -1) {
+          parts.push('\\N')
+        }
+        lastLineIdx = w.lineIdx
+
+        if (styleConfig.animationType === 'karaoke') {
+          if (j <= i) {
+            parts.push(`{\\c${highlightAss}}${wUpper}{\\c${primaryAss}}`)
+          } else {
+            parts.push(wUpper)
+          }
+        } else if (styleConfig.animationType === 'popline') {
+          if (j === i) {
+            const durMs = Math.round((w.end - w.start) * 1000)
+            const gMs = Math.min(100, Math.floor(durMs / 3))
+            const sMs = Math.min(150, Math.floor(durMs / 2))
+            parts.push(`{\\u1\\c${highlightAss}\\fscx95\\fscy95\\t(0,${gMs},\\fscx105\\fscy105)\\t(${gMs},${gMs + sMs},\\fscx100\\fscy100)}`)
+          }
+          parts.push(wUpper)
+          if (j === i) {
+            parts.push('{\\u0\\c' + primaryAss + '}')
+          }
+        } else {
+          if (j === i) {
+            parts.push(getAnimationTag(styleConfig, highlightAss, w, w.end - w.start))
+            parts.push(wUpper)
+            parts.push('{\\r}')
+          } else {
+            parts.push(wUpper)
+          }
+        }
+
+        if (j < blockWords.length - 1 && blockWords[j + 1].lineIdx === w.lineIdx) {
+          parts.push(' ')
+        }
+      }
+
+      let text = parts.join('')
+
+      if (styleConfig.wordSpacing !== 100) {
+        const spaceParts = text.split(' ')
+        text = spaceParts
+          .map((part, idx) => {
+            if (idx < spaceParts.length - 1) {
+              return part + ` {\\fscx${styleConfig.wordSpacing}} {\\fscx100}`
+            }
+            return part
+          })
+          .join('')
+      }
+
+      assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${text}\n`
     }
   }
 
   return assContent
 }
 
-function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig) {
-  const avgCharWidth = fontSize * 0.6
-  const maxCharsPerLine = Math.floor((playResX * 0.8) / avgCharWidth)
-  const maxLines = 2
-  const maxCharsPerBlock = maxCharsPerLine * maxLines
+function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2) {
+  const maxWordsPerLine = wordsPerLine
+  const maxLines = linesCount
+  const maxWordsPerBlock = maxWordsPerLine * maxLines
 
   const blocks = []
-  let currentBlock = { words: [], charCount: 0, start: 0, end: 0, lineIdx: 0 }
+  let currentBlock = { words: [], start: 0, end: 0, lineIdx: 0, wordsInLine: 0 }
 
   for (const word of allWords) {
-    const wordLen = word.text.length + 1
-
-    if (currentBlock.charCount + wordLen > maxCharsPerBlock && currentBlock.words.length > 0) {
+    if (currentBlock.words.length >= maxWordsPerBlock && currentBlock.words.length > 0) {
       currentBlock.end = currentBlock.words[currentBlock.words.length - 1].end
       blocks.push(currentBlock)
-      currentBlock = { words: [], charCount: 0, start: word.start, end: 0, lineIdx: 0 }
+      currentBlock = { words: [], start: word.start, end: 0, lineIdx: 0, wordsInLine: 0 }
     }
 
-    if (currentBlock.charCount + wordLen > maxCharsPerLine && currentBlock.words.length > 0) {
+    if (currentBlock.wordsInLine >= maxWordsPerLine && currentBlock.words.length > 0) {
       currentBlock.lineIdx++
+      currentBlock.wordsInLine = 0
       if (currentBlock.lineIdx >= maxLines) {
         currentBlock.end = currentBlock.words[currentBlock.words.length - 1].end
         blocks.push(currentBlock)
-        currentBlock = { words: [], charCount: 0, start: word.start, end: 0, lineIdx: 0 }
-      } else {
-        currentBlock.charCount = 0
+        currentBlock = { words: [], start: word.start, end: 0, lineIdx: 0, wordsInLine: 0 }
       }
     }
 
     currentBlock.words.push({ ...word, lineIdx: currentBlock.lineIdx })
-    currentBlock.charCount += wordLen
+    currentBlock.wordsInLine++
   }
 
   if (currentBlock.words.length > 0) {
@@ -188,7 +264,7 @@ function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig) {
   return blocks
 }
 
-function buildBlockText(block, activeWordIndex, styleConfig, highlightAss) {
+function buildBlockText(block, activeWordIndex, styleConfig, highlightAss, eventDuration) {
   const parts = []
   let lastLineIdx = -1
 
@@ -204,7 +280,7 @@ function buildBlockText(block, activeWordIndex, styleConfig, highlightAss) {
     const wUpper = word.text.toUpperCase()
 
     if (isActive) {
-      parts.push(getAnimationTag(styleConfig, highlightAss, word))
+      parts.push(getAnimationTag(styleConfig, highlightAss, word, eventDuration))
       parts.push(wUpper)
       parts.push('{\\r}')
     } else {
@@ -233,20 +309,24 @@ function buildBlockText(block, activeWordIndex, styleConfig, highlightAss) {
   return text
 }
 
-function getAnimationTag(styleConfig, highlightAss, word) {
+function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {
   const { animationType } = styleConfig
 
   switch (animationType) {
     case 'karaoke': {
-      const durationCs = Math.round((word.end - word.start) * 100)
-      return `{\\kf${durationCs}\\c${highlightAss}}`
+      const durationCs = Math.round(eventDuration * 100)
+      return `{\\kf${durationCs}}`
     }
     case 'scale':
       return `{\\fscx110\\fscy110\\c${highlightAss}}`
-    case 'bounce': {
-      const bouncePct = 120
-      return `{\\t(0,50,\\fscx${bouncePct}\\fscy${bouncePct})\\t(50,100,\\fscx100\\fscy100)\\c${highlightAss}}`
+    case 'wordpop': {
+      const durationMs = Math.round((word.end - word.start) * 1000)
+      const growMs = Math.min(100, Math.floor(durationMs / 3))
+      const shrinkMs = Math.min(150, Math.floor(durationMs / 2))
+      return `{\\fscx80\\fscy80\\t(0,${growMs},\\fscx115\\fscy115)\\t(${growMs},${growMs + shrinkMs},\\fscx100\\fscy100)\\c${highlightAss}}`
     }
+    case 'popline':
+      return ''
     case 'highlight':
     default:
       return `{\\c${highlightAss}}`
@@ -268,4 +348,57 @@ export function formatSecondsToSrtTime(seconds) {
     String(s).padStart(2, '0') + ',' +
     String(ms).padStart(3, '0')
   )
+}
+
+export function groupWordsIntoSegments(wordEntries, wordsPerLine = 4, linesCount = 2) {
+  if (!wordEntries || wordEntries.length === 0) return []
+
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '00:00:00,000'
+    if (timeStr.includes(',')) return timeStr
+    const parts = timeStr.split(':')
+    if (parts.length === 3) {
+      return parts[0] + ':' + parts[1] + ':' + parts[2].replace('.', ',')
+    }
+    return timeStr
+  }
+
+  const segments = []
+  let currentWords = []
+  let currentStart = null
+
+  const pushSegment = () => {
+    if (currentWords.length === 0) return
+    const text = currentWords.map(w => w.text).join(' ')
+    const lastWord = currentWords[currentWords.length - 1]
+    segments.push({
+      start: formatTime(currentStart),
+      end: formatTime(lastWord.end),
+      text,
+      words: currentWords.map(w => ({ text: w.text, start: formatTime(w.start), end: formatTime(w.end) })),
+    })
+    currentWords = []
+    currentStart = null
+  }
+
+  for (let i = 0; i < wordEntries.length; i++) {
+    const word = wordEntries[i]
+    const wordText = (word.text || '').trim()
+    if (!wordText) continue
+
+    if (currentStart === null) currentStart = word.start
+    currentWords.push({ text: wordText, start: word.start, end: word.end })
+
+    const nextWord = wordEntries[i + 1]
+    const maxWords = wordsPerLine * linesCount
+    const endsSentence = /[.!?;]$/.test(wordText)
+    const hasGap = nextWord && (parseSrtTimeToSeconds(nextWord.start) - parseSrtTimeToSeconds(word.end)) > 0.3
+
+    if (currentWords.length >= maxWords || endsSentence || hasGap) {
+      pushSegment()
+    }
+  }
+
+  pushSegment()
+  return segments
 }

@@ -11,7 +11,7 @@ export default defineConfig({
         entry: 'electron/main.cjs',
         vite: {
           build: {
-            outDir: 'dist-electron',
+            outDir: 'dist/electron',
           },
         },
       },
@@ -22,7 +22,7 @@ export default defineConfig({
         },
         vite: {
           build: {
-            outDir: 'dist-electron',
+            outDir: 'dist/electron',
           },
         },
       },

@@ -1,8 +1,8 @@
 {
   "name": "corgi-editor",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "description": "CORGI-EDITOR - Edição automática de vídeo/áudio",
-  "main": "dist-electron/main.js",
+  "main": "dist/electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build && electron-builder --win",
@@ -11,8 +11,10 @@
   "author": "Luiz",
   "license": "MIT",
   "dependencies": {
+    "adm-zip": "^0.6.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "wavesurfer.js": "^7.12.12"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
@@ -31,12 +33,34 @@
     "productName": "CORGI-EDITOR",
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "!dist/win-unpacked/**",
+      "!dist/*.7z",
+      "!dist/builder-*"
     ],
     "extraResources": [
       {
-        "from": "bin/",
-        "to": "bin/"
+        "from": "bin/auto-editor.exe",
+        "to": "bin/auto-editor.exe"
+      },
+      {
+        "from": "bin/ffmpeg.exe",
+        "to": "bin/ffmpeg.exe"
+      },
+      {
+        "from": "bin/ffplay.exe",
+        "to": "bin/ffplay.exe"
+      },
+      {
+        "from": "bin/ffprobe.exe",
+        "to": "bin/ffprobe.exe"
+      },
+      {
+        "from": "bin/whisper/ggml-tiny.bin",
+        "to": "bin/whisper/ggml-tiny.bin"
+      },
+      {
+        "from": "src/global_config/fonts/",
+        "to": "fonts/"
       }
     ],
     "win": {
