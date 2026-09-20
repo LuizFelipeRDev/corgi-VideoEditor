@@ -10,6 +10,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
   const [localWordsPerLine, setLocalWordsPerLine] = useState(config.wordsPerLine || defaultWordsPerLine)
   const [localLinesCount, setLocalLinesCount] = useState(config.linesCount || defaultLinesCount)
   const [localFont, setLocalFont] = useState(config.fontId || defaultFont)
+  const [localFontSize, setLocalFontSize] = useState(config.fontSize || styleConfig.fontSize)
   const [useGlobalConfig, setUseGlobalConfig] = useState(config.useGlobalConfig ?? true)
 
   const handleReset = () => {
@@ -18,6 +19,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
     setLocalWordsPerLine(defaultWordsPerLine)
     setLocalLinesCount(defaultLinesCount)
     setLocalFont(defaultFont)
+    setLocalFontSize(styleConfig.fontSize)
   }
 
   const handleSave = () => {
@@ -27,6 +29,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
       wordsPerLine: useGlobalConfig ? undefined : localWordsPerLine,
       linesCount: useGlobalConfig ? undefined : localLinesCount,
       fontId: localFont,
+      fontSize: localFontSize,
       useGlobalConfig,
     })
   }
@@ -51,6 +54,22 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
                 <option key={f.id} value={f.id}>{f.name}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Tamanho da Fonte - {localFontSize}</label>
+            <input
+              type="range"
+              min="60"
+              max="200"
+              value={localFontSize}
+              onChange={(e) => setLocalFontSize(Number(e.target.value))}
+              className="w-full h-2 bg-retro-bg border border-retro-black rounded appearance-none cursor-pointer accent-retro-black"
+            />
+            <div className="flex justify-between mt-0.5">
+              <span className="font-pixel text-[5px] text-retro-black/50">60</span>
+              <span className="font-pixel text-[5px] text-retro-black/50">200</span>
+            </div>
           </div>
 
           <div>

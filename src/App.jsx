@@ -301,7 +301,8 @@ function App() {
             styleCfg.highlightColor || undefined,
             styleCfg.fontId || undefined,
             positionMode,
-            positionPercent
+            positionPercent,
+            styleCfg.fontSize || undefined
           )
           if (assContent) {
             await window.api.writeFile(assPath, assContent)

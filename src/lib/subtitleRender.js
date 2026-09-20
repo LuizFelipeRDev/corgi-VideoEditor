@@ -53,7 +53,7 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, positionMode, positionPercent) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, positionMode, positionPercent, fontSizeOverride) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
   const playResX = videoWidth || 1920
@@ -62,7 +62,8 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
 
   const assFontName = fontId || styleConfig.fontFamily.split(',')[0].trim()
   const fontScale = styleConfig.italic ? 0.9 : 1.0
-  const scaledFontSize = Math.round(styleConfig.fontSize * fontScale * dimensionScale)
+  const baseFontSize = fontSizeOverride || styleConfig.fontSize
+  const scaledFontSize = Math.round(baseFontSize * fontScale * dimensionScale)
 
   let alignment = 2
   let marginV = 40

@@ -20,6 +20,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
   const primaryColor = cfg.primaryColor || stylePreset.primaryColor
   const highlightColor = cfg.highlightColor || stylePreset.highlightColor
   const fontId = cfg.fontId || stylePreset.fontFamily.split(',')[0].trim()
+  const configFontSize = cfg.fontSize || stylePreset.fontSize
   const animType = stylePreset.animationType
 
   const activeSub = subtitles.find((sub) => {
@@ -66,9 +67,13 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     ),
   }
 
+  const previewFontSize = fullscreen
+    ? Math.round((configFontSize / 105) * 32)
+    : Math.round((configFontSize / 105) * 14)
+
   const blockStyle = {
     fontFamily: `'${fontId}', sans-serif`,
-    fontSize: fullscreen ? '32px' : '14px',
+    fontSize: `${previewFontSize}px`,
     fontWeight: stylePreset.bold ? 'bold' : 'normal',
     fontStyle: stylePreset.italic ? 'italic' : 'normal',
     letterSpacing: `${stylePreset.letterSpacing * 0.2}px`,
