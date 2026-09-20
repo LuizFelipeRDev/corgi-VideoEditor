@@ -6,6 +6,9 @@ Automatic video/audio editing with AI-powered subtitles.
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+<!-- Version is defined in: src/global_config/version.js -->
+<!-- Update package.json version to match -->
+
 ---
 
 ## What is CORGI-EDITOR?
