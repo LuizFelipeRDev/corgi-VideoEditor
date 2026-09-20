@@ -252,7 +252,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               className="absolute inset-0 flex items-center justify-center"
               style={{ backgroundColor: greenScreen ? '#00a800' : '#000' }}
             >
-              <div className="relative w-full h-full" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
+              <div className={`relative ${outputResolution === 'portrait' ? '' : 'w-full h-full'}`} style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
                 {subtitles && subtitles.length > 0 && (
                   <SubtitleOverlay
                     subtitles={subtitles}
