@@ -202,7 +202,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro h-50 w-80 p-4"
+        className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro w-80 max-h-[80vh] overflow-y-auto p-4"
         onClick={(e) => e.stopPropagation()}
       >
         {confirmDialog && (
@@ -233,8 +233,8 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
           <button
             onClick={() => setTab('geral')}
             className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${tab === 'geral'
-                ? 'bg-retro-bg text-retro-black z-10'
-                : 'bg-retro-box text-retro-black/50'
+              ? 'bg-retro-bg text-retro-black z-10'
+              : 'bg-retro-box text-retro-black/50'
               }`}
           >
             Geral
@@ -242,8 +242,8 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
           <button
             onClick={() => setTab('saida')}
             className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${tab === 'saida'
-                ? 'bg-retro-bg text-retro-black z-10'
-                : 'bg-retro-box text-retro-black/50'
+              ? 'bg-retro-bg text-retro-black z-10'
+              : 'bg-retro-box text-retro-black/50'
               }`}
           >
             Saida
@@ -251,8 +251,8 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
           <button
             onClick={() => setTab('legendas')}
             className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${tab === 'legendas'
-                ? 'bg-retro-bg text-retro-black z-10'
-                : 'bg-retro-box text-retro-black/50'
+              ? 'bg-retro-bg text-retro-black z-10'
+              : 'bg-retro-box text-retro-black/50'
               }`}
           >
             Legendas
@@ -293,7 +293,18 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
             </div>
 
             <div className="mb-4">
-              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">GPU (NVIDIA)</label>
+              <div className="flex items-center">
+                <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">GPU (NVIDIA)</label>
+                <div className="mb-[10px]">
+                  <Tooltip text="Para placas de vídeo NVIDIA, a geração de legendas será mais rápida com CUDA instalado.">
+                    <span className="font-pixel  text-[7px] text-retro-black/50 cursor-help">[?]</span>
+                  </Tooltip>
+
+                </div>
+
+
+              </div>
+
               {whisperCliInstalled && (
                 <div className="flex items-center justify-between">
                   <p className="font-pixel text-[6px] text-green-600">
@@ -455,8 +466,8 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                             setShowResPopup(false)
                           }}
                           className={`w-full h-8 px-2 font-pixel text-[8px] flex items-center gap-2 transition-colors ${localResolution === r.id
-                              ? 'bg-retro-black text-retro-bg'
-                              : 'hover:bg-gray-200 text-retro-black'
+                            ? 'bg-retro-black text-retro-bg'
+                            : 'hover:bg-gray-200 text-retro-black'
                             }`}
                         >
                           <r.icon size={14} stroke={2} />
@@ -567,7 +578,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
             </div>
 
             <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
-              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">LEGENDA NO VIDEO</label>
+              {/* <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">LEGENDA NO VIDEO</label> */}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -596,7 +607,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
             </div>
 
             <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
-              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">AUDIO - VIDEO</label>
+              {/* <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">AUDIO - VIDEO</label> */}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
