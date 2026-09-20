@@ -148,8 +148,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       const popDur = styleConfig.popDuration || 0.18
       const popStart = 100 - popSz
       const popPeak = 100 + popSz
-      const durCs = Math.round(popDur * 100)
-      const halfDurCs = Math.round(durCs / 2)
+      const durCs = Math.round(popDur * 1000)
+      const growCs = Math.round(durCs * 0.55)
+      const shrinkCs = durCs
       const parts = []
       let lastLineIdx = -1
       for (const w of blockWords) {
@@ -157,7 +158,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         lastLineIdx = w.lineIdx
         if (useHighlight) parts.push(`{\\c${highlightAss}}`)
         if (styleConfig.animationType === 'bounce' && popOn) {
-          parts.push(`{\\fscx${popStart}\\fscy${popStart}\\t(0,${halfDurCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${halfDurCs},${durCs},\\fscx100\\fscy100)}`)
+          parts.push(`{\\fscx${popStart}\\fscy${popStart}\\t(0,${growCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growCs},${shrinkCs},\\fscx100\\fscy100)}`)
         }
         parts.push(w.text.toUpperCase())
         if (useHighlight) parts.push(`{\\c${primaryAss}}`)
@@ -199,9 +200,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const popDur = styleConfig.popDuration || 0.18
             const popStart = 100 - popSz
             const popPeak = 100 + popSz
-            const durCs = Math.round(popDur * 100)
-            const halfDurCs = Math.round(durCs / 2)
-            parts.push(`{\\u1\\c${highlightAss}\\fscx${popStart}\\fscy${popStart}\\t(0,${halfDurCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${halfDurCs},${durCs},\\fscx100\\fscy100)}`)
+            const durCs = Math.round(popDur * 1000)
+            const growCs = Math.round(durCs * 0.55)
+            const shrinkCs = durCs
+            parts.push(`{\\u1\\c${highlightAss}\\fscx${popStart}\\fscy${popStart}\\t(0,${growCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growCs},${shrinkCs},\\fscx100\\fscy100)}`)
           }
           parts.push(wUpper)
           if (j === i) {

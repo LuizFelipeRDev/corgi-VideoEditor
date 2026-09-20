@@ -75,7 +75,7 @@ export const SUBTITLE_STYLES = {
     animationType: 'bounce',
     popIntensity: 1,
     popDuration: 0.18,
-    popSize: 5,
+    popSize: 1,
     bestFor: 'Gaming & entertainment',
   },
   karaoke: {
