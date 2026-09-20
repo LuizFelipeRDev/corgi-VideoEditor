@@ -10,7 +10,7 @@ import AboutModal from './components/AboutModal'
 import CudaDownloadModal from './components/CudaDownloadModal'
 import SubtitlesPanel from './components/SubtitlesPanel'
 import Waveform from './components/Waveform'
-import { generateAssContent, groupWordsIntoSegments } from './lib/subtitleRender'
+import { generateAssContent, groupWordsIntoSegments, detectSilence, remapSubtitleTimestamps } from './lib/subtitleRender'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 
 function App() {
@@ -249,6 +249,20 @@ function App() {
 
     const outputDir = outputFolder || selectedFile.folder
 
+    let exportSubtitles = subtitles
+    if (shouldBurn && hasSubtitles) {
+      try {
+        setProgress({ pct: 91, text: 'Detectando silencios...' })
+        const silenceSegments = await detectSilence(selectedFile.path, threshold, parseFloat(marginVal))
+        if (silenceSegments.length > 0) {
+          exportSubtitles = remapSubtitleTimestamps(subtitles, silenceSegments, parseFloat(marginVal))
+          console.log(`[export] Remapped ${subtitles.length} subtitles (${silenceSegments.length} silence segments detected)`)
+        }
+      } catch (e) {
+        console.warn('[export] Silence detection failed, using original timestamps:', e)
+      }
+    }
+
     try {
       let assPath = null
 
@@ -290,7 +304,7 @@ function App() {
           const videoW = outputResolution === 'portrait' ? 1080 : outputResolution === 'landscape' ? 1920 : inputW
           const videoH = outputResolution === 'portrait' ? 1920 : outputResolution === 'landscape' ? 1080 : inputH
           const assContent = generateAssContent(
-            subtitles,
+            exportSubtitles,
             subtitleStyle,
             subtitlePosition,
             videoW,

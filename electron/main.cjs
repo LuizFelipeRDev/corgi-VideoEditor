@@ -509,6 +509,45 @@ ipcMain.handle('run-whisper-cli', async (event, { audioFile, model, output, lang
   });
 });
 
+ipcMain.handle('run-ffmpeg-analysis', async (event, args) => {
+  const ffmpegPath = getFfmpegPath();
+  if (!fs.existsSync(ffmpegPath)) return { success: false, error: 'FFmpeg não encontrado' };
+
+  const shellArgs = args.map(a => {
+    if (/[\s'";&|<>]/.test(a) || a.includes('\\:')) {
+      return `"${a.replace(/"/g, '\\"')}"`;
+    }
+    return a;
+  });
+  const cmd = `"${ffmpegPath}" ${shellArgs.join(' ')}`;
+  console.log('[ffmpeg-analysis] cmd:', cmd);
+
+  return new Promise((resolve) => {
+    const proc = exec(cmd, { env: { ...process.env }, maxBuffer: 10 * 1024 * 1024 });
+    let stderrData = '';
+
+    proc.stderr?.on('data', (d) => {
+      stderrData += d.toString('utf-8');
+    });
+
+    proc.stdout?.on('data', (d) => {
+      stderrData += d.toString('utf-8');
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0 || stderrData.includes('silence_')) {
+        resolve({ success: true, output: stderrData });
+      } else {
+        resolve({ success: false, error: `FFmpeg analysis failed with code ${code}` });
+      }
+    });
+
+    proc.on('error', (err) => {
+      resolve({ success: false, error: err.message });
+    });
+  });
+});
+
 ipcMain.handle('run-ffmpeg', async (event, args, cwd) => {
   const ffmpegPath = getFfmpegPath();
   if (!fs.existsSync(ffmpegPath)) return { success: false, error: 'FFmpeg não encontrado' };

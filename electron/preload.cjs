@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('api', {
   onWhisperCliDone: (cb) => { _whisperCliDoneCb = cb; },
   onWhisperCliError: (cb) => { _whisperCliErrorCb = cb; },
   runFfmpeg: (args, cwd) => ipcRenderer.invoke('run-ffmpeg', args, cwd),
+  runFfmpegAnalysis: (args) => ipcRenderer.invoke('run-ffmpeg-analysis', args),
   onFfmpegOutput: (cb) => { _ffmpegOutputCb = cb; },
   onFfmpegDone: (cb) => { _ffmpegDoneCb = cb; },
   onFfmpegError: (cb) => { _ffmpegErrorCb = cb; },

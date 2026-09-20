@@ -343,6 +343,104 @@ export function parseSrtTimeToSecondsExport(timeStr) {
   return parseSrtTimeToSeconds(timeStr)
 }
 
+function secondsToSrtTime(seconds) {
+  const totalMs = Math.round(seconds * 1000)
+  const h = Math.floor(totalMs / 3600000)
+  const m = Math.floor((totalMs % 3600000) / 60000)
+  const s = Math.floor((totalMs % 60000) / 1000)
+  const ms = totalMs % 1000
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`
+}
+
+export async function detectSilence(filePath, thresholdDb, minDurationSec) {
+  const result = await window.api.runFfmpegAnalysis([
+    '-i', filePath,
+    '-af', `silencedetect=noise=${thresholdDb}dB:d=${minDurationSec}`,
+    '-f', 'null', '-'
+  ])
+  if (!result.success || !result.output) return []
+
+  const segments = []
+  const lines = result.output.split('\n')
+  let currentStart = null
+
+  for (const line of lines) {
+    const startMatch = line.match(/silence_start:\s*([\d.]+)/)
+    if (startMatch) {
+      currentStart = parseFloat(startMatch[1])
+    }
+    const endMatch = line.match(/silence_end:\s*([\d.]+)/)
+    if (endMatch && currentStart !== null) {
+      const end = parseFloat(endMatch[1])
+      segments.push({ start: currentStart, end })
+      currentStart = null
+    }
+  }
+
+  return segments
+}
+
+export function remapSubtitleTimestamps(subtitles, silenceSegments, margin) {
+  if (!silenceSegments || silenceSegments.length === 0) return subtitles
+
+  const sorted = [...silenceSegments].sort((a, b) => a.start - b.start)
+
+  const adjusted = sorted
+    .map(seg => ({
+      start: Math.max(0, seg.start - margin),
+      end: seg.end + margin
+    }))
+    .reduce((merged, seg) => {
+      if (merged.length === 0) return [seg]
+      const last = merged[merged.length - 1]
+      if (seg.start <= last.end) {
+        last.end = Math.max(last.end, seg.end)
+      } else {
+        merged.push(seg)
+      }
+      return merged
+    }, [])
+
+  function getOffset(originalTime) {
+    let offset = 0
+    for (const seg of adjusted) {
+      if (originalTime >= seg.end) {
+        offset += seg.end - seg.start
+      } else if (originalTime > seg.start) {
+        offset += originalTime - seg.start
+        return offset
+      } else {
+        break
+      }
+    }
+    return offset
+  }
+
+  return subtitles.map(sub => {
+    const origStart = parseSrtTimeToSeconds(sub.start)
+    const origEnd = parseSrtTimeToSeconds(sub.end)
+
+    const newStart = Math.max(0, origStart - getOffset(origStart))
+    const newEnd = Math.max(newStart + 0.01, origEnd - getOffset(origEnd))
+
+    const result = {
+      ...sub,
+      start: secondsToSrtTime(newStart),
+      end: secondsToSrtTime(newEnd)
+    }
+
+    if (sub.words && sub.words.length > 0) {
+      result.words = sub.words.map(w => ({
+        ...w,
+        start: secondsToSrtTime(Math.max(0, parseSrtTimeToSeconds(w.start) - getOffset(parseSrtTimeToSeconds(w.start)))),
+        end: secondsToSrtTime(Math.max(0, parseSrtTimeToSeconds(w.end) - getOffset(parseSrtTimeToSeconds(w.end))))
+      }))
+    }
+
+    return result
+  })
+}
+
 export function formatSecondsToSrtTime(seconds) {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
