@@ -577,12 +577,15 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                   type="checkbox"
                   checked={localGreenScreen}
                   onChange={(e) => handleToggleGreenScreen(e.target.checked)}
-                  disabled={!localSubtitles}
+                  disabled={!localSubtitles || !isInputAudio}
                   className="w-4 h-4 accent-retro-black disabled:opacity-50"
                 />
                 <span className="font-pixel text-[7px] text-retro-black uppercase disabled:opacity-50">
                   Criar video com fundo verde
                 </span>
+                <Tooltip text="Opcao disponivel apenas para entrada de audio">
+                  <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+                </Tooltip>
               </label>
               {localSubtitles && localGreenScreen && isOutputAudio && (
                 <p className="font-pixel text-[6px] text-red-600 mt-1">

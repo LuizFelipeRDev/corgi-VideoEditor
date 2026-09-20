@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import SubtitleOverlay from './SubtitleOverlay'
 
-function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution }) {
+function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [videoFullscreen, setVideoFullscreen] = useState(false)
   const [videoTime, setVideoTime] = useState(0)
@@ -141,6 +141,39 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               </svg>
             </button>
           </div>
+        ) : isAudio && subtitlesEnabled ? (
+          <div
+            className="w-full h-full min-h-0 flex flex-col items-center justify-center overflow-hidden relative"
+            style={{
+              backgroundColor: greenScreen ? '#00a800' : '#000',
+              aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9',
+            }}
+          >
+            <p className="font-pixel text-[8px] text-white/80 z-10">{selectedFile.name}</p>
+            {subtitles && subtitles.length > 0 && (
+              <SubtitleOverlay
+                subtitles={subtitles}
+                subtitleStyle={subtitleStyle}
+                subtitlePosition={subtitlePosition}
+                subtitleConfigs={subtitleConfigs}
+                currentTime={videoTime}
+                positionMode={positionMode}
+                positionPercent={positionPercent}
+              />
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setVideoFullscreen(true)
+              }}
+              className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
+              title="Tela cheia"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
+              </svg>
+            </button>
+          </div>
         ) : isAudio ? (
           <div className="w-full h-full flex flex-col items-center justify-center gap-2">
             <svg className="w-12 h-12 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -186,14 +219,26 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
           }}
         >
           <div className="relative max-w-full max-h-full flex items-center justify-center" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
-            <video
-              ref={videoRef}
-              src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
-              onTimeUpdate={handleTimeUpdate}
-              muted
-              autoPlay
-              className="max-w-full max-h-full object-contain"
-            />
+            {isVideo ? (
+              <video
+                ref={videoRef}
+                src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
+                onTimeUpdate={handleTimeUpdate}
+                muted
+                autoPlay
+                className="max-w-full max-h-full object-contain"
+              />
+            ) : (
+              <div
+                className="w-full h-full flex items-center justify-center"
+                style={{
+                  backgroundColor: greenScreen ? '#00a800' : '#000',
+                  aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9',
+                }}
+              >
+                <p className="font-pixel text-[10px] text-white/80">{selectedFile.name}</p>
+              </div>
+            )}
             {subtitles && subtitles.length > 0 && (
               <SubtitleOverlay
                 subtitles={subtitles}

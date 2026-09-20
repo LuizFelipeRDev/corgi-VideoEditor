@@ -596,6 +596,8 @@ function App() {
                 positionMode={positionMode}
                 positionPercent={positionPercent}
                 outputResolution={outputResolution}
+                greenScreen={greenScreen}
+                subtitlesEnabled={subtitlesEnabled}
               />
             </div>
             <Controls
