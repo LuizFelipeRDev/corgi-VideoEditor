@@ -77,6 +77,7 @@ ipcRenderer.on('ffmpeg-error', (event, msg) => {
 
 contextBridge.exposeInMainWorld('api', {
   runAutoEditor: (args) => ipcRenderer.invoke('run-auto-editor', args),
+  runAutoEditorExport: (args) => ipcRenderer.invoke('run-auto-editor-export', args),
   onOutput: (cb) => { _outputCb = cb; },
   onDone: (cb) => { _doneCb = cb; },
   onError: (cb) => { _errorCb = cb; },

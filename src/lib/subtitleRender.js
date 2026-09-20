@@ -352,76 +352,67 @@ function secondsToSrtTime(seconds) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`
 }
 
-export async function detectSilence(filePath, thresholdDb, minDurationSec) {
-  const result = await window.api.runFfmpegAnalysis([
-    '-i', filePath,
-    '-af', `silencedetect=noise=${thresholdDb}dB:d=${minDurationSec}`,
-    '-f', 'null', '-'
-  ])
-  if (!result.success || !result.output) return []
+export function parsePremiereXml(xmlText) {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(xmlText, 'text/xml')
 
+  const timebaseEl = doc.querySelector('timebase')
+  const fps = timebaseEl ? parseInt(timebaseEl.textContent) : 30
+
+  const clipItems = doc.querySelectorAll('clipitem')
   const segments = []
-  const lines = result.output.split('\n')
-  let currentStart = null
 
-  for (const line of lines) {
-    const startMatch = line.match(/silence_start:\s*([\d.]+)/)
-    if (startMatch) {
-      currentStart = parseFloat(startMatch[1])
-    }
-    const endMatch = line.match(/silence_end:\s*([\d.]+)/)
-    if (endMatch && currentStart !== null) {
-      const end = parseFloat(endMatch[1])
-      segments.push({ start: currentStart, end })
-      currentStart = null
-    }
-  }
+  clipItems.forEach(item => {
+    const inEl = item.querySelector('in')
+    const outEl = item.querySelector('out')
+    const startEl = item.querySelector('start')
+    const endEl = item.querySelector('end')
 
-  return segments
+    if (inEl && outEl && startEl && endEl) {
+      segments.push({
+        in: parseInt(inEl.textContent),
+        out: parseInt(outEl.textContent),
+        start: parseInt(startEl.textContent),
+        end: parseInt(endEl.textContent),
+      })
+    }
+  })
+
+  segments.sort((a, b) => a.start - b.start)
+
+  console.log(`[parsePremiereXml] fps=${fps}, segments=${segments.length}`)
+  segments.forEach((seg, i) => {
+    console.log(`  seg ${i}: in=${seg.in} out=${seg.out} start=${seg.start} end=${seg.end} (kept ${(seg.out - seg.in) / fps}s, timeline ${(seg.end - seg.start) / fps}s)`)
+  })
+
+  return { fps, segments }
 }
 
-export function remapSubtitleTimestamps(subtitles, silenceSegments, margin) {
-  if (!silenceSegments || silenceSegments.length === 0) return subtitles
+export function remapSubtitleTimestamps(subtitles, segments, fps) {
+  if (!segments || segments.length === 0) return subtitles
 
-  const sorted = [...silenceSegments].sort((a, b) => a.start - b.start)
+  function findCutTime(originalTimeSec) {
+    const originalFrame = Math.round(originalTimeSec * fps)
 
-  const adjusted = sorted
-    .map(seg => ({
-      start: Math.max(0, seg.start - margin),
-      end: seg.end + margin
-    }))
-    .reduce((merged, seg) => {
-      if (merged.length === 0) return [seg]
-      const last = merged[merged.length - 1]
-      if (seg.start <= last.end) {
-        last.end = Math.max(last.end, seg.end)
-      } else {
-        merged.push(seg)
+    for (const seg of segments) {
+      if (originalFrame >= seg.in && originalFrame < seg.out) {
+        return (seg.start + (originalFrame - seg.in)) / fps
       }
-      return merged
-    }, [])
-
-  function getOffset(originalTime) {
-    let offset = 0
-    for (const seg of adjusted) {
-      if (originalTime >= seg.end) {
-        offset += seg.end - seg.start
-      } else if (originalTime > seg.start) {
-        offset += originalTime - seg.start
-        return offset
-      } else {
-        break
+      if (originalFrame < seg.in) {
+        return seg.start / fps
       }
     }
-    return offset
+
+    const last = segments[segments.length - 1]
+    return last.end / fps
   }
 
   return subtitles.map(sub => {
     const origStart = parseSrtTimeToSeconds(sub.start)
     const origEnd = parseSrtTimeToSeconds(sub.end)
 
-    const newStart = Math.max(0, origStart - getOffset(origStart))
-    const newEnd = Math.max(newStart + 0.01, origEnd - getOffset(origEnd))
+    const newStart = Math.max(0, findCutTime(origStart))
+    const newEnd = Math.max(newStart + 0.01, findCutTime(origEnd))
 
     const result = {
       ...sub,
@@ -432,8 +423,8 @@ export function remapSubtitleTimestamps(subtitles, silenceSegments, margin) {
     if (sub.words && sub.words.length > 0) {
       result.words = sub.words.map(w => ({
         ...w,
-        start: secondsToSrtTime(Math.max(0, parseSrtTimeToSeconds(w.start) - getOffset(parseSrtTimeToSeconds(w.start)))),
-        end: secondsToSrtTime(Math.max(0, parseSrtTimeToSeconds(w.end) - getOffset(parseSrtTimeToSeconds(w.end))))
+        start: secondsToSrtTime(Math.max(0, findCutTime(parseSrtTimeToSeconds(w.start)))),
+        end: secondsToSrtTime(Math.max(0, findCutTime(parseSrtTimeToSeconds(w.end))))
       }))
     }
 

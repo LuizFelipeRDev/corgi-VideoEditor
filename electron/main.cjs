@@ -189,6 +189,43 @@ ipcMain.handle('open-folder', async (e, folderPath) => {
   }
 });
 
+ipcMain.handle('run-auto-editor-export', async (event, args) => {
+  const binPath = getBinPath();
+  if (!fs.existsSync(binPath)) return { success: false, error: 'Não encontrado' };
+
+  console.log('[auto-editor-export] bin:', binPath);
+  console.log('[auto-editor-export] args:', JSON.stringify(args));
+
+  return new Promise((resolve) => {
+    let stdoutData = '';
+    let stderrData = '';
+    const proc = spawn(binPath, args, {
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      cwd: path.dirname(binPath),
+    });
+
+    proc.stdout.on('data', (d) => {
+      stdoutData += d.toString('utf-8');
+    });
+
+    proc.stderr.on('data', (d) => {
+      stderrData += d.toString('utf-8');
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ success: true, output: stdoutData || stderrData });
+      } else {
+        resolve({ success: false, error: stderrData.trim() || `Exit code ${code}` });
+      }
+    });
+
+    proc.on('error', (err) => {
+      resolve({ success: false, error: err.message });
+    });
+  });
+});
+
 ipcMain.handle('run-auto-editor', async (event, args) => {
   const binPath = getBinPath();
   if (!fs.existsSync(binPath)) return { success: false, error: 'Não encontrado' };

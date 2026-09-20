@@ -10,7 +10,7 @@ import AboutModal from './components/AboutModal'
 import CudaDownloadModal from './components/CudaDownloadModal'
 import SubtitlesPanel from './components/SubtitlesPanel'
 import Waveform from './components/Waveform'
-import { generateAssContent, groupWordsIntoSegments, detectSilence, remapSubtitleTimestamps } from './lib/subtitleRender'
+import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps } from './lib/subtitleRender'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 
 function App() {
@@ -252,14 +252,31 @@ function App() {
     let exportSubtitles = subtitles
     if (shouldBurn && hasSubtitles) {
       try {
-        setProgress({ pct: 91, text: 'Detectando silencios...' })
-        const silenceSegments = await detectSilence(selectedFile.path, threshold, parseFloat(marginVal))
-        if (silenceSegments.length > 0) {
-          exportSubtitles = remapSubtitleTimestamps(subtitles, silenceSegments, parseFloat(marginVal))
-          console.log(`[export] Remapped ${subtitles.length} subtitles (${silenceSegments.length} silence segments detected)`)
+        setProgress({ pct: 91, text: 'Analisando corte...' })
+        const xmlPath = await window.api.joinPath(outputDir, 'corgi_cutmap.xml')
+        const xmlArgs = [
+          selectedFile.path,
+          '--export', 'premiere',
+          '--edit', `audio:${Math.pow(10, parseFloat(threshold) / 20)}`,
+          '--margin', `${marginVal}s`,
+          '--output', xmlPath
+        ]
+        const xmlResult = await window.api.runAutoEditorExport(xmlArgs)
+        if (xmlResult.success) {
+          const xmlText = await window.api.readFile(xmlPath)
+          if (xmlText) {
+            const { fps, segments } = parsePremiereXml(xmlText)
+            if (segments.length > 0) {
+              exportSubtitles = remapSubtitleTimestamps(subtitles, segments, fps)
+              console.log(`[export] Remapped ${subtitles.length} subtitles via Premiere XML (${segments.length} segments, ${fps}fps)`)
+            }
+          }
+          await window.api.deleteFile(xmlPath)
+        } else {
+          console.warn('[export] Premiere XML export failed:', xmlResult.error)
         }
       } catch (e) {
-        console.warn('[export] Silence detection failed, using original timestamps:', e)
+        console.warn('[export] Timestamp remapping failed, using original timestamps:', e)
       }
     }
 
