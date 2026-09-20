@@ -110,16 +110,6 @@ Click the gear icon next to any style to customize:
 - **Words per Line** — 3-6 words
 - **Lines Count** — 1-3 lines
 
-### Pop Effect Properties
-
-Each style has centralized pop effect controls in `src/lib/subtitleStyles.js`:
-
-| Property | Description | Example |
-|----------|-------------|---------|
-| `popIntensity` | 0 = no pop, 1 = enabled | `1` |
-| `popDuration` | Animation duration in seconds | `0.18` |
-| `popSize` | Scale range (± percentage points) | `5` (95% → 105%) |
-
 ---
 
 ## Smart Subtitle Mode
@@ -185,77 +175,7 @@ Only `ggml-tiny.bin` is bundled. Download others from Settings > General.
 
 ## Configuration
 
-Config file: `%APPDATA%/corgi-editor/config.ini`
-
-```ini
-[settings]
-threshold = -30
-margin = 0.5
-output_folder = 
-output_format = mp4
-output_resolution = original
-subtitles = true
-subtitle_model = small
-subtitle_position = bottom
-subtitle_style = hormozi
-green_screen = false
-burn_subtitles = true
-words_per_line = 4
-lines_count = 2
-subtitle_persistence = 1
-smart_subtitle = false
-```
-
----
-
-## Development
-
-### Prerequisites
-
-- Node.js with npm
-- Windows (target platform)
-- Binaries in `bin/` directory (auto-editor, ffmpeg, ffplay, ffprobe, whisper)
-
-### Commands
-
-```bash
-# Development mode
-npm run dev
-
-# Build production installer
-npm run build
-
-# Preview production build
-npm run preview
-```
-
-### Project Structure
-
-```
-corgi-editor/
-├── electron/           # Electron main process
-│   ├── main.cjs        # IPC handlers, config, processing
-│   └── preload.cjs     # Context bridge
-├── src/                # React frontend
-│   ├── components/     # UI components (15 files)
-│   ├── lib/            # Core logic
-│   │   ├── subtitleRender.js   # ASS generation, grouping
-│   │   └── subtitleStyles.js   # 7 style definitions
-│   ├── global_config/  # Fonts, window config
-│   └── App.jsx         # Main app
-├── bin/                # External binaries (not in git)
-└── docs/               # Documentation
-```
-
-### Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | React 18, Vite 5, Tailwind CSS 3.4 |
-| Desktop | Electron 35, electron-builder 26 |
-| Audio | WaveSurfer.js 7.12 |
-| Processing | FFmpeg, auto-editor, whisper.cpp |
-| Subtitles | ASS (Advanced SubStation Alpha) |
+Settings are saved automatically in `%APPDATA%/corgi-editor/config.ini`.
 
 ---
 
@@ -362,41 +282,6 @@ Aceleração GPU disponível para GPUs NVIDIA:
 2. Clique em **BAIXAR GPU (NVIDIA)** (~422 MB)
 3. O app baixa `whisper-cuda.zip` do GitHub Releases
 4. Arquivos são extraídos para `%APPDATA%/corgi-editor/bin/whisper/`
-
----
-
-## Desenvolvimento
-
-### Comandos
-
-```bash
-# Modo desenvolvimento
-npm run dev
-
-# Build do instalador de produção
-npm run build
-
-# Pré-visualizar build de produção
-npm run preview
-```
-
-### Estrutura do Projeto
-
-```
-corgi-editor/
-├── electron/           # Processo principal Electron
-│   ├── main.cjs        # Handlers IPC, config, processamento
-│   └── preload.cjs     # Context bridge
-├── src/                # Frontend React
-│   ├── components/     # Componentes UI (15 arquivos)
-│   ├── lib/            # Lógica principal
-│   │   ├── subtitleRender.js   # Geração ASS, agrupamento
-│   │   └── subtitleStyles.js   # Definições de 7 estilos
-│   ├── global_config/  # Fontes, configuração de janela
-│   └── App.jsx         # App principal
-├── bin/                # Binários externos (não está no git)
-└── docs/               # Documentação
-```
 
 ---
 
