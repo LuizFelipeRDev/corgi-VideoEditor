@@ -1,4 +1,4 @@
-import { SUBTITLE_STYLES } from './subtitleStyles'
+import { SUBTITLE_STYLES, hasPopEffect } from './subtitleStyles'
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '')
@@ -143,14 +143,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     if (styleConfig.animationType === 'simple' || styleConfig.animationType === 'bounce') {
       const useHighlight = styleConfig.animationType === 'bounce' && Math.random() > 0.5
+      const popOn = hasPopEffect(styleId)
+      const popSz = styleConfig.popSize || 5
+      const popDur = styleConfig.popDuration || 0.18
+      const popStart = 100 - popSz
+      const popPeak = 100 + popSz
+      const durCs = Math.round(popDur * 100)
+      const halfDurCs = Math.round(durCs / 2)
       const parts = []
       let lastLineIdx = -1
       for (const w of blockWords) {
         if (w.lineIdx !== lastLineIdx && lastLineIdx !== -1) parts.push('\\N')
         lastLineIdx = w.lineIdx
         if (useHighlight) parts.push(`{\\c${highlightAss}}`)
-        if (styleConfig.animationType === 'bounce') {
-          parts.push('{\\fscx95\\fscy95\\t(0,100,\\fscx105\\fscy105)\\t(100,180,\\fscx100\\fscy100)}')
+        if (styleConfig.animationType === 'bounce' && popOn) {
+          parts.push(`{\\fscx${popStart}\\fscy${popStart}\\t(0,${halfDurCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${halfDurCs},${durCs},\\fscx100\\fscy100)}`)
         }
         parts.push(w.text.toUpperCase())
         if (useHighlight) parts.push(`{\\c${primaryAss}}`)
@@ -188,10 +195,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           }
         } else if (styleConfig.animationType === 'popline') {
           if (j === i) {
-            const durMs = Math.round((w.end - w.start) * 1000)
-            const gMs = Math.min(100, Math.floor(durMs / 3))
-            const sMs = Math.min(150, Math.floor(durMs / 2))
-            parts.push(`{\\u1\\c${highlightAss}\\fscx95\\fscy95\\t(0,${gMs},\\fscx105\\fscy105)\\t(${gMs},${gMs + sMs},\\fscx100\\fscy100)}`)
+            const popSz = styleConfig.popSize || 5
+            const popDur = styleConfig.popDuration || 0.18
+            const popStart = 100 - popSz
+            const popPeak = 100 + popSz
+            const durCs = Math.round(popDur * 100)
+            const halfDurCs = Math.round(durCs / 2)
+            parts.push(`{\\u1\\c${highlightAss}\\fscx${popStart}\\fscy${popStart}\\t(0,${halfDurCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${halfDurCs},${durCs},\\fscx100\\fscy100)}`)
           }
           parts.push(wUpper)
           if (j === i) {
@@ -317,6 +327,10 @@ function buildBlockText(block, activeWordIndex, styleConfig, highlightAss, event
 
 function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {
   const { animationType } = styleConfig
+  const popSz = styleConfig.popSize || 5
+  const popDur = styleConfig.popDuration || 0.18
+  const popStart = 100 - popSz
+  const popPeak = 100 + popSz
 
   switch (animationType) {
     case 'karaoke': {
@@ -324,12 +338,12 @@ function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {
       return `{\\kf${durationCs}}`
     }
     case 'scale':
-      return `{\\fscx110\\fscy110\\c${highlightAss}}`
+      return `{\\fscx${popPeak}\\fscy${popPeak}\\c${highlightAss}}`
     case 'wordpop': {
       const durationMs = Math.round((word.end - word.start) * 1000)
       const growMs = Math.min(100, Math.floor(durationMs / 3))
       const shrinkMs = Math.min(150, Math.floor(durationMs / 2))
-      return `{\\fscx80\\fscy80\\t(0,${growMs},\\fscx115\\fscy115)\\t(${growMs},${growMs + shrinkMs},\\fscx100\\fscy100)\\c${highlightAss}}`
+      return `{\\fscx${popStart}\\fscy${popStart}\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growMs},${growMs + shrinkMs},\\fscx100\\fscy100)\\c${highlightAss}}`
     }
     case 'popline':
       return ''

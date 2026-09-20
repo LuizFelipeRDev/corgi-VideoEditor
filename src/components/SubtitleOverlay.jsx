@@ -1,4 +1,4 @@
-import { SUBTITLE_STYLES, SUBTITLE_POSITIONS } from '../lib/subtitleStyles'
+import { SUBTITLE_STYLES, SUBTITLE_POSITIONS, hasPopEffect } from '../lib/subtitleStyles'
 import { parseSrtTimeToSecondsExport } from '../lib/subtitleRender'
 
 function hashString(str) {
@@ -24,6 +24,9 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
   const fontId = cfg.fontId || stylePreset.fontFamily.split(',')[0].trim()
   const configFontSize = cfg.fontSize || stylePreset.fontSize
   const animType = stylePreset.animationType
+  const popOn = hasPopEffect(subtitleStyle)
+  const popDur = stylePreset.popDuration
+  const popSz = stylePreset.popSize
 
   const activeSub = subtitles.find((sub) => {
     const start = parseSrtTimeToSecondsExport(sub.start)
@@ -85,7 +88,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     maxWidth: isPortrait ? '90%' : '85%',
     wordBreak: 'break-word',
     ...(isPortrait ? { padding: '0 3%' } : {}),
-    ...(animType === 'bounce' ? { animation: 'subtitle-bounce 0.18s ease-out' } : {}),
+    ...(animType === 'bounce' && popOn ? { animation: `subtitle-bounce ${popDur}s ease-out` } : {}),
   }
 
   const now = currentTime
@@ -132,10 +135,11 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
 
       case 'scale': {
         const isActive = wordStart !== null && wordEnd !== null && now >= wordStart && now < wordEnd
+        const scaleVal = 1 + (popSz / 100)
         return {
           ...base,
           color: isActive ? highlightColor : primaryColor,
-          transform: isActive ? 'scale(1.1)' : 'scale(1)',
+          transform: isActive ? `scale(${scaleVal})` : 'scale(1)',
         }
       }
 
@@ -144,7 +148,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
         return {
           ...base,
           color: isActive ? highlightColor : primaryColor,
-          animation: isActive ? 'subtitle-wordpop 0.3s ease-out' : 'none',
+          animation: isActive && popOn ? `subtitle-wordpop ${popDur}s ease-out` : 'none',
         }
       }
 
@@ -154,7 +158,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
           ...base,
           color: isActive ? highlightColor : primaryColor,
           textDecoration: isActive ? 'underline' : 'none',
-          animation: isActive ? 'subtitle-popline-bounce 0.18s ease-out' : 'none',
+          animation: isActive && popOn ? `subtitle-popline-bounce ${popDur}s ease-out` : 'none',
         }
       }
     }
