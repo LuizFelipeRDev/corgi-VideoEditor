@@ -461,7 +461,7 @@ export function formatSecondsToSrtTime(seconds) {
   )
 }
 
-export function groupWordsIntoSegments(wordEntries, wordsPerLine = 4, linesCount = 2, persistence = 1) {
+export function groupWordsIntoSegments(wordEntries, wordsPerLine = 4, linesCount = 2, persistence = 1, smart = false) {
   if (!wordEntries || wordEntries.length === 0) return []
 
   const formatTime = (timeStr) => {
@@ -474,19 +474,24 @@ export function groupWordsIntoSegments(wordEntries, wordsPerLine = 4, linesCount
     return timeStr
   }
 
+  const stripTrailingDot = (text) => {
+    if (!smart) return text
+    return text.replace(/\.$/, '')
+  }
+
   const segments = []
   let currentWords = []
   let currentStart = null
 
   const pushSegment = () => {
     if (currentWords.length === 0) return
-    const text = currentWords.map(w => w.text).join(' ')
+    const text = currentWords.map(w => stripTrailingDot(w.text)).join(' ')
     const lastWord = currentWords[currentWords.length - 1]
     segments.push({
       start: formatTime(currentStart),
       end: formatTime(lastWord.end),
       text,
-      words: currentWords.map(w => ({ text: w.text, start: formatTime(w.start), end: formatTime(w.end) })),
+      words: currentWords.map(w => ({ text: stripTrailingDot(w.text), start: formatTime(w.start), end: formatTime(w.end) })),
     })
     currentWords = []
     currentStart = null
@@ -502,7 +507,7 @@ export function groupWordsIntoSegments(wordEntries, wordsPerLine = 4, linesCount
 
     const nextWord = wordEntries[i + 1]
     const maxWords = wordsPerLine * linesCount
-    const endsSentence = /[.!?;]$/.test(wordText)
+    const endsSentence = smart ? /[.!?]$/.test(wordText) : /[.!?;]$/.test(wordText)
     const hasGap = nextWord && (parseSrtTimeToSeconds(nextWord.start) - parseSrtTimeToSeconds(word.end)) > 0.3
 
     if (currentWords.length >= maxWords || endsSentence || hasGap) {

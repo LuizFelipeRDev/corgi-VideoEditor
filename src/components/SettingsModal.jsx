@@ -26,7 +26,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', desc: 'Maxima qualidade, bem lento' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
   const [tab, setTab] = useState('geral')
   const [localFolder, setLocalFolder] = useState(outputFolder)
   const [localFormat, setLocalFormat] = useState(outputFormat)
@@ -40,6 +40,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   const [localWordsPerLine, setLocalWordsPerLine] = useState(wordsPerLine || 4)
   const [localLinesCount, setLocalLinesCount] = useState(linesCount || 2)
   const [localPersistence, setLocalPersistence] = useState(subtitlePersistence ?? 1)
+  const [localSmartSubtitle, setLocalSmartSubtitle] = useState(smartSubtitle)
   const [localPositionMode, setLocalPositionMode] = useState(positionMode || 'fixed')
   const [localPositionPercent, setLocalPositionPercent] = useState(positionPercent ?? 80)
 
@@ -104,6 +105,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
       words_per_line: localWordsPerLine,
       lines_count: localLinesCount,
       subtitle_persistence: localPersistence,
+      smart_subtitle: localSmartSubtitle,
       subtitle_position_mode: localPositionMode,
       subtitle_position_percent: localPositionPercent,
     })
@@ -575,6 +577,24 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
               <p className="font-pixel text-[6px] text-retro-black/50 mt-1">
                 Tempo que a legenda fica visivel entre frases
               </p>
+            </div>
+
+            <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localSmartSubtitle}
+                  onChange={(e) => setLocalSmartSubtitle(e.target.checked)}
+                  disabled={!localSubtitles}
+                  className="w-4 h-4 accent-retro-black disabled:opacity-50"
+                />
+                <span className="font-pixel text-[7px] text-retro-black uppercase">
+                  Legenda Inteligente
+                </span>
+                <Tooltip text="Quebra automatica em pontuacao (. ! ?). Remove o ponto final, mantem ! e ?">
+                  <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+                </Tooltip>
+              </label>
             </div>
 
             <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>

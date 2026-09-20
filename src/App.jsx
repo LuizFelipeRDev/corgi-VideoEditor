@@ -56,6 +56,7 @@ function App() {
   const [wordsPerLine, setWordsPerLine] = useState(4)
   const [linesCount, setLinesCount] = useState(2)
   const [subtitlePersistence, setSubtitlePersistence] = useState(1)
+  const [smartSubtitle, setSmartSubtitle] = useState(false)
   const [subtitleConfigs, setSubtitleConfigs] = useState({})
   const [subtitlesEdited, setSubtitlesEdited] = useState(false)
 
@@ -77,6 +78,7 @@ function App() {
       setWordsPerLine(Number(c.words_per_line) || 4)
       setLinesCount(Number(c.lines_count) || 2)
       setSubtitlePersistence(Number(c.subtitle_persistence) || 1)
+      setSmartSubtitle(c.smart_subtitle === 'true')
       try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
     })
 
@@ -458,7 +460,8 @@ function App() {
           wordTimings,
           styleCfg.wordsPerLine || wordsPerLine,
           styleCfg.linesCount || linesCount,
-          subtitlePersistence
+          subtitlePersistence,
+          smartSubtitle
         )
         setSubtitles(enriched)
       }
@@ -585,6 +588,7 @@ function App() {
     if (newConfig.words_per_line !== undefined) setWordsPerLine(newConfig.words_per_line)
     if (newConfig.lines_count !== undefined) setLinesCount(newConfig.lines_count)
     if (newConfig.subtitle_persistence !== undefined) setSubtitlePersistence(newConfig.subtitle_persistence)
+    if (newConfig.smart_subtitle !== undefined) setSmartSubtitle(newConfig.smart_subtitle)
     if (newConfig.subtitle_configs !== undefined) setSubtitleConfigs(newConfig.subtitle_configs)
 
     await window.api.saveConfig({
@@ -603,6 +607,7 @@ function App() {
       words_per_line: String(newConfig.words_per_line ?? wordsPerLine),
       lines_count: String(newConfig.lines_count ?? linesCount),
       subtitle_persistence: String(newConfig.subtitle_persistence ?? subtitlePersistence),
+      smart_subtitle: String(newConfig.smart_subtitle ?? smartSubtitle),
       subtitle_configs: JSON.stringify(newConfig.subtitle_configs ?? subtitleConfigs),
     })
   }
@@ -721,6 +726,7 @@ function App() {
           wordsPerLine={wordsPerLine}
           linesCount={linesCount}
           subtitlePersistence={subtitlePersistence}
+          smartSubtitle={smartSubtitle}
           positionMode={positionMode}
           positionPercent={positionPercent}
           whisperCliInstalled={whisperCliInstalled}

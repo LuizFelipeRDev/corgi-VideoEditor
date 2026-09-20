@@ -74,8 +74,8 @@ export const SUBTITLE_STYLES = {
     wordSpacing: 100,
     animationType: 'bounce',
     popIntensity: 1,
-    popDuration: 0.18,
-    popSize: 1,
+    popDuration: 0.16,
+    popSize: 15,
     bestFor: 'Gaming & entertainment',
   },
   karaoke: {
@@ -143,8 +143,8 @@ export const SUBTITLE_STYLES = {
     wordSpacing: 100,
     animationType: 'wordpop',
     popIntensity: 1,
-    popDuration: 0.30,
-    popSize: 15,
+    popDuration: 0.05,
+    popSize: 10,
     bestFor: 'TikTok & viral content',
   },
   simple: {
