@@ -8,6 +8,13 @@ docs/
 Thumbs.db
 config.ini
 
+# Binaries
+bin/auto-editor.exe
+bin/ffmpeg.exe
+bin/ffplay.exe
+bin/ffprobe.exe
+whisper-cuda.zip
+
 # Whisper models (mantém apenas tiny)
 bin/ggml-base*.bin
 bin/ggml-small*.bin
