@@ -50,20 +50,20 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     zIndex: 5,
   }
 
-  const textStyle = isPercentage ? {
-    position: 'absolute',
-    left: '50%',
-    bottom: `${clampedPercent}%`,
-    transform: 'translateX(-50%)',
-  } : {
+  const textStyle = {
     position: 'absolute',
     left: 0,
     right: 0,
-    display: 'flex',
-    justifyContent: 'center',
-    ...(posPreset.justifyContent === 'flex-start' ? { top: posPreset.paddingTop || '16px' } : {}),
-    ...(posPreset.justifyContent === 'center' ? { top: '50%', transform: 'translateY(-50%)' } : {}),
-    ...(posPreset.justifyContent === 'flex-end' ? { bottom: posPreset.paddingBottom || '40px' } : {}),
+    width: 'fit-content',
+    margin: '0 auto',
+    ...(isPercentage
+      ? { bottom: `${clampedPercent}%` }
+      : posPreset.justifyContent === 'center'
+        ? { top: '50%', transform: 'translateY(-50%)' }
+        : posPreset.justifyContent === 'flex-start'
+          ? { top: fullscreen ? (posPreset.paddingTop || '0') : (posPreset.paddingTop ? '16px' : '10px') }
+          : { bottom: fullscreen ? (posPreset.paddingBottom || '40px') : (posPreset.paddingBottom ? '24px' : '40px') }
+    ),
   }
 
   const blockStyle = {

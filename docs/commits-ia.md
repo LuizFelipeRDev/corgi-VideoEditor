@@ -114,6 +114,9 @@ The version must follow:
 * `v0.1.0` = module implementation, significant feature, refactoring, or significant change
 * `v0.0.1` = fixes, bugfixes, small adjustments, etc.
 
+* Check if `src/components/AboutModal.jsx` has the new version. If it isn't, adjust the version.
+
+
 ### Mandatory Rule
 
 ****The version MUST NOT be invented or automatically inferred.****

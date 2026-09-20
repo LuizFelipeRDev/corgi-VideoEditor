@@ -72,9 +72,8 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
   100% { transform: scale(1.00); }
 }
 @keyframes subtitle-wordpop {
-  0%   { transform: scale(0.80); }
-  33%  { transform: scale(1.15); }
-  83%  { transform: scale(1.00); }
+  0%   { transform: scale(0.95); }
+  40%  { transform: scale(1.05); }
   100% { transform: scale(1.00); }
 }
 @keyframes subtitle-popline-bounce {
