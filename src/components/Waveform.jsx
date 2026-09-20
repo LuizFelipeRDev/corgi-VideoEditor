@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react'
 import WaveSurfer from 'wavesurfer.js'
 
-function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef }) {
+function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles }) {
   const containerRef = useRef(null)
   const wsRef = useRef(null)
   const [ready, setReady] = useState(false)
@@ -61,11 +61,13 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef }) {
     })
 
     wsRef.current = ws
+    if (waveSurferRef) waveSurferRef.current = ws
 
     return () => {
       ws.pause()
       ws.destroy()
       wsRef.current = null
+      if (waveSurferRef) waveSurferRef.current = null
     }
   }, [selectedFile])
 
@@ -115,7 +117,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef }) {
       <div className="flex items-center gap-2 mb-1">
         <button
           onClick={handlePlayPause}
-          disabled={!ready}
+          disabled={!ready || processing || generatingSubtitles}
           className="w-5 h-5 flex items-center justify-center bg-retro-box border border-retro-black rounded hover:bg-green-100 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           {playing ? (

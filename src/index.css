@@ -65,3 +65,20 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
 .btn-retro:active { box-shadow: 0 0 #1a1a1a; transform: translate(2px, 2px); }
 .drag-over { background-color: #d4edda !important; border-color: #28a745 !important; }
 .progress-fill { transition: width 0.3s ease; }
+
+@keyframes subtitle-bounce {
+  0%   { transform: scale(0.95); }
+  55%  { transform: scale(1.05); }
+  100% { transform: scale(1.00); }
+}
+@keyframes subtitle-wordpop {
+  0%   { transform: scale(0.80); }
+  33%  { transform: scale(1.15); }
+  83%  { transform: scale(1.00); }
+  100% { transform: scale(1.00); }
+}
+@keyframes subtitle-popline-bounce {
+  0%   { transform: scale(0.95); }
+  50%  { transform: scale(1.05); }
+  100% { transform: scale(1.00); }
+}

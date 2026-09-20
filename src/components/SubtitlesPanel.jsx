@@ -6,6 +6,7 @@ function SubtitlesPanel({
   subtitles,
   onGenerate,
   generating,
+  processing,
   onStop,
   selectedFile,
   subtitlesEnabled,
@@ -16,11 +17,15 @@ function SubtitlesPanel({
   currentTime,
   subtitleStyle,
   subtitlePosition,
+  positionMode,
+  positionPercent,
   wordsPerLine,
   linesCount,
   subtitleConfigs,
   onStyleChange,
   onPositionChange,
+  onPositionModeChange,
+  onPositionPercentChange,
   onConfigSave,
   hasChanges,
   onSave,
@@ -151,21 +156,39 @@ function SubtitlesPanel({
 
           <div>
             <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Posicao</label>
-            <div className="flex gap-1">
-              {SUBTITLE_POSITION_LIST.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => onPositionChange(p.id)}
-                  className={`flex-1 h-7 border-2 border-retro-black rounded font-pixel text-[6px] ${
-                    subtitlePosition === p.id
-                      ? 'bg-retro-black text-retro-bg'
-                      : 'bg-retro-bg text-retro-black hover:bg-gray-200'
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
+            {positionMode === 'fixed' ? (
+              <div className="flex gap-1">
+                {SUBTITLE_POSITION_LIST.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => onPositionChange(p.id)}
+                    className={`flex-1 h-7 border-2 border-retro-black rounded font-pixel text-[6px] ${
+                      subtitlePosition === p.id
+                        ? 'bg-retro-black text-retro-bg'
+                        : 'bg-retro-bg text-retro-black hover:bg-gray-200'
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div>
+                <input
+                  type="range"
+                  min="5"
+                  max="85"
+                  value={positionPercent}
+                  onChange={(e) => onPositionPercentChange(Number(e.target.value))}
+                  className="w-full h-2 bg-retro-bg border border-retro-black rounded appearance-none cursor-pointer accent-retro-black"
+                />
+                <div className="flex justify-between mt-0.5">
+                  <span className="font-pixel text-[5px] text-retro-black/50">BAIXO</span>
+                  <span className="font-pixel text-[5px] text-retro-black">{positionPercent}%</span>
+                  <span className="font-pixel text-[5px] text-retro-black/50">TOPO</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <button
@@ -191,7 +214,8 @@ function SubtitlesPanel({
             </p>
             <button
               onClick={onGenerate}
-              className="btn-retro w-full h-8 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[7px] text-retro-black uppercase hover:bg-green-100"
+              disabled={processing}
+              className="btn-retro w-full h-8 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[7px] text-retro-black uppercase hover:bg-green-100 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               GERAR LEGENDAS
             </button>
@@ -329,7 +353,12 @@ function SubtitlesPanel({
 
             <button
               onClick={onAddSubtitle}
-              className="btn-retro w-full h-7 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[6px] text-retro-black uppercase hover:bg-green-100 mt-2"
+              disabled={generating || processing}
+              className={`btn-retro w-full h-7 border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[6px] uppercase mt-2 ${
+                generating || processing
+                  ? 'bg-retro-bg text-retro-black/30 opacity-30 cursor-not-allowed'
+                  : 'bg-retro-bg text-retro-black hover:bg-green-100'
+              }`}
             >
               + ADICIONAR LEGENDA
             </button>
@@ -337,10 +366,10 @@ function SubtitlesPanel({
             {subtitles.length > 0 && (
               <button
                 onClick={onGenerate}
-                disabled={generating}
+                disabled={generating || processing}
                 className={`btn-retro w-full h-7 border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[6px] uppercase mt-1 ${
-                  generating
-                    ? 'bg-retro-bg text-retro-black/40 cursor-not-allowed'
+                  generating || processing
+                    ? 'bg-retro-bg text-retro-black/30 opacity-30 cursor-not-allowed'
                     : 'bg-retro-bg text-retro-black hover:bg-yellow-100'
                 }`}
               >

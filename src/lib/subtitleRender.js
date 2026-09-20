@@ -53,7 +53,7 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, positionMode, positionPercent) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
   const playResX = videoWidth || 1920
@@ -66,7 +66,12 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
 
   let alignment = 2
   let marginV = 40
-  if (position === 'top') {
+
+  if (positionMode === 'percentage') {
+    alignment = 2
+    const percent = Math.min(90, Math.max(5, positionPercent ?? 80))
+    marginV = Math.round((percent / 100) * (playResY - 60) + 40)
+  } else if (position === 'top') {
     alignment = 8
     marginV = 20
   } else if (position === 'middle') {

@@ -1,4 +1,4 @@
-function Controls({ threshold, setThreshold, marginVal, setMarginVal, processing, onExport, progress, onSaveConfig }) {
+function Controls({ threshold, setThreshold, marginVal, setMarginVal, processing, generatingSubtitles, onExport, progress, onSaveConfig }) {
   const handleBlur = () => {
     onSaveConfig({ threshold, margin: marginVal })
   }
@@ -40,8 +40,8 @@ function Controls({ threshold, setThreshold, marginVal, setMarginVal, processing
 
       <button
         onClick={onExport}
-        disabled={processing}
-        className="btn-retro w-full h-10 bg-retro-bg border-2 border-retro-black rounded shadow-retro font-pixel text-[9px] text-retro-black uppercase tracking-wider hover:bg-yellow-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        disabled={processing || generatingSubtitles}
+        className="btn-retro w-full h-10 bg-retro-bg border-2 border-retro-black rounded shadow-retro font-pixel text-[9px] text-retro-black uppercase tracking-wider hover:bg-yellow-50 disabled:opacity-30 disabled:cursor-not-allowed"
       >
         {processing ? 'PROCESSANDO...' : 'EXPORTAR'}
       </button>

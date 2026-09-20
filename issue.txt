@@ -1,0 +1,1 @@
+ temos 3 problemas, problema 1-> no frontend do eletron ele esta aglutinando toda a legenda sem respeitar a configuração de 4  palavras por linha em vcada mini container problemas 2 e 3 sao na media final apos exportar, esta sem highlight e exportando em 3 linhas sem respeitar a configuração de 4 palavras por linha(se vc esta em duvida de onde esta essa configuração leia config

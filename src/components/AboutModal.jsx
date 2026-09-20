@@ -17,7 +17,7 @@ function AboutModal({ onClose }) {
         </div>
         <img src={logo} alt="Logo" className="w-20 h-20 mx-auto mb-3" />
         <h2 className="font-pixel text-[10px] text-retro-black mb-1">A Lue Project</h2>
-        <p className="font-pixel text-[7px] text-retro-black/60">CORGI-EDITOR v1.0.0</p>
+        <p className="font-pixel text-[7px] text-retro-black/60">CORGI-EDITOR v1.1.0</p>
       </div>
     </div>
   )

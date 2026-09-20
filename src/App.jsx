@@ -35,10 +35,13 @@ function App() {
   const videoDurationRef = useRef(0)
   const videoRef = useRef(null)
   const exportingRef = useRef(false)
+  const waveSurferRef = useRef(null)
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
   const [subtitleModel, setSubtitleModel] = useState('small')
   const [subtitlePosition, setSubtitlePosition] = useState('bottom')
+  const [positionMode, setPositionMode] = useState('fixed')
+  const [positionPercent, setPositionPercent] = useState(80)
   const [subtitleStyle, setSubtitleStyle] = useState('hormozi')
   const [greenScreen, setGreenScreen] = useState(false)
   const [burnSubtitles, setBurnSubtitles] = useState(true)
@@ -60,6 +63,8 @@ function App() {
       setSubtitlesEnabled(c.subtitles === 'true')
       setSubtitleModel(c.subtitle_model || 'small')
       setSubtitlePosition(c.subtitle_position || 'bottom')
+      setPositionMode(c.subtitle_position_mode || 'fixed')
+      setPositionPercent(Math.min(85, Math.max(5, Number(c.subtitle_position_percent) || 80)))
       setSubtitleStyle(c.subtitle_style || 'hormozi')
       setGreenScreen(c.green_screen === 'true')
       setBurnSubtitles(c.burn_subtitles !== 'false')
@@ -196,6 +201,10 @@ function App() {
 
   const handleExport = async () => {
     if (!selectedFile || processing) return
+    if (videoRef.current) {
+      videoRef.current.pause()
+      if (waveSurferRef?.current) waveSurferRef.current.pause()
+    }
     exportingRef.current = true
     setProcessing(true)
     errorBuffer.current = ''
@@ -279,7 +288,9 @@ function App() {
             styleCfg.linesCount || linesCount,
             styleCfg.primaryColor || undefined,
             styleCfg.highlightColor || undefined,
-            styleCfg.fontId || undefined
+            styleCfg.fontId || undefined,
+            positionMode,
+            positionPercent
           )
           if (assContent) {
             await window.api.writeFile(assPath, assContent)
@@ -327,6 +338,10 @@ function App() {
 
   const handleGenerateSubtitles = async () => {
     if (!selectedFile || generatingSubtitles) return
+    if (videoRef.current) {
+      videoRef.current.pause()
+      if (waveSurferRef?.current) waveSurferRef.current.pause()
+    }
     whisperGenRef.current++
     whisperStoppingRef.current = false
     setGeneratingSubtitles(true)
@@ -508,6 +523,8 @@ function App() {
     if (newConfig.subtitles !== undefined) setSubtitlesEnabled(newConfig.subtitles === true || newConfig.subtitles === 'true')
     if (newConfig.subtitle_model !== undefined) setSubtitleModel(newConfig.subtitle_model)
     if (newConfig.subtitle_position !== undefined) setSubtitlePosition(newConfig.subtitle_position)
+    if (newConfig.subtitle_position_mode !== undefined) setPositionMode(newConfig.subtitle_position_mode)
+    if (newConfig.subtitle_position_percent !== undefined) setPositionPercent(newConfig.subtitle_position_percent)
     if (newConfig.subtitle_style !== undefined) setSubtitleStyle(newConfig.subtitle_style)
     if (newConfig.green_screen !== undefined) setGreenScreen(newConfig.green_screen)
     if (newConfig.burn_subtitles !== undefined) setBurnSubtitles(newConfig.burn_subtitles)
@@ -523,6 +540,8 @@ function App() {
       subtitles: String(newConfig.subtitles ?? subtitlesEnabled),
       subtitle_model: newConfig.subtitle_model ?? subtitleModel,
       subtitle_position: newConfig.subtitle_position ?? subtitlePosition,
+      subtitle_position_mode: newConfig.subtitle_position_mode ?? positionMode,
+      subtitle_position_percent: String(newConfig.subtitle_position_percent ?? positionPercent),
       subtitle_style: newConfig.subtitle_style ?? subtitleStyle,
       green_screen: String(newConfig.green_screen ?? greenScreen),
       burn_subtitles: String(newConfig.burn_subtitles ?? burnSubtitles),
@@ -555,6 +574,13 @@ function App() {
                 seekTo={seekTo}
                 onClear={() => setSubtitles([])}
                 videoRef={videoRef}
+                waveSurferRef={waveSurferRef}
+                subtitles={subtitles}
+                subtitleStyle={subtitleStyle}
+                subtitlePosition={subtitlePosition}
+                subtitleConfigs={subtitleConfigs}
+                positionMode={positionMode}
+                positionPercent={positionPercent}
               />
             </div>
             <Controls
@@ -563,6 +589,7 @@ function App() {
               marginVal={marginVal}
               setMarginVal={setMarginVal}
               processing={processing}
+              generatingSubtitles={generatingSubtitles}
               onExport={handleExport}
               progress={progress}
               onSaveConfig={handleSaveSettings}
@@ -574,6 +601,9 @@ function App() {
               onTimeUpdate={handleTimeUpdate}
               seekTo={seekTo}
               videoRef={videoRef}
+              waveSurferRef={waveSurferRef}
+              processing={processing}
+              generatingSubtitles={generatingSubtitles}
             />
           </div>
         </div>
@@ -582,6 +612,7 @@ function App() {
             subtitles={subtitles}
             onGenerate={handleGenerateSubtitles}
             generating={generatingSubtitles}
+            processing={processing}
             onStop={() => {
               whisperStoppingRef.current = true
               window.api.stopWhisperCli()
@@ -596,11 +627,15 @@ function App() {
             currentTime={currentTime}
             subtitleStyle={subtitleStyle}
             subtitlePosition={subtitlePosition}
+            positionMode={positionMode}
+            positionPercent={positionPercent}
             wordsPerLine={wordsPerLine}
             linesCount={linesCount}
             subtitleConfigs={subtitleConfigs}
             onStyleChange={(style) => handleSaveSettings({ subtitle_style: style })}
             onPositionChange={(pos) => handleSaveSettings({ subtitle_position: pos })}
+            onPositionModeChange={(mode) => handleSaveSettings({ subtitle_position_mode: mode })}
+            onPositionPercentChange={(pct) => handleSaveSettings({ subtitle_position_percent: pct })}
             onConfigSave={(cfg) => handleSaveSettings({ subtitle_configs: cfg })}
             hasChanges={subtitlesEdited}
             onSave={handleSaveSubtitles}
@@ -624,6 +659,8 @@ function App() {
           selectedFile={selectedFile}
           wordsPerLine={wordsPerLine}
           linesCount={linesCount}
+          positionMode={positionMode}
+          positionPercent={positionPercent}
           whisperCliInstalled={whisperCliInstalled}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}

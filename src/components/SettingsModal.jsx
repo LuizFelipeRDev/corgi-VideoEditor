@@ -24,7 +24,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', desc: 'Maxima qualidade, bem lento' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
   const [tab, setTab] = useState('geral')
   const [localFolder, setLocalFolder] = useState(outputFolder)
   const [localFormat, setLocalFormat] = useState(outputFormat)
@@ -34,6 +34,8 @@ function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, g
   const [localBurnSubtitles, setLocalBurnSubtitles] = useState(burnSubtitles)
   const [localWordsPerLine, setLocalWordsPerLine] = useState(wordsPerLine || 4)
   const [localLinesCount, setLocalLinesCount] = useState(linesCount || 2)
+  const [localPositionMode, setLocalPositionMode] = useState(positionMode || 'fixed')
+  const [localPositionPercent, setLocalPositionPercent] = useState(positionPercent ?? 80)
 
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [modelInstalled, setModelInstalled] = useState({})
@@ -84,6 +86,8 @@ function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, g
       burn_subtitles: localBurnSubtitles,
       words_per_line: localWordsPerLine,
       lines_count: localLinesCount,
+      subtitle_position_mode: localPositionMode,
+      subtitle_position_percent: localPositionPercent,
     })
     onClose()
   }
@@ -429,6 +433,19 @@ function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, g
                 />
                 <span className="font-pixel text-[7px] text-retro-black uppercase">Ativar legendas</span>
               </label>
+            </div>
+
+            <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
+              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">MODO DE POSICAO</label>
+              <select
+                value={localPositionMode}
+                onChange={(e) => setLocalPositionMode(e.target.value)}
+                disabled={!localSubtitles}
+                className="w-full h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer disabled:opacity-50"
+              >
+                <option value="fixed">Posicao Pre-definida</option>
+                <option value="percentage">Ajuste Livre</option>
+              </select>
             </div>
 
             <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>

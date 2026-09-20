@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import SubtitleOverlay from './SubtitleOverlay'
 
-function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef }) {
+function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent }) {
   const [isDragOver, setIsDragOver] = useState(false)
+  const [videoFullscreen, setVideoFullscreen] = useState(false)
+  const [videoTime, setVideoTime] = useState(0)
+  const savedTimeRef = useRef(0)
 
   const isVideo = selectedFile && /\.(mp4|mkv|mov|webm|avi)$/i.test(selectedFile.name)
   const isAudio = selectedFile && /\.(mp3|wav|flac|ogg|aac|m4a)$/i.test(selectedFile.name)
@@ -48,6 +52,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
   }
 
   const handleTimeUpdate = (e) => {
+    setVideoTime(e.target.currentTime)
     if (onTimeUpdate) {
       onTimeUpdate(e.target.currentTime)
     }
@@ -88,8 +93,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               <span className="text-[7px] opacity-60">ou clique aqui</span>
             </p>
           </div>
-        ) : isVideo ? (
-          <div className="w-full h-full min-h-0 flex flex-col items-center justify-center overflow-hidden">
+        ) : isVideo && !videoFullscreen ? (
+          <div className="w-full h-full min-h-0 flex flex-col items-center justify-center overflow-hidden relative">
             <video
               ref={videoRef}
               src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
@@ -97,6 +102,44 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               muted
               className="max-w-full max-h-full object-contain rounded"
             />
+            {subtitles && subtitles.length > 0 && (
+              <SubtitleOverlay
+                subtitles={subtitles}
+                subtitleStyle={subtitleStyle}
+                subtitlePosition={subtitlePosition}
+                subtitleConfigs={subtitleConfigs}
+                currentTime={videoTime}
+                positionMode={positionMode}
+                positionPercent={positionPercent}
+              />
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (videoRef.current) {
+                  savedTimeRef.current = videoRef.current.currentTime
+                  const wasPlaying = !videoRef.current.paused
+                  setVideoFullscreen(true)
+                  setTimeout(() => {
+                    if (videoRef.current) {
+                      videoRef.current.currentTime = savedTimeRef.current
+                      if (wasPlaying) {
+                        videoRef.current.play()
+                      } else {
+                        if (waveSurferRef?.current) waveSurferRef.current.play()
+                        videoRef.current.play()
+                      }
+                    }
+                  }, 100)
+                }
+              }}
+              className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
+              title="Tela cheia"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
+              </svg>
+            </button>
           </div>
         ) : isAudio ? (
           <div className="w-full h-full flex flex-col items-center justify-center gap-2">
@@ -126,6 +169,64 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
           <span className="font-pixel text-[7px] text-retro-black">—</span>
         </div>
       </div>
+
+      {videoFullscreen && selectedFile && (
+        <div
+          className="fixed inset-0 bg-black z-50 flex items-center justify-center"
+          onClick={() => {
+            if (videoRef.current) {
+              savedTimeRef.current = videoRef.current.currentTime
+              videoRef.current.pause()
+            }
+            if (waveSurferRef?.current) waveSurferRef.current.pause()
+            setVideoFullscreen(false)
+            setTimeout(() => {
+              if (videoRef.current) videoRef.current.currentTime = savedTimeRef.current
+            }, 100)
+          }}
+        >
+          <div className="relative max-w-full max-h-full flex items-center justify-center">
+            <video
+              ref={videoRef}
+              src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
+              onTimeUpdate={handleTimeUpdate}
+              muted
+              autoPlay
+              className="max-w-full max-h-full object-contain"
+            />
+            {subtitles && subtitles.length > 0 && (
+              <SubtitleOverlay
+                subtitles={subtitles}
+                subtitleStyle={subtitleStyle}
+                subtitlePosition={subtitlePosition}
+                subtitleConfigs={subtitleConfigs}
+                currentTime={videoTime}
+                fullscreen
+                positionMode={positionMode}
+                positionPercent={positionPercent}
+              />
+            )}
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              if (videoRef.current) {
+                savedTimeRef.current = videoRef.current.currentTime
+                videoRef.current.pause()
+              }
+              if (waveSurferRef?.current) waveSurferRef.current.pause()
+              setVideoFullscreen(false)
+              setTimeout(() => {
+                if (videoRef.current) videoRef.current.currentTime = savedTimeRef.current
+              }, 100)
+            }}
+            className="absolute top-2 right-2 w-7 h-7 bg-white/20 hover:bg-white/40 border border-white/30 rounded flex items-center justify-center text-white text-[12px] transition-colors"
+            title="Sair da tela cheia"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   )
 }

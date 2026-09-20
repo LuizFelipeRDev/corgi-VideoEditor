@@ -76,6 +76,8 @@ function readConfig() {
     words_per_line: '4',
     lines_count: '2',
     subtitle_configs: '{}',
+    subtitle_position_mode: 'fixed',
+    subtitle_position_percent: '80',
   };
   if (!fs.existsSync(configPath)) return defaults;
   try {
@@ -93,7 +95,7 @@ function readConfig() {
 
 function writeConfig(config) {
   fs.writeFileSync(configPath,
-    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\n`, 'utf-8');
+    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\n`, 'utf-8');
 }
 
 let mainWindow;
