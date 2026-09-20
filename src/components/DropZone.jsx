@@ -95,7 +95,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             </p>
           </div>
         ) : isVideo && !videoFullscreen ? (
-          <div className="w-full h-full min-h-0 flex flex-col items-center justify-center overflow-hidden relative" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
+          <div className={`min-h-0 flex flex-col items-center justify-center overflow-hidden relative h-full ${outputResolution === 'portrait' ? 'bg-black' : 'w-full'}`} style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
             <video
               ref={videoRef}
               src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
@@ -112,6 +112,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 currentTime={effectiveTime}
                 positionMode={positionMode}
                 positionPercent={positionPercent}
+                outputResolution={outputResolution}
               />
             )}
             <button
@@ -144,7 +145,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
           </div>
         ) : isAudio && subtitlesEnabled ? (
           <div
-            className="w-full h-full min-h-0 flex flex-col items-center justify-center overflow-hidden relative"
+            className={`min-h-0 flex flex-col items-center justify-center overflow-hidden relative h-full ${outputResolution === 'portrait' ? '' : 'w-full'}`}
             style={{
               backgroundColor: greenScreen ? '#00a800' : '#000',
               aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9',
@@ -159,6 +160,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 currentTime={effectiveTime}
                 positionMode={positionMode}
                 positionPercent={positionPercent}
+                outputResolution={outputResolution}
               />
             )}
             <button
@@ -241,6 +243,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                   fullscreen
                   positionMode={positionMode}
                   positionPercent={positionPercent}
+                  outputResolution={outputResolution}
                 />
               )}
             </div>
@@ -260,6 +263,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                     fullscreen
                     positionMode={positionMode}
                     positionPercent={positionPercent}
+                    outputResolution={outputResolution}
                   />
                 )}
               </div>

@@ -10,8 +10,10 @@ function hashString(str) {
   return Math.abs(hash)
 }
 
-function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent }) {
+function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent, outputResolution }) {
   if (!subtitles || subtitles.length === 0) return null
+
+  const isPortrait = outputResolution === 'portrait'
 
   const stylePreset = SUBTITLE_STYLES[subtitleStyle] || SUBTITLE_STYLES.hormozi
   const posPreset = SUBTITLE_POSITIONS[subtitlePosition] || SUBTITLE_POSITIONS.bottom
@@ -80,8 +82,9 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     textAlign: 'center',
     lineHeight: 1.3,
     textShadow: `0 0 2px ${stylePreset.outlineColor}, 0 0 4px ${stylePreset.outlineColor}`,
-    maxWidth: '85%',
+    maxWidth: isPortrait ? '90%' : '85%',
     wordBreak: 'break-word',
+    ...(isPortrait ? { padding: '0 3%' } : {}),
     ...(animType === 'bounce' ? { animation: 'subtitle-bounce 0.18s ease-out' } : {}),
   }
 
