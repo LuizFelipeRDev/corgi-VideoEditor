@@ -210,7 +210,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
 
       {videoFullscreen && selectedFile && (
         <div
-          className="fixed inset-0 bg-black z-50 flex items-center justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: outputResolution === 'portrait' ? '#1a1a1a' : '#000' }}
           onClick={() => {
             if (videoRef.current) {
               savedTimeRef.current = videoRef.current.currentTime
@@ -249,10 +250,15 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             </div>
           ) : (
             <div
-              className="absolute inset-0 flex items-center justify-center"
-              style={{ backgroundColor: greenScreen ? '#00a800' : '#000' }}
+              className="flex items-center justify-center"
+              style={{
+                width: outputResolution === 'portrait' ? '56.25vh' : '100%',
+                height: outputResolution === 'portrait' ? '100vh' : '100%',
+                backgroundColor: greenScreen ? '#00a800' : '#000',
+                aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9',
+              }}
             >
-              <div className={`relative ${outputResolution === 'portrait' ? '' : 'w-full h-full'}`} style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
+              <div className="relative w-full h-full">
                 {subtitles && subtitles.length > 0 && (
                   <SubtitleOverlay
                     subtitles={subtitles}
