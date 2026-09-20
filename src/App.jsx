@@ -17,6 +17,7 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null)
   const [outputFolder, setOutputFolder] = useState('')
   const [outputFormat, setOutputFormat] = useState('mp3')
+  const [outputResolution, setOutputResolution] = useState('original')
   const [threshold, setThreshold] = useState('-30')
   const [marginVal, setMarginVal] = useState('0.5')
   const [processing, setProcessing] = useState(false)
@@ -59,6 +60,7 @@ function App() {
       setThreshold(c.threshold)
       setMarginVal(c.margin)
       setOutputFormat(c.output_format || 'mp3')
+      setOutputResolution(c.output_resolution || 'original')
       if (c.output_folder) setOutputFolder(c.output_folder)
       setSubtitlesEnabled(c.subtitles === 'true')
       setSubtitleModel(c.subtitle_model || 'small')
@@ -265,19 +267,28 @@ function App() {
           ]
         } else {
           const bgColor = greenScreen ? 'green' : 'black'
+          const bgRes = outputResolution === 'portrait' ? '1080x1920' : outputResolution === 'landscape' ? '1920x1080' : '1920x1080'
           ffmpegArgs = [
             '-y',
             '-f', 'lavfi',
-            '-i', `color=c=${bgColor}:s=1920x1080:d=${duration}`,
+            '-i', `color=c=${bgColor}:s=${bgRes}:d=${duration}`,
             '-i', tempOutPath,
           ]
+        }
+
+        const videoFilters = []
+        if (isVideoInput && outputResolution !== 'original') {
+          const outRes = outputResolution === 'portrait' ? '1080:1920' : '1920:1080'
+          videoFilters.push(`scale=${outRes}`)
         }
 
         if (shouldBurn) {
           assPath = await window.api.joinPath(outputDir, 'corgi_sub.ass')
           const styleCfg = subtitleConfigs[subtitleStyle] || {}
-          const videoW = videoRef.current?.videoWidth || 1920
-          const videoH = videoRef.current?.videoHeight || 1080
+          const inputW = videoRef.current?.videoWidth || 1920
+          const inputH = videoRef.current?.videoHeight || 1080
+          const videoW = outputResolution === 'portrait' ? 1080 : outputResolution === 'landscape' ? 1920 : inputW
+          const videoH = outputResolution === 'portrait' ? 1920 : outputResolution === 'landscape' ? 1080 : inputH
           const assContent = generateAssContent(
             subtitles,
             subtitleStyle,
@@ -299,9 +310,11 @@ function App() {
 
             const fontsDir = await window.api.getFontsPath()
             const escapedFontsDir = fontsDir.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\\\:')
-            ffmpegArgs.push(
-              '-vf', `ass=corgi_sub.ass:fontsdir=${escapedFontsDir}`,
-            )
+            videoFilters.push(`ass=corgi_sub.ass:fontsdir=${escapedFontsDir}`)
+          }
+
+          if (videoFilters.length > 0) {
+            ffmpegArgs.push('-vf', videoFilters.join(','))
           }
         }
 
@@ -520,6 +533,7 @@ function App() {
     if (newConfig.margin !== undefined) setMarginVal(newConfig.margin)
     if (newConfig.output_folder !== undefined) setOutputFolder(newConfig.output_folder)
     if (newConfig.output_format !== undefined) setOutputFormat(newConfig.output_format)
+    if (newConfig.output_resolution !== undefined) setOutputResolution(newConfig.output_resolution)
     if (newConfig.subtitles !== undefined) setSubtitlesEnabled(newConfig.subtitles === true || newConfig.subtitles === 'true')
     if (newConfig.subtitle_model !== undefined) setSubtitleModel(newConfig.subtitle_model)
     if (newConfig.subtitle_position !== undefined) setSubtitlePosition(newConfig.subtitle_position)
@@ -581,6 +595,7 @@ function App() {
                 subtitleConfigs={subtitleConfigs}
                 positionMode={positionMode}
                 positionPercent={positionPercent}
+                outputResolution={outputResolution}
               />
             </div>
             <Controls
@@ -652,6 +667,7 @@ function App() {
         <SettingsModal
           outputFolder={outputFolder}
           outputFormat={outputFormat}
+          outputResolution={outputResolution}
           subtitles={subtitlesEnabled}
           subtitleModel={subtitleModel}
           greenScreen={greenScreen}

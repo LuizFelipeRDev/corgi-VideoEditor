@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { IconZoomScan, IconRectangle, IconRectangleVertical } from '@tabler/icons-react'
+import Tooltip from './Tooltip'
 
 const OUTPUT_FORMATS = [
   { value: 'mp3', label: 'MP3' },
@@ -24,10 +26,13 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', desc: 'Maxima qualidade, bem lento' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
   const [tab, setTab] = useState('geral')
   const [localFolder, setLocalFolder] = useState(outputFolder)
   const [localFormat, setLocalFormat] = useState(outputFormat)
+  const [localResolution, setLocalResolution] = useState(outputResolution || 'original')
+  const [showResPopup, setShowResPopup] = useState(false)
+  const resPopupRef = useRef(null)
   const [localSubtitles, setLocalSubtitles] = useState(subtitles)
   const [localSubtitleModel, setLocalSubtitleModel] = useState(subtitleModel || 'small')
   const [localGreenScreen, setLocalGreenScreen] = useState(greenScreen)
@@ -71,6 +76,16 @@ function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, g
     return () => window.api.onModelDownloadProgress(null)
   }, [downloading])
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (resPopupRef.current && !resPopupRef.current.contains(e.target)) {
+        setShowResPopup(false)
+      }
+    }
+    if (showResPopup) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showResPopup])
+
   const handleSelectFolder = async () => {
     const d = await window.api.selectOutputDir()
     if (d) setLocalFolder(d)
@@ -80,6 +95,7 @@ function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, g
     await onSave({
       output_folder: localFolder,
       output_format: localFormat,
+      output_resolution: localResolution,
       subtitles: localSubtitles,
       subtitle_model: localSubtitleModel,
       green_screen: localGreenScreen,
@@ -407,6 +423,57 @@ function SettingsModal({ outputFolder, outputFormat, subtitles, subtitleModel, g
                 ))}
               </select>
             </div>
+
+            <div className={`mb-4 ${isOutputAudio ? 'opacity-30 pointer-events-none' : ''}`}>
+              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">RESOLUCAO DE SAIDA</label>
+              <div className="relative" ref={resPopupRef}>
+                <button
+                  onClick={() => !isOutputAudio && setShowResPopup(!showResPopup)}
+                  className="w-full h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black uppercase flex items-center justify-between hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isOutputAudio}
+                >
+                  <span>
+                    {localResolution === 'original' && 'Original'}
+                    {localResolution === 'landscape' && 'Paisagem (16:9)'}
+                    {localResolution === 'portrait' && 'Retrato (9:16)'}
+                  </span>
+                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 5l3 3 3-3" />
+                  </svg>
+                </button>
+
+                {showResPopup && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-retro-bg border-2 border-retro-black rounded shadow-retro z-50">
+                    {[
+                      { id: 'original', icon: IconZoomScan, label: 'Original', desc: 'Mesma resolucao do video de entrada' },
+                      { id: 'landscape', icon: IconRectangle, label: 'Paisagem', desc: '1920x1080 - Formato 16:9 padrao' },
+                      { id: 'portrait', icon: IconRectangleVertical, label: 'Retrato', desc: '1080x1920 - Formato 9:16 para celular' },
+                    ].map((r) => (
+                      <Tooltip key={r.id} text={r.desc}>
+                        <button
+                          onClick={() => {
+                            setLocalResolution(r.id)
+                            setShowResPopup(false)
+                          }}
+                          className={`w-full h-8 px-2 font-pixel text-[8px] flex items-center gap-2 transition-colors ${
+                            localResolution === r.id
+                              ? 'bg-retro-black text-retro-bg'
+                              : 'hover:bg-gray-200 text-retro-black'
+                          }`}
+                        >
+                          <r.icon size={14} stroke={2} />
+                          <span>{r.label}</span>
+                          <span className="ml-auto text-[6px] opacity-60">
+                            {r.id === 'original' ? 'Auto' : r.id === 'landscape' ? '1920x1080' : '1080x1920'}
+                          </span>
+                        </button>
+                      </Tooltip>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {needsVideo && isOutputAudio && (
               <p className="font-pixel text-[6px] text-red-600 mb-2">
                 Formato atual ({localFormat.toUpperCase()}) nao suporta legenda embarcada

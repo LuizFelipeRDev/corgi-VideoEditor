@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import SubtitleOverlay from './SubtitleOverlay'
 
-function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent }) {
+function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [videoFullscreen, setVideoFullscreen] = useState(false)
   const [videoTime, setVideoTime] = useState(0)
@@ -94,7 +94,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             </p>
           </div>
         ) : isVideo && !videoFullscreen ? (
-          <div className="w-full h-full min-h-0 flex flex-col items-center justify-center overflow-hidden relative">
+          <div className="w-full h-full min-h-0 flex flex-col items-center justify-center overflow-hidden relative" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
             <video
               ref={videoRef}
               src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
@@ -185,7 +185,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             }, 100)
           }}
         >
-          <div className="relative max-w-full max-h-full flex items-center justify-center">
+          <div className="relative max-w-full max-h-full flex items-center justify-center" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
             <video
               ref={videoRef}
               src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}

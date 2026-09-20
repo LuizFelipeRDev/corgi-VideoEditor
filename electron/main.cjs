@@ -67,6 +67,7 @@ function readConfig() {
     margin: '0.5',
     output_folder: '',
     output_format: 'mp3',
+    output_resolution: 'original',
     subtitles: 'false',
     subtitle_model: 'small',
     subtitle_position: 'bottom',
@@ -95,7 +96,7 @@ function readConfig() {
 
 function writeConfig(config) {
   fs.writeFileSync(configPath,
-    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\n`, 'utf-8');
+    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\noutput_resolution = ${config.output_resolution || 'original'}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\n`, 'utf-8');
 }
 
 let mainWindow;
