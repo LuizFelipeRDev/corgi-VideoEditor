@@ -26,7 +26,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', desc: 'Maxima qualidade, bem lento' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
   const [tab, setTab] = useState('geral')
   const [localFolder, setLocalFolder] = useState(outputFolder)
   const [localFormat, setLocalFormat] = useState(outputFormat)
@@ -39,6 +39,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   const [localBurnSubtitles, setLocalBurnSubtitles] = useState(burnSubtitles)
   const [localWordsPerLine, setLocalWordsPerLine] = useState(wordsPerLine || 4)
   const [localLinesCount, setLocalLinesCount] = useState(linesCount || 2)
+  const [localPersistence, setLocalPersistence] = useState(subtitlePersistence ?? 1)
   const [localPositionMode, setLocalPositionMode] = useState(positionMode || 'fixed')
   const [localPositionPercent, setLocalPositionPercent] = useState(positionPercent ?? 80)
 
@@ -102,6 +103,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
       burn_subtitles: localBurnSubtitles,
       words_per_line: localWordsPerLine,
       lines_count: localLinesCount,
+      subtitle_persistence: localPersistence,
       subtitle_position_mode: localPositionMode,
       subtitle_position_percent: localPositionPercent,
     })
@@ -230,31 +232,28 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
         <div className="flex gap-0 mb-4">
           <button
             onClick={() => setTab('geral')}
-            className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${
-              tab === 'geral'
+            className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${tab === 'geral'
                 ? 'bg-retro-bg text-retro-black z-10'
                 : 'bg-retro-box text-retro-black/50'
-            }`}
+              }`}
           >
             Geral
           </button>
           <button
             onClick={() => setTab('saida')}
-            className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${
-              tab === 'saida'
+            className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${tab === 'saida'
                 ? 'bg-retro-bg text-retro-black z-10'
                 : 'bg-retro-box text-retro-black/50'
-            }`}
+              }`}
           >
             Saida
           </button>
           <button
             onClick={() => setTab('legendas')}
-            className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${
-              tab === 'legendas'
+            className={`flex-1 h-8 border-2 border-retro-black rounded-t font-pixel text-[8px] uppercase ${tab === 'legendas'
                 ? 'bg-retro-bg text-retro-black z-10'
                 : 'bg-retro-box text-retro-black/50'
-            }`}
+              }`}
           >
             Legendas
           </button>
@@ -332,7 +331,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                 className="btn-retro w-full h-7 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[6px] text-retro-black uppercase hover:bg-gray-200 flex items-center justify-center gap-2"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
                 ABRIR PASTA DRIVERS
               </button>
@@ -455,11 +454,10 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                             setLocalResolution(r.id)
                             setShowResPopup(false)
                           }}
-                          className={`w-full h-8 px-2 font-pixel text-[8px] flex items-center gap-2 transition-colors ${
-                            localResolution === r.id
+                          className={`w-full h-8 px-2 font-pixel text-[8px] flex items-center gap-2 transition-colors ${localResolution === r.id
                               ? 'bg-retro-black text-retro-bg'
                               : 'hover:bg-gray-200 text-retro-black'
-                          }`}
+                            }`}
                         >
                           <r.icon size={14} stroke={2} />
                           <span>{r.label}</span>
@@ -545,6 +543,30 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
             </div>
 
             <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
+              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">
+                PERSISTENCIA DA LEGENDA — {localPersistence.toFixed(1)}s
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0.5"
+                  max="3"
+                  step="0.1"
+                  value={localPersistence}
+                  onChange={(e) => setLocalPersistence(Number(e.target.value))}
+                  disabled={!localSubtitles}
+                  className="flex-1 h-2 accent-retro-black disabled:opacity-50"
+                />
+                <span className="font-pixel text-[7px] text-retro-black w-8 text-right">
+                  {localPersistence.toFixed(1)}s
+                </span>
+              </div>
+              <p className="font-pixel text-[6px] text-retro-black/50 mt-1">
+                Tempo que a legenda fica visivel entre frases
+              </p>
+            </div>
+
+            <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
               <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">LEGENDA NO VIDEO</label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -557,6 +579,9 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                 <span className="font-pixel text-[7px] text-retro-black uppercase">
                   Imbutir legenda no arquivo
                 </span>
+                <Tooltip text="Anexa a legenda ao vídeo em vez de criar um arquivo SRT.">
+                  <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+                </Tooltip>
               </label>
               {localSubtitles && !localBurnSubtitles && (
                 <p className="font-pixel text-[6px] text-retro-black/50 mt-1">

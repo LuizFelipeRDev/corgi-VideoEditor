@@ -55,6 +55,7 @@ function App() {
   const [seekTo, setSeekTo] = useState(null)
   const [wordsPerLine, setWordsPerLine] = useState(4)
   const [linesCount, setLinesCount] = useState(2)
+  const [subtitlePersistence, setSubtitlePersistence] = useState(1)
   const [subtitleConfigs, setSubtitleConfigs] = useState({})
   const [subtitlesEdited, setSubtitlesEdited] = useState(false)
 
@@ -75,6 +76,7 @@ function App() {
       setBurnSubtitles(c.burn_subtitles !== 'false')
       setWordsPerLine(Number(c.words_per_line) || 4)
       setLinesCount(Number(c.lines_count) || 2)
+      setSubtitlePersistence(Number(c.subtitle_persistence) || 1)
       try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
     })
 
@@ -455,7 +457,8 @@ function App() {
         const enriched = groupWordsIntoSegments(
           wordTimings,
           styleCfg.wordsPerLine || wordsPerLine,
-          styleCfg.linesCount || linesCount
+          styleCfg.linesCount || linesCount,
+          subtitlePersistence
         )
         setSubtitles(enriched)
       }
@@ -581,6 +584,7 @@ function App() {
     if (newConfig.burn_subtitles !== undefined) setBurnSubtitles(newConfig.burn_subtitles)
     if (newConfig.words_per_line !== undefined) setWordsPerLine(newConfig.words_per_line)
     if (newConfig.lines_count !== undefined) setLinesCount(newConfig.lines_count)
+    if (newConfig.subtitle_persistence !== undefined) setSubtitlePersistence(newConfig.subtitle_persistence)
     if (newConfig.subtitle_configs !== undefined) setSubtitleConfigs(newConfig.subtitle_configs)
 
     await window.api.saveConfig({
@@ -598,6 +602,7 @@ function App() {
       burn_subtitles: String(newConfig.burn_subtitles ?? burnSubtitles),
       words_per_line: String(newConfig.words_per_line ?? wordsPerLine),
       lines_count: String(newConfig.lines_count ?? linesCount),
+      subtitle_persistence: String(newConfig.subtitle_persistence ?? subtitlePersistence),
       subtitle_configs: JSON.stringify(newConfig.subtitle_configs ?? subtitleConfigs),
     })
   }
@@ -715,6 +720,7 @@ function App() {
           selectedFile={selectedFile}
           wordsPerLine={wordsPerLine}
           linesCount={linesCount}
+          subtitlePersistence={subtitlePersistence}
           positionMode={positionMode}
           positionPercent={positionPercent}
           whisperCliInstalled={whisperCliInstalled}

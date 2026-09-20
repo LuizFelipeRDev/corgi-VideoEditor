@@ -445,7 +445,7 @@ export function formatSecondsToSrtTime(seconds) {
   )
 }
 
-export function groupWordsIntoSegments(wordEntries, wordsPerLine = 4, linesCount = 2) {
+export function groupWordsIntoSegments(wordEntries, wordsPerLine = 4, linesCount = 2, persistence = 1) {
   if (!wordEntries || wordEntries.length === 0) return []
 
   const formatTime = (timeStr) => {
@@ -495,5 +495,17 @@ export function groupWordsIntoSegments(wordEntries, wordsPerLine = 4, linesCount
   }
 
   pushSegment()
+
+  if (persistence > 0) {
+    for (let i = 0; i < segments.length - 1; i++) {
+      const currentEnd = parseSrtTimeToSeconds(segments[i].end)
+      const nextStart = parseSrtTimeToSeconds(segments[i + 1].start)
+      const gap = nextStart - currentEnd
+      if (gap > 0 && gap <= persistence) {
+        segments[i].end = secondsToSrtTime(Math.min(currentEnd + persistence, nextStart))
+      }
+    }
+  }
+
   return segments
 }
