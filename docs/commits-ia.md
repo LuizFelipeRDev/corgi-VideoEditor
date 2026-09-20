@@ -115,6 +115,7 @@ The version must follow:
 * `v0.0.1` = fixes, bugfixes, small adjustments, etc.
 
 * Check if `src/components/AboutModal.jsx` has the new version. If it isn't, adjust the version.
+* Update `src/global_config/version.js` with the new version. This is the single source of truth for the app version.
 
 
 ### Mandatory Rule
