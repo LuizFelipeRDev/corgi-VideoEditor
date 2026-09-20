@@ -81,3 +81,8 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
   50%  { transform: scale(1.05); }
   100% { transform: scale(1.00); }
 }
+
+@keyframes toast-progress {
+  0%   { width: 100%; }
+  100% { width: 0%; }
+}

@@ -8,6 +8,7 @@ import ErrorModal from './components/ErrorModal'
 import InfoModal from './components/InfoModal'
 import AboutModal from './components/AboutModal'
 import CudaDownloadModal from './components/CudaDownloadModal'
+import Toast from './components/Toast'
 import SubtitlesPanel from './components/SubtitlesPanel'
 import Waveform from './components/Waveform'
 import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps } from './lib/subtitleRender'
@@ -28,6 +29,8 @@ function App() {
   const whisperStoppingRef = useRef(false)
   const whisperGenRef = useRef(0)
   const [showAbout, setShowAbout] = useState(false)
+  const [showExportToast, setShowExportToast] = useState(false)
+  const [exportedFolderPath, setExportedFolderPath] = useState('')
   const [showCudaModal, setShowCudaModal] = useState(false)
   const [whisperCliInstalled, setWhisperCliInstalled] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -374,6 +377,8 @@ function App() {
       videoDurationRef.current = 0
       lastPct.current = 0
       setProgress({ pct: 100, text: '100%' })
+      setExportedFolderPath(outputFolder || selectedFile.folder)
+      setShowExportToast(true)
     } finally {
       await window.api.deleteFile(tempOutPath)
       exportingRef.current = false
@@ -737,6 +742,15 @@ function App() {
       )}
       {showAbout && (
         <AboutModal onClose={() => setShowAbout(false)} />
+      )}
+      {showExportToast && (
+        <Toast
+          message="Exportacao concluida!"
+          linkLabel="ABRIR PASTA"
+          onLinkClick={() => window.api.openFolder(exportedFolderPath)}
+          duration={5000}
+          onClose={() => setShowExportToast(false)}
+        />
       )}
     </div>
   )
