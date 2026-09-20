@@ -598,6 +598,7 @@ function App() {
                 outputResolution={outputResolution}
                 greenScreen={greenScreen}
                 subtitlesEnabled={subtitlesEnabled}
+                currentTime={currentTime}
               />
             </div>
             <Controls

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import SubtitleOverlay from './SubtitleOverlay'
 
-function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled }) {
+function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [videoFullscreen, setVideoFullscreen] = useState(false)
   const [videoTime, setVideoTime] = useState(0)
@@ -9,6 +9,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
 
   const isVideo = selectedFile && /\.(mp4|mkv|mov|webm|avi)$/i.test(selectedFile.name)
   const isAudio = selectedFile && /\.(mp3|wav|flac|ogg|aac|m4a)$/i.test(selectedFile.name)
+  const effectiveTime = currentTimeProp !== undefined ? currentTimeProp : videoTime
 
   useEffect(() => {
     if (videoRef.current && seekTo !== null) {
@@ -108,7 +109,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 subtitleStyle={subtitleStyle}
                 subtitlePosition={subtitlePosition}
                 subtitleConfigs={subtitleConfigs}
-                currentTime={videoTime}
+                currentTime={effectiveTime}
                 positionMode={positionMode}
                 positionPercent={positionPercent}
               />
@@ -149,14 +150,13 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9',
             }}
           >
-            <p className="font-pixel text-[8px] text-white/80 z-10">{selectedFile.name}</p>
             {subtitles && subtitles.length > 0 && (
               <SubtitleOverlay
                 subtitles={subtitles}
                 subtitleStyle={subtitleStyle}
                 subtitlePosition={subtitlePosition}
                 subtitleConfigs={subtitleConfigs}
-                currentTime={videoTime}
+                currentTime={effectiveTime}
                 positionMode={positionMode}
                 positionPercent={positionPercent}
               />
@@ -245,7 +245,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 subtitleStyle={subtitleStyle}
                 subtitlePosition={subtitlePosition}
                 subtitleConfigs={subtitleConfigs}
-                currentTime={videoTime}
+                currentTime={effectiveTime}
                 fullscreen
                 positionMode={positionMode}
                 positionPercent={positionPercent}
