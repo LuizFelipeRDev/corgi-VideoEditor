@@ -165,6 +165,9 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               onClick={(e) => {
                 e.stopPropagation()
                 setVideoFullscreen(true)
+                setTimeout(() => {
+                  if (waveSurferRef?.current) waveSurferRef.current.play()
+                }, 100)
               }}
               className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
               title="Tela cheia"
@@ -218,8 +221,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             }, 100)
           }}
         >
-          <div className="relative max-w-full max-h-full flex items-center justify-center" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
-            {isVideo ? (
+          {isVideo ? (
+            <div className="relative max-w-full max-h-full flex items-center justify-center" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
               <video
                 ref={videoRef}
                 src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
@@ -228,30 +231,40 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 autoPlay
                 className="max-w-full max-h-full object-contain"
               />
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center"
-                style={{
-                  backgroundColor: greenScreen ? '#00a800' : '#000',
-                  aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9',
-                }}
-              >
-                <p className="font-pixel text-[10px] text-white/80">{selectedFile.name}</p>
+              {subtitles && subtitles.length > 0 && (
+                <SubtitleOverlay
+                  subtitles={subtitles}
+                  subtitleStyle={subtitleStyle}
+                  subtitlePosition={subtitlePosition}
+                  subtitleConfigs={subtitleConfigs}
+                  currentTime={effectiveTime}
+                  fullscreen
+                  positionMode={positionMode}
+                  positionPercent={positionPercent}
+                />
+              )}
+            </div>
+          ) : (
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ backgroundColor: greenScreen ? '#00a800' : '#000' }}
+            >
+              <div className="relative w-full h-full" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
+                {subtitles && subtitles.length > 0 && (
+                  <SubtitleOverlay
+                    subtitles={subtitles}
+                    subtitleStyle={subtitleStyle}
+                    subtitlePosition={subtitlePosition}
+                    subtitleConfigs={subtitleConfigs}
+                    currentTime={effectiveTime}
+                    fullscreen
+                    positionMode={positionMode}
+                    positionPercent={positionPercent}
+                  />
+                )}
               </div>
-            )}
-            {subtitles && subtitles.length > 0 && (
-              <SubtitleOverlay
-                subtitles={subtitles}
-                subtitleStyle={subtitleStyle}
-                subtitlePosition={subtitlePosition}
-                subtitleConfigs={subtitleConfigs}
-                currentTime={effectiveTime}
-                fullscreen
-                positionMode={positionMode}
-                positionPercent={positionPercent}
-              />
-            )}
-          </div>
+            </div>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation()
