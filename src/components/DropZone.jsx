@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import SubtitleOverlay from './SubtitleOverlay'
 
-function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp }) {
+function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp, displayConfig }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [videoFullscreen, setVideoFullscreen] = useState(false)
   const [videoTime, setVideoTime] = useState(0)
@@ -113,6 +113,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 positionMode={positionMode}
                 positionPercent={positionPercent}
                 outputResolution={outputResolution}
+                displayConfig={displayConfig}
               />
             )}
             <button
@@ -161,6 +162,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 positionMode={positionMode}
                 positionPercent={positionPercent}
                 outputResolution={outputResolution}
+                displayConfig={displayConfig}
               />
             )}
             <button
@@ -245,6 +247,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                   positionMode={positionMode}
                   positionPercent={positionPercent}
                   outputResolution={outputResolution}
+                  displayConfig={displayConfig}
                 />
               )}
             </div>
@@ -270,6 +273,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                     positionMode={positionMode}
                     positionPercent={positionPercent}
                     outputResolution={outputResolution}
+                    displayConfig={displayConfig}
                   />
                 )}
               </div>

@@ -1,5 +1,6 @@
 import { SUBTITLE_STYLES, SUBTITLE_POSITIONS, hasPopEffect } from '../lib/subtitleStyles'
 import { parseSrtTimeToSecondsExport } from '../lib/subtitleRender'
+import { SUBTITLE_DISPLAY_DEFAULTS, getPreviewFontSize } from '../global_config/subtitleConfig'
 
 function hashString(str) {
   let hash = 0
@@ -10,7 +11,7 @@ function hashString(str) {
   return Math.abs(hash)
 }
 
-function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent, outputResolution }) {
+function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent, outputResolution, displayConfig }) {
   if (!subtitles || subtitles.length === 0) return null
 
   const isPortrait = outputResolution === 'portrait'
@@ -40,10 +41,19 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     ? hashString(activeSub.text) % 2 === 0
     : false
 
-  const isPercentage = positionMode === 'percentage'
+  const displayCtx = fullscreen
+    ? (displayConfig?.fullscreen || SUBTITLE_DISPLAY_DEFAULTS.fullscreen)
+    : (displayConfig?.preview || SUBTITLE_DISPLAY_DEFAULTS.preview)
+
+  const effectivePositionMode = displayCtx.positionMode || positionMode || 'fixed'
+  const effectivePositionFixed = displayCtx.positionFixed || subtitlePosition || 'bottom'
+  const effectivePositionPercent = displayCtx.positionPercent ?? positionPercent ?? 80
+
+  const posPresetEffective = SUBTITLE_POSITIONS[effectivePositionFixed] || SUBTITLE_POSITIONS.bottom
+  const isPercentage = effectivePositionMode === 'percentage'
 
   const previewMax = fullscreen ? 90 : 85
-  const clampedPercent = Math.min(previewMax, Math.max(5, isPercentage ? (positionPercent ?? 80) : 80))
+  const clampedPercent = Math.min(previewMax, Math.max(5, isPercentage ? (effectivePositionPercent ?? 80) : 80))
 
   const containerStyle = {
     position: 'absolute',
@@ -64,17 +74,15 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     margin: '0 auto',
     ...(isPercentage
       ? { bottom: `${clampedPercent}%` }
-      : posPreset.justifyContent === 'center'
+      : posPresetEffective.justifyContent === 'center'
         ? { top: '50%', transform: 'translateY(-50%)' }
-        : posPreset.justifyContent === 'flex-start'
-          ? { top: fullscreen ? (posPreset.paddingTop || '0') : (posPreset.paddingTop ? '16px' : '10px') }
-          : { bottom: fullscreen ? (posPreset.paddingBottom || '40px') : (posPreset.paddingBottom ? '24px' : '40px') }
+        : posPresetEffective.justifyContent === 'flex-start'
+          ? { top: fullscreen ? (posPresetEffective.paddingTop || '0') : (posPresetEffective.paddingTop ? '16px' : '10px') }
+          : { bottom: fullscreen ? (posPresetEffective.paddingBottom || '40px') : (posPresetEffective.paddingBottom ? '24px' : '40px') }
     ),
   }
 
-  const previewFontSize = fullscreen
-    ? Math.round((configFontSize / 105) * 32)
-    : Math.round((configFontSize / 105) * 14)
+  const previewFontSize = getPreviewFontSize(displayConfig, configFontSize)
 
   const blockStyle = {
     fontFamily: `'${fontId}', sans-serif`,

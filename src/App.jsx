@@ -13,6 +13,7 @@ import SubtitlesPanel from './components/SubtitlesPanel'
 import Waveform from './components/Waveform'
 import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps } from './lib/subtitleRender'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
+import { SUBTITLE_DISPLAY_DEFAULTS, mergeDisplayConfig } from './global_config/subtitleConfig'
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null)
@@ -59,6 +60,7 @@ function App() {
   const [smartSubtitle, setSmartSubtitle] = useState(false)
   const [subtitleConfigs, setSubtitleConfigs] = useState({})
   const [subtitlesEdited, setSubtitlesEdited] = useState(false)
+  const [displayConfig, setDisplayConfig] = useState(null)
 
   useEffect(() => {
     window.api.getConfig().then((c) => {
@@ -80,6 +82,7 @@ function App() {
       setSubtitlePersistence(Number(c.subtitle_persistence) || 1)
       setSmartSubtitle(c.smart_subtitle === 'true')
       try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
+      try { setDisplayConfig(mergeDisplayConfig(JSON.parse(c.subtitle_display_config || '{}'))) } catch { setDisplayConfig({ ...SUBTITLE_DISPLAY_DEFAULTS }) }
     })
 
     window.api.checkWhisperCli().then(setWhisperCliInstalled)
@@ -340,7 +343,8 @@ function App() {
             styleCfg.fontId || undefined,
             positionMode,
             positionPercent,
-            styleCfg.fontSize || undefined
+            styleCfg.fontSize || undefined,
+            displayConfig
           )
           if (assContent) {
             await window.api.writeFile(assPath, assContent)
@@ -590,6 +594,7 @@ function App() {
     if (newConfig.subtitle_persistence !== undefined) setSubtitlePersistence(newConfig.subtitle_persistence)
     if (newConfig.smart_subtitle !== undefined) setSmartSubtitle(newConfig.smart_subtitle)
     if (newConfig.subtitle_configs !== undefined) setSubtitleConfigs(newConfig.subtitle_configs)
+    if (newConfig.subtitle_display_config !== undefined) setDisplayConfig(mergeDisplayConfig(newConfig.subtitle_display_config))
 
     await window.api.saveConfig({
       threshold: newConfig.threshold ?? threshold,
@@ -609,6 +614,7 @@ function App() {
       subtitle_persistence: String(newConfig.subtitle_persistence ?? subtitlePersistence),
       smart_subtitle: String(newConfig.smart_subtitle ?? smartSubtitle),
       subtitle_configs: JSON.stringify(newConfig.subtitle_configs ?? subtitleConfigs),
+      subtitle_display_config: JSON.stringify(newConfig.subtitle_display_config ?? displayConfig),
     })
   }
 
@@ -646,6 +652,7 @@ function App() {
                 greenScreen={greenScreen}
                 subtitlesEnabled={subtitlesEnabled}
                 currentTime={currentTime}
+                displayConfig={displayConfig}
               />
             </div>
             <Controls
@@ -729,6 +736,7 @@ function App() {
           smartSubtitle={smartSubtitle}
           positionMode={positionMode}
           positionPercent={positionPercent}
+          displayConfig={displayConfig}
           whisperCliInstalled={whisperCliInstalled}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}

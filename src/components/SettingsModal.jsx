@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { IconZoomScan, IconRectangle, IconRectangleVertical } from '@tabler/icons-react'
 import Tooltip from './Tooltip'
+import { SUBTITLE_DISPLAY_DEFAULTS } from '../global_config/subtitleConfig'
 
 const OUTPUT_FORMATS = [
   { value: 'mp3', label: 'MP3' },
@@ -26,7 +27,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', desc: 'Maxima qualidade, bem lento' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, positionMode, positionPercent, displayConfig, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
   const [tab, setTab] = useState('geral')
   const [localFolder, setLocalFolder] = useState(outputFolder)
   const [localFormat, setLocalFormat] = useState(outputFormat)
@@ -43,6 +44,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   const [localSmartSubtitle, setLocalSmartSubtitle] = useState(smartSubtitle)
   const [localPositionMode, setLocalPositionMode] = useState(positionMode || 'fixed')
   const [localPositionPercent, setLocalPositionPercent] = useState(positionPercent ?? 80)
+  const [localDisplayConfig, setLocalDisplayConfig] = useState(displayConfig || { ...SUBTITLE_DISPLAY_DEFAULTS })
 
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [modelInstalled, setModelInstalled] = useState({})
@@ -108,6 +110,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
       smart_subtitle: localSmartSubtitle,
       subtitle_position_mode: localPositionMode,
       subtitle_position_percent: localPositionPercent,
+      subtitle_display_config: localDisplayConfig,
     })
     onClose()
   }
@@ -595,6 +598,189 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                   <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
                 </Tooltip>
               </label>
+            </div>
+
+            <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
+              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">TAMANHO DA FONTE</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-pixel text-[6px] text-retro-black/50 block mb-1">Preview</label>
+                  <input
+                    type="number"
+                    min="8"
+                    max="40"
+                    value={localDisplayConfig.preview.fontSize}
+                    onChange={(e) => setLocalDisplayConfig({
+                      ...localDisplayConfig,
+                      preview: { ...localDisplayConfig.preview, fontSize: Number(e.target.value) }
+                    })}
+                    disabled={!localSubtitles}
+                    className="w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="font-pixel text-[6px] text-retro-black/50 block mb-1">Fullscreen</label>
+                  <input
+                    type="number"
+                    min="16"
+                    max="80"
+                    value={localDisplayConfig.fullscreen.fontSize}
+                    onChange={(e) => setLocalDisplayConfig({
+                      ...localDisplayConfig,
+                      fullscreen: { ...localDisplayConfig.fullscreen, fontSize: Number(e.target.value) }
+                    })}
+                    disabled={!localSubtitles}
+                    className="w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none disabled:opacity-50"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
+              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">POSICAO - PREVIEW</label>
+              <select
+                value={localDisplayConfig.preview.positionMode}
+                onChange={(e) => setLocalDisplayConfig({
+                  ...localDisplayConfig,
+                  preview: { ...localDisplayConfig.preview, positionMode: e.target.value }
+                })}
+                disabled={!localSubtitles}
+                className="w-full h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer disabled:opacity-50"
+              >
+                <option value="fixed">Posicao Pre-definida</option>
+                <option value="percentage">Ajuste Livre</option>
+              </select>
+              {localDisplayConfig.preview.positionMode === 'fixed' ? (
+                <select
+                  value={localDisplayConfig.preview.positionFixed}
+                  onChange={(e) => setLocalDisplayConfig({
+                    ...localDisplayConfig,
+                    preview: { ...localDisplayConfig.preview, positionFixed: e.target.value }
+                  })}
+                  disabled={!localSubtitles}
+                  className="w-full h-8 mt-1 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer disabled:opacity-50"
+                >
+                  <option value="top">TOPO</option>
+                  <option value="middle">MEIO</option>
+                  <option value="bottom">BAIXO</option>
+                </select>
+              ) : (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="range"
+                    min="5"
+                    max="85"
+                    value={localDisplayConfig.preview.positionPercent}
+                    onChange={(e) => setLocalDisplayConfig({
+                      ...localDisplayConfig,
+                      preview: { ...localDisplayConfig.preview, positionPercent: Number(e.target.value) }
+                    })}
+                    disabled={!localSubtitles}
+                    className="flex-1 h-2 accent-retro-black disabled:opacity-50"
+                  />
+                  <span className="font-pixel text-[7px] text-retro-black w-8 text-right">
+                    {localDisplayConfig.preview.positionPercent}%
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
+              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">POSICAO - FULLSCREEN</label>
+              <select
+                value={localDisplayConfig.fullscreen.positionMode}
+                onChange={(e) => setLocalDisplayConfig({
+                  ...localDisplayConfig,
+                  fullscreen: { ...localDisplayConfig.fullscreen, positionMode: e.target.value }
+                })}
+                disabled={!localSubtitles}
+                className="w-full h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer disabled:opacity-50"
+              >
+                <option value="fixed">Posicao Pre-definida</option>
+                <option value="percentage">Ajuste Livre</option>
+              </select>
+              {localDisplayConfig.fullscreen.positionMode === 'fixed' ? (
+                <select
+                  value={localDisplayConfig.fullscreen.positionFixed}
+                  onChange={(e) => setLocalDisplayConfig({
+                    ...localDisplayConfig,
+                    fullscreen: { ...localDisplayConfig.fullscreen, positionFixed: e.target.value }
+                  })}
+                  disabled={!localSubtitles}
+                  className="w-full h-8 mt-1 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer disabled:opacity-50"
+                >
+                  <option value="top">TOPO</option>
+                  <option value="middle">MEIO</option>
+                  <option value="bottom">BAIXO</option>
+                </select>
+              ) : (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="range"
+                    min="5"
+                    max="85"
+                    value={localDisplayConfig.fullscreen.positionPercent}
+                    onChange={(e) => setLocalDisplayConfig({
+                      ...localDisplayConfig,
+                      fullscreen: { ...localDisplayConfig.fullscreen, positionPercent: Number(e.target.value) }
+                    })}
+                    disabled={!localSubtitles}
+                    className="flex-1 h-2 accent-retro-black disabled:opacity-50"
+                  />
+                  <span className="font-pixel text-[7px] text-retro-black w-8 text-right">
+                    {localDisplayConfig.fullscreen.positionPercent}%
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
+              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">POSICAO - EXPORT</label>
+              <select
+                value={localDisplayConfig.export.positionMode}
+                onChange={(e) => setLocalDisplayConfig({
+                  ...localDisplayConfig,
+                  export: { ...localDisplayConfig.export, positionMode: e.target.value }
+                })}
+                disabled={!localSubtitles}
+                className="w-full h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer disabled:opacity-50"
+              >
+                <option value="fixed">Posicao Pre-definida</option>
+                <option value="percentage">Ajuste Livre</option>
+              </select>
+              {localDisplayConfig.export.positionMode === 'fixed' ? (
+                <select
+                  value={localDisplayConfig.export.positionFixed}
+                  onChange={(e) => setLocalDisplayConfig({
+                    ...localDisplayConfig,
+                    export: { ...localDisplayConfig.export, positionFixed: e.target.value }
+                  })}
+                  disabled={!localSubtitles}
+                  className="w-full h-8 mt-1 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer disabled:opacity-50"
+                >
+                  <option value="top">TOPO</option>
+                  <option value="middle">MEIO</option>
+                  <option value="bottom">BAIXO</option>
+                </select>
+              ) : (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="range"
+                    min="5"
+                    max="85"
+                    value={localDisplayConfig.export.positionPercent}
+                    onChange={(e) => setLocalDisplayConfig({
+                      ...localDisplayConfig,
+                      export: { ...localDisplayConfig.export, positionPercent: Number(e.target.value) }
+                    })}
+                    disabled={!localSubtitles}
+                    className="flex-1 h-2 accent-retro-black disabled:opacity-50"
+                  />
+                  <span className="font-pixel text-[7px] text-retro-black w-8 text-right">
+                    {localDisplayConfig.export.positionPercent}%
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>

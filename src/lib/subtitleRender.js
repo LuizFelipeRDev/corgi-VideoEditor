@@ -1,4 +1,5 @@
 import { SUBTITLE_STYLES, hasPopEffect } from './subtitleStyles'
+import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize } from '../global_config/subtitleConfig'
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '')
@@ -53,29 +54,33 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, positionMode, positionPercent, fontSizeOverride) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, positionMode, positionPercent, fontSizeOverride, displayConfig) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
   const playResX = videoWidth || 1920
   const playResY = videoHeight || 1080
-  const dimensionScale = Math.max(playResY / 1080, 0.5)
 
   const assFontName = fontId || styleConfig.fontFamily.split(',')[0].trim()
   const fontScale = styleConfig.italic ? 0.9 : 1.0
   const baseFontSize = fontSizeOverride || styleConfig.fontSize
-  const scaledFontSize = Math.round(baseFontSize * fontScale * dimensionScale)
+  const scaledFontSize = getExportFontSize(baseFontSize * fontScale, playResY)
+
+  const exportCtx = displayConfig?.export || SUBTITLE_DISPLAY_DEFAULTS.export
+  const effectivePositionMode = exportCtx.positionMode || positionMode || 'percentage'
+  const effectivePositionFixed = exportCtx.positionFixed || position || 'bottom'
+  const effectivePositionPercent = exportCtx.positionPercent ?? positionPercent ?? 80
 
   let alignment = 2
   let marginV = 40
 
-  if (positionMode === 'percentage') {
+  if (effectivePositionMode === 'percentage') {
     alignment = 2
-    const percent = Math.min(90, Math.max(5, positionPercent ?? 80))
+    const percent = Math.min(90, Math.max(5, effectivePositionPercent ?? 80))
     marginV = Math.round((percent / 100) * (playResY - 60) + 40)
-  } else if (position === 'top') {
+  } else if (effectivePositionFixed === 'top') {
     alignment = 8
     marginV = 20
-  } else if (position === 'middle') {
+  } else if (effectivePositionFixed === 'middle') {
     alignment = 5
     marginV = 0
   }
