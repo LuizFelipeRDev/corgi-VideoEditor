@@ -341,8 +341,6 @@ function App() {
             styleCfg.primaryColor || undefined,
             styleCfg.highlightColor || undefined,
             styleCfg.fontId || undefined,
-            positionMode,
-            positionPercent,
             styleCfg.fontSize || undefined,
             displayConfig
           )

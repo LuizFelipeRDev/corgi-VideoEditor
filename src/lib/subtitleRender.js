@@ -54,7 +54,7 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, positionMode, positionPercent, fontSizeOverride, displayConfig) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, displayConfig) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
   const playResX = videoWidth || 1920
@@ -66,16 +66,16 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
   const scaledFontSize = getExportFontSize(baseFontSize * fontScale, playResY)
 
   const exportCtx = displayConfig?.export || SUBTITLE_DISPLAY_DEFAULTS.export
-  const effectivePositionMode = exportCtx.positionMode || positionMode || 'percentage'
+  const effectivePositionMode = exportCtx.positionMode || 'percentage'
   const effectivePositionFixed = exportCtx.positionFixed || position || 'bottom'
-  const effectivePositionPercent = exportCtx.positionPercent ?? positionPercent ?? 80
+  const effectivePositionPercent = exportCtx.positionPercent ?? 80
 
   let alignment = 2
   let marginV = 40
 
   if (effectivePositionMode === 'percentage') {
     alignment = 2
-    const percent = Math.min(90, Math.max(5, effectivePositionPercent ?? 80))
+    const percent = Math.min(90, Math.max(5, effectivePositionPercent))
     marginV = Math.round((percent / 100) * (playResY - 60) + 40)
   } else if (effectivePositionFixed === 'top') {
     alignment = 8
