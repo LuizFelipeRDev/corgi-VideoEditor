@@ -45,9 +45,9 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     ? SUBTITLE_DISPLAY_DEFAULTS.fullscreen
     : SUBTITLE_DISPLAY_DEFAULTS.preview
 
-  const effectivePositionMode = displayCtx.positionMode || positionMode || 'fixed'
-  const effectivePositionFixed = displayCtx.positionFixed || subtitlePosition || 'bottom'
-  const effectivePositionPercent = displayCtx.positionPercent ?? positionPercent ?? 80
+  const effectivePositionMode = positionMode || displayCtx.positionMode || 'fixed'
+  const effectivePositionFixed = subtitlePosition || displayCtx.positionFixed || 'bottom'
+  const effectivePositionPercent = positionPercent ?? displayCtx.positionPercent ?? 80
 
   const posPresetEffective = SUBTITLE_POSITIONS[effectivePositionFixed] || SUBTITLE_POSITIONS.bottom
   const isPercentage = effectivePositionMode === 'percentage'
