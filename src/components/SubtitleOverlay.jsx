@@ -11,7 +11,7 @@ function hashString(str) {
   return Math.abs(hash)
 }
 
-function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent, outputResolution, displayConfig }) {
+function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent, outputResolution }) {
   if (!subtitles || subtitles.length === 0) return null
 
   const isPortrait = outputResolution === 'portrait'
@@ -42,8 +42,8 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     : false
 
   const displayCtx = fullscreen
-    ? (displayConfig?.fullscreen || SUBTITLE_DISPLAY_DEFAULTS.fullscreen)
-    : (displayConfig?.preview || SUBTITLE_DISPLAY_DEFAULTS.preview)
+    ? SUBTITLE_DISPLAY_DEFAULTS.fullscreen
+    : SUBTITLE_DISPLAY_DEFAULTS.preview
 
   const effectivePositionMode = displayCtx.positionMode || positionMode || 'fixed'
   const effectivePositionFixed = displayCtx.positionFixed || subtitlePosition || 'bottom'
@@ -82,7 +82,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     ),
   }
 
-  const previewFontSize = getPreviewFontSize(displayConfig, configFontSize)
+  const previewFontSize = getPreviewFontSize(configFontSize)
 
   const blockStyle = {
     fontFamily: `'${fontId}', sans-serif`,

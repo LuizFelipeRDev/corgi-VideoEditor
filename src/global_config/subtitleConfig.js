@@ -27,21 +27,11 @@ export const SUBTITLE_DISPLAY_DEFAULTS = {
   },
 }
 
-export function getPreviewFontSize(config, baseFontSize) {
-  const cfg = config?.preview || SUBTITLE_DISPLAY_DEFAULTS.preview
-  return Math.round((baseFontSize / 105) * cfg.fontSize)
+export function getPreviewFontSize(baseFontSize) {
+  return Math.round((baseFontSize / 105) * SUBTITLE_DISPLAY_DEFAULTS.preview.fontSize)
 }
 
 export function getExportFontSize(baseFontSize, videoHeight) {
   const dimensionScale = Math.max(videoHeight / 1080, 0.5)
   return Math.round(baseFontSize * dimensionScale)
-}
-
-export function mergeDisplayConfig(saved) {
-  if (!saved) return { ...SUBTITLE_DISPLAY_DEFAULTS }
-  return {
-    preview: { ...SUBTITLE_DISPLAY_DEFAULTS.preview, ...saved.preview },
-    fullscreen: { ...SUBTITLE_DISPLAY_DEFAULTS.fullscreen, ...saved.fullscreen },
-    export: { ...SUBTITLE_DISPLAY_DEFAULTS.export, ...saved.export },
-  }
 }

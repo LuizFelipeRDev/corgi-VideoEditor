@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import SubtitleOverlay from './SubtitleOverlay'
 
-function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp, displayConfig }) {
+function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [videoFullscreen, setVideoFullscreen] = useState(false)
   const [videoTime, setVideoTime] = useState(0)
@@ -113,7 +113,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 positionMode={positionMode}
                 positionPercent={positionPercent}
                 outputResolution={outputResolution}
-                displayConfig={displayConfig}
+
               />
             )}
             <button
@@ -162,7 +162,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 positionMode={positionMode}
                 positionPercent={positionPercent}
                 outputResolution={outputResolution}
-                displayConfig={displayConfig}
+
               />
             )}
             <button
@@ -246,9 +246,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                   fullscreen
                   positionMode={positionMode}
                   positionPercent={positionPercent}
-                  outputResolution={outputResolution}
-                  displayConfig={displayConfig}
-                />
+                outputResolution={outputResolution}
+              />
               )}
             </div>
           ) : (
@@ -271,10 +270,9 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                     currentTime={effectiveTime}
                     fullscreen
                     positionMode={positionMode}
-                    positionPercent={positionPercent}
-                    outputResolution={outputResolution}
-                    displayConfig={displayConfig}
-                  />
+                positionPercent={positionPercent}
+                outputResolution={outputResolution}
+              />
                 )}
               </div>
             </div>

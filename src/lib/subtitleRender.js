@@ -54,7 +54,7 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, displayConfig) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
   const playResX = videoWidth || 1920
@@ -65,7 +65,7 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
   const baseFontSize = fontSizeOverride || styleConfig.fontSize
   const scaledFontSize = getExportFontSize(baseFontSize * fontScale, playResY)
 
-  const exportCtx = displayConfig?.export || SUBTITLE_DISPLAY_DEFAULTS.export
+  const exportCtx = SUBTITLE_DISPLAY_DEFAULTS.export
   const effectivePositionMode = exportCtx.positionMode || 'percentage'
   const effectivePositionFixed = exportCtx.positionFixed || position || 'bottom'
   const effectivePositionPercent = exportCtx.positionPercent ?? 80

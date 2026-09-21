@@ -81,7 +81,6 @@ function readConfig() {
     subtitle_position_percent: '80',
     subtitle_persistence: '1',
     smart_subtitle: 'false',
-    subtitle_display_config: '{"preview":{"positionMode":"fixed","positionFixed":"bottom","positionPercent":80,"fontSize":14},"fullscreen":{"positionMode":"fixed","positionFixed":"bottom","positionPercent":80,"fontSize":32},"export":{"positionMode":"fixed","positionFixed":"bottom","positionPercent":80}}',
   };
   if (!fs.existsSync(configPath)) return defaults;
   try {
@@ -99,7 +98,7 @@ function readConfig() {
 
 function writeConfig(config) {
   fs.writeFileSync(configPath,
-    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\noutput_resolution = ${config.output_resolution || 'original'}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\nsubtitle_persistence = ${config.subtitle_persistence || '1'}\nsmart_subtitle = ${config.smart_subtitle || 'false'}\nsubtitle_display_config = ${config.subtitle_display_config || '{"preview":{"positionMode":"fixed","positionFixed":"bottom","positionPercent":80,"fontSize":14},"fullscreen":{"positionMode":"fixed","positionFixed":"bottom","positionPercent":80,"fontSize":32},"export":{"positionMode":"fixed","positionFixed":"bottom","positionPercent":80}}'}\n`, 'utf-8');
+    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\noutput_resolution = ${config.output_resolution || 'original'}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\nsubtitle_persistence = ${config.subtitle_persistence || '1'}\nsmart_subtitle = ${config.smart_subtitle || 'false'}\n`, 'utf-8');
 }
 
 let mainWindow;
