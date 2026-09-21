@@ -27,8 +27,11 @@ export const SUBTITLE_DISPLAY_DEFAULTS = {
   },
 }
 
-export function getPreviewFontSize(baseFontSize) {
-  return Math.round((baseFontSize / 105) * SUBTITLE_DISPLAY_DEFAULTS.preview.fontSize)
+export function getPreviewFontSize(baseFontSize, fullscreen = false) {
+  const displayFontSize = fullscreen
+    ? SUBTITLE_DISPLAY_DEFAULTS.fullscreen.fontSize
+    : SUBTITLE_DISPLAY_DEFAULTS.preview.fontSize
+  return Math.round((baseFontSize / 105) * displayFontSize)
 }
 
 export function getExportFontSize(baseFontSize, videoHeight) {

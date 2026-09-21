@@ -82,7 +82,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     ),
   }
 
-  const previewFontSize = getPreviewFontSize(configFontSize)
+  const previewFontSize = getPreviewFontSize(configFontSize, fullscreen)
 
   const blockStyle = {
     fontFamily: `'${fontId}', sans-serif`,
