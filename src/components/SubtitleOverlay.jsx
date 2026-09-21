@@ -52,7 +52,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
   const posPresetEffective = SUBTITLE_POSITIONS[effectivePositionFixed] || SUBTITLE_POSITIONS.bottom
   const isPercentage = effectivePositionMode === 'percentage'
 
-  const previewMax = fullscreen ? 90 : 85
+  const previewMax = fullscreen ? 75 : 70
   const clampedPercent = Math.min(previewMax, Math.max(5, isPercentage ? (effectivePositionPercent ?? 80) : 80))
 
   const containerStyle = {

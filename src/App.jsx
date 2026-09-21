@@ -72,7 +72,7 @@ function App() {
       setSubtitleModel(c.subtitle_model || 'small')
       setSubtitlePosition(c.subtitle_position || 'bottom')
       setPositionMode(c.subtitle_position_mode || 'fixed')
-      setPositionPercent(Math.min(85, Math.max(5, Number(c.subtitle_position_percent) || 80)))
+      setPositionPercent(Math.min(70, Math.max(5, Number(c.subtitle_position_percent) || 80)))
       setSubtitleStyle(c.subtitle_style || 'hormozi')
       setGreenScreen(c.green_screen === 'true')
       setBurnSubtitles(c.burn_subtitles !== 'false')

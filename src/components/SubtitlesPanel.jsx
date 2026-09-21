@@ -177,7 +177,7 @@ function SubtitlesPanel({
                 <input
                   type="range"
                   min="5"
-                  max="85"
+                  max="70"
                   value={positionPercent}
                   onChange={(e) => onPositionPercentChange(Number(e.target.value))}
                   className="w-full h-2 bg-retro-bg border border-retro-black rounded appearance-none cursor-pointer accent-retro-black"
