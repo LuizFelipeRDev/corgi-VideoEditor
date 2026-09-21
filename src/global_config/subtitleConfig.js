@@ -21,7 +21,7 @@ export const SUBTITLE_DISPLAY_DEFAULTS = {
     fontSize: 32,
   },
   export: {
-    positionMode: 'percentage',
+    positionMode: 'fixed',
     positionFixed: 'bottom',
     positionPercent: 80,
   },
