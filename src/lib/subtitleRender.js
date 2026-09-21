@@ -141,7 +141,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   if (allWords.length === 0) return null
 
-  const blocks = groupWordsIntoBlocks(allWords, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, hasPopEffect(styleId))
+  const blocks = groupWordsIntoBlocks(allWords, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, styleId)
 
   for (const block of blocks) {
     const blockWords = block.words
@@ -250,39 +250,67 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   return assContent
 }
 
-function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, hasPop = false) {
-  const maxWordsPerLine = hasPop ? Math.max(1, wordsPerLine - 1) : wordsPerLine
+function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, styleId = null) {
+  const maxWordsPerLine = wordsPerLine
   const maxLines = linesCount
   const maxWordsPerBlock = maxWordsPerLine * maxLines
 
-  const blocks = []
-  let currentBlock = { words: [], start: 0, end: 0, lineIdx: 0, wordsInLine: 0 }
+  const hasPop = styleId ? hasPopEffect(styleId) : false
+  const popScale = hasPop ? (100 + (styleConfig.popSize || 0)) / 100 : 1
 
-  for (const word of allWords) {
-    if (currentBlock.words.length >= maxWordsPerBlock && currentBlock.words.length > 0) {
+  const marginL = 10
+  const marginR = 10
+  const availableWidth = playResX - marginL - marginR
+  const charWidth = fontSize * 0.63
+  const spaceWidth = fontSize * 0.315
+
+  const blocks = []
+  let currentBlock = { words: [], start: 0, end: 0, lineIdx: 0, wordsInLine: 0, lineWidth: 0 }
+
+  const pushBlock = () => {
+    if (currentBlock.words.length > 0) {
       currentBlock.end = currentBlock.words[currentBlock.words.length - 1].end
       blocks.push(currentBlock)
-      currentBlock = { words: [], start: word.start, end: 0, lineIdx: 0, wordsInLine: 0 }
+    }
+    currentBlock = { words: [], start: 0, end: 0, lineIdx: 0, wordsInLine: 0, lineWidth: 0 }
+  }
+
+  for (let i = 0; i < allWords.length; i++) {
+    const word = allWords[i]
+
+    if (currentBlock.words.length >= maxWordsPerBlock) {
+      pushBlock()
+      currentBlock.start = word.start
     }
 
-    if (currentBlock.wordsInLine >= maxWordsPerLine && currentBlock.words.length > 0) {
+    const wordWidth = word.text.length * charWidth * popScale
+
+    if (currentBlock.wordsInLine >= maxWordsPerLine) {
       currentBlock.lineIdx++
       currentBlock.wordsInLine = 0
+      currentBlock.lineWidth = 0
       if (currentBlock.lineIdx >= maxLines) {
-        currentBlock.end = currentBlock.words[currentBlock.words.length - 1].end
-        blocks.push(currentBlock)
-        currentBlock = { words: [], start: word.start, end: 0, lineIdx: 0, wordsInLine: 0 }
+        pushBlock()
+        currentBlock.start = word.start
+      }
+    }
+
+    if (currentBlock.wordsInLine > 0 && currentBlock.lineWidth + spaceWidth + wordWidth > availableWidth) {
+      currentBlock.lineIdx++
+      currentBlock.wordsInLine = 0
+      currentBlock.lineWidth = 0
+      if (currentBlock.lineIdx >= maxLines) {
+        pushBlock()
+        currentBlock.start = word.start
       }
     }
 
     currentBlock.words.push({ ...word, lineIdx: currentBlock.lineIdx })
     currentBlock.wordsInLine++
+    currentBlock.lineWidth += currentBlock.wordsInLine === 1 ? wordWidth : spaceWidth + wordWidth
   }
 
-  if (currentBlock.words.length > 0) {
-    currentBlock.end = currentBlock.words[currentBlock.words.length - 1].end
-    blocks.push(currentBlock)
-  }
+  pushBlock()
 
   return blocks
 }
