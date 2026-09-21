@@ -11,7 +11,7 @@ function hashString(str) {
   return Math.abs(hash)
 }
 
-function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent, outputResolution }) {
+function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent, outputResolution, wordsPerLine, linesCount }) {
   if (!subtitles || subtitles.length === 0) return null
 
   const isPortrait = outputResolution === 'portrait'
@@ -92,6 +92,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     letterSpacing: `${stylePreset.letterSpacing * 0.2}px`,
     textAlign: 'center',
     lineHeight: 1.3,
+    whiteSpace: 'pre-line',
     textShadow: `0 0 2px ${stylePreset.outlineColor}, 0 0 4px ${stylePreset.outlineColor}`,
     maxWidth: isPortrait ? '90%' : '85%',
     wordBreak: 'break-word',
@@ -175,11 +176,21 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
   return (
     <div style={containerStyle}>
       <div style={{ ...blockStyle, ...textStyle }}>
-        {words.map((word, i) => (
-          <span key={i} style={getWordStyle(word, i)}>
-            {word.text}{i < words.length - 1 ? ' ' : ''}
-          </span>
-        ))}
+        {(() => {
+          const wpl = wordsPerLine || 4
+          const maxLines = linesCount || 2
+          const maxWords = wpl * maxLines
+          const visibleWords = words.slice(0, maxWords)
+          return visibleWords.map((word, i) => {
+            const isLast = i === visibleWords.length - 1
+            const isLineEnd = (i + 1) % wpl === 0 && !isLast
+            return (
+              <span key={i} style={getWordStyle(word, i)}>
+                {word.text}{isLast ? '' : isLineEnd ? '\n' : ' '}
+              </span>
+            )
+          })
+        })()}
       </div>
     </div>
   )

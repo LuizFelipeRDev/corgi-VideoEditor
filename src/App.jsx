@@ -647,6 +647,8 @@ function App() {
                 greenScreen={greenScreen}
                 subtitlesEnabled={subtitlesEnabled}
                 currentTime={currentTime}
+                wordsPerLine={wordsPerLine}
+                linesCount={linesCount}
               />
             </div>
             <Controls

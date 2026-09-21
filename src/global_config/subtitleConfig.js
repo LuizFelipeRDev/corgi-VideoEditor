@@ -7,8 +7,7 @@
  * - export: arquivo ASS exportado
  */
 
-//  para ajuste variavel  src\components\SubtitleOverlay.jsx
-//  ajuste essa linha const previewMax = fullscreen ? 75 : 70
+
 export const SUBTITLE_DISPLAY_DEFAULTS = {
   preview: {
     positionMode: 'fixed',
