@@ -141,7 +141,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   if (allWords.length === 0) return null
 
-  const blocks = groupWordsIntoBlocks(allWords, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount)
+  const blocks = groupWordsIntoBlocks(allWords, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, hasPopEffect(styleId))
 
   for (const block of blocks) {
     const blockWords = block.words
@@ -250,8 +250,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   return assContent
 }
 
-function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2) {
-  const maxWordsPerLine = wordsPerLine
+function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, hasPop = false) {
+  const maxWordsPerLine = hasPop ? Math.max(1, wordsPerLine - 1) : wordsPerLine
   const maxLines = linesCount
   const maxWordsPerBlock = maxWordsPerLine * maxLines
 
