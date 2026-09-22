@@ -453,7 +453,7 @@ function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fo
   }
 
   const boxH = (ascentRatio + descentRatio) * fontSize + padY * 2
-  const boxW = activeMetrics.width + padX * 2
+  const boxW = wordWidths[activeIndex] + padX * 2
   const boxX = wordX - padX
   const baselineY = baseline0 + activeWord.lineIdx * lineHeight
   const boxY = baselineY - ascentRatio * fontSize - padY
