@@ -4,7 +4,7 @@ import { FONTS } from '../global_config/fonts'
 
 function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defaultLinesCount, onSave, onClose }) {
   const styleConfig = SUBTITLE_STYLES[subtitleStyle] || SUBTITLE_STYLES.hormozi
-  const defaultFont = styleConfig.fontFamily.split(',')[0].trim()
+  const defaultFont = FONTS.find(f => f.family === styleConfig.fontFamily)?.id || 'Montserrat Bold'
   const [localPrimary, setLocalPrimary] = useState(config.primaryColor || styleConfig.primaryColor)
   const [localHighlight, setLocalHighlight] = useState(config.highlightColor || styleConfig.highlightColor)
   const [localWordsPerLine, setLocalWordsPerLine] = useState(config.wordsPerLine || defaultWordsPerLine)
