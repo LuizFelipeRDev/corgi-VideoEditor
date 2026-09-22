@@ -163,7 +163,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         lastLineIdx = w.lineIdx
         if (useHighlight) parts.push(`{\\c${highlightAss}}`)
         if (styleConfig.animationType === 'bounce' && popOn) {
-          parts.push(`{\\fscx${popStart}\\t(0,${growCs},\\fscx${popPeak})\\t(${growCs},${shrinkCs},\\fscx100)}`)
+          parts.push(`{\\fscx${popStart}\\fscy${popStart}\\t(0,${growCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growCs},${shrinkCs},\\fscx100\\fscy100)}`)
         }
         parts.push(w.text.toUpperCase())
         if (useHighlight) parts.push(`{\\c${primaryAss}}`)
@@ -208,7 +208,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const durCs = Math.round(popDur * 1000)
             const growCs = Math.round(durCs * 0.55)
             const shrinkCs = durCs
-            parts.push(`{\\u1\\c${highlightAss}\\fscx${popStart}\\t(0,${growCs},\\fscx${popPeak})\\t(${growCs},${shrinkCs},\\fscx100)}`)
+            parts.push(`{\\u1\\c${highlightAss}\\fscx${popStart}\\fscy${popStart}\\t(0,${growCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growCs},${shrinkCs},\\fscx100\\fscy100)}`)
           }
           parts.push(wUpper)
           if (j === i) {
@@ -378,7 +378,7 @@ function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {
       const durationMs = Math.round((word.end - word.start) * 1000)
       const growMs = Math.min(100, Math.floor(durationMs / 3))
       const shrinkMs = Math.min(150, Math.floor(durationMs / 2))
-      return `{\\fscx${popStart}\\t(0,${growMs},\\fscx${popPeak})\\t(${growMs},${growMs + shrinkMs},\\fscx100)\\c${highlightAss}}`
+      return `{\\fscx${popStart}\\fscy${popStart}\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growMs},${growMs + shrinkMs},\\fscx100\\fscy100)\\c${highlightAss}}`
     }
     case 'popline':
       return ''
