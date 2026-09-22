@@ -1,5 +1,5 @@
 export const FONTS = [
-  { id: 'Montserrat Bold', name: 'Montserrat Bold', family: 'Montserrat Bold, sans-serif', assName: 'Montserrat Bold' },
+  { id: 'Montserrat', name: 'Montserrat', family: 'Montserrat, sans-serif', assName: 'Montserrat ExtraBold' },
   { id: 'Bebas Neue', name: 'Bebas Neue', family: 'Bebas Neue, sans-serif', assName: 'Bebas Neue' },
   { id: 'Bangers', name: 'Bangers', family: 'Bangers, sans-serif', assName: 'Bangers' },
   { id: 'Lilita One', name: 'Lilita One', family: 'Lilita One, sans-serif', assName: 'Lilita One' },

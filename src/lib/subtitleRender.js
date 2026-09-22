@@ -1,5 +1,12 @@
 import { SUBTITLE_STYLES, hasPopEffect } from './subtitleStyles'
 import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize } from '../global_config/subtitleConfig'
+import { FONTS } from '../global_config/fonts'
+
+const resolveAssFontName = (fontId, styleFontFamily) => {
+  const picked = FONTS.find(f => f.id === fontId)
+  if (picked) return picked.assName
+  return fontId || styleFontFamily.split(',')[0].trim()
+}
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '')
@@ -60,7 +67,7 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
   const playResX = videoWidth || 1920
   const playResY = videoHeight || 1080
 
-  const assFontName = fontId || styleConfig.fontFamily.split(',')[0].trim()
+  const assFontName = resolveAssFontName(fontId, styleConfig.fontFamily)
   const fontScale = styleConfig.italic ? 0.9 : 1.0
   const baseFontSize = fontSizeOverride || styleConfig.fontSize
   const scaledFontSize = getExportFontSize(baseFontSize * fontScale, playResY)

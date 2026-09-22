@@ -1,6 +1,7 @@
 import { SUBTITLE_STYLES, SUBTITLE_POSITIONS, hasPopEffect } from '../lib/subtitleStyles'
 import { parseSrtTimeToSecondsExport } from '../lib/subtitleRender'
 import { SUBTITLE_DISPLAY_DEFAULTS, getPreviewFontSize } from '../global_config/subtitleConfig'
+import { FONTS } from '../global_config/fonts'
 
 function hashString(str) {
   let hash = 0
@@ -23,6 +24,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
   const primaryColor = cfg.primaryColor || stylePreset.primaryColor
   const highlightColor = cfg.highlightColor || stylePreset.highlightColor
   const fontId = cfg.fontId || stylePreset.fontFamily.split(',')[0].trim()
+const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', sans-serif`
   const configFontSize = cfg.fontSize || stylePreset.fontSize
   const animType = stylePreset.animationType
   const popOn = hasPopEffect(subtitleStyle)
@@ -85,7 +87,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
   const previewFontSize = getPreviewFontSize(configFontSize, fullscreen)
 
   const blockStyle = {
-    fontFamily: `'${fontId}', sans-serif`,
+    fontFamily,
     fontSize: `${previewFontSize}px`,
     fontWeight: stylePreset.bold ? 'bold' : 'normal',
     fontStyle: stylePreset.italic ? 'italic' : 'normal',
