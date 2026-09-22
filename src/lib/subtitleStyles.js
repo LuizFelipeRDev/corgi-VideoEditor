@@ -58,7 +58,7 @@ export const SUBTITLE_STYLES = {
   mrbeast: {
     id: 'mrbeast',
     name: 'MrBeast',
-    fontFamily: 'Bangers, sans-serif',
+    fontFamily: 'Komika Axis, sans-serif',
     fontNameFallback: 'IBM Plex Sans, sans-serif',
     fontSize: 120,
     primaryColor: '#FFFFFF',
