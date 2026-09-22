@@ -68,6 +68,7 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
   const playResY = videoHeight || 1080
 
   const assFontName = resolveAssFontName(fontId, styleConfig.fontFamily)
+  const cssFontFamily = (FONTS.find(f => f.id === fontId)?.family || styleConfig.fontFamily || 'Montserrat, sans-serif')
   const fontScale = styleConfig.italic ? 0.9 : 1.0
   const baseFontSize = fontSizeOverride || styleConfig.fontSize
   const scaledFontSize = getExportFontSize(baseFontSize * fontScale, playResY)
@@ -208,7 +209,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           }
         } else if (styleConfig.animationType === 'highlightbox') {
           if (j === i) {
-            const boxTag = computeHighlightBoxRect(blockWords, i, playResX, playResY, scaledFontSize, alignment, marginV, highlightAss)
+            const boxTag = computeHighlightBoxRect(blockWords, i, playResX, playResY, scaledFontSize, alignment, marginV, highlightAss, cssFontFamily, styleConfig.bold)
             assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${boxTag}\n`
           }
           parts.push(wUpper)
@@ -359,39 +360,71 @@ function buildBlockText(block, activeWordIndex, styleConfig, highlightAss, event
   return text
 }
 
-function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fontSize, alignment, marginV, highlightAss) {
+let measureCanvas = null
+const textMeasureCache = {}
+
+function getCanvasFontStyle(fontSize, fontFamily, bold) {
+  const cssFamily = (fontFamily || 'Montserrat, sans-serif').split(',')[0].replace(/['"]/g, '').trim()
+  return `${bold ? 'bold' : 'normal'} ${fontSize}px "${cssFamily}"`
+}
+
+function measureTextMetrics(text, fontSize, fontFamily, bold) {
+  const key = `${fontFamily}|${bold}|${Math.round(fontSize)}|${text}`
+  if (textMeasureCache[key] !== undefined) return textMeasureCache[key]
+
+  const fallback = {
+    width: text.length * fontSize * 0.63,
+    ascent: fontSize * 0.8,
+    descent: fontSize * 0.2,
+  }
+  try {
+    if (typeof document !== 'undefined' && document.createElement) {
+      if (!measureCanvas) measureCanvas = document.createElement('canvas')
+      const ctx = measureCanvas.getContext('2d')
+      ctx.font = getCanvasFontStyle(fontSize, fontFamily, bold)
+      const m = ctx.measureText(text)
+      const width = m.width
+      const ascent = m.actualBoundingBoxAscent || fallback.ascent
+      const descent = m.actualBoundingBoxDescent || fallback.descent
+      const result = { width, ascent, descent }
+      textMeasureCache[key] = result
+      return result
+    }
+  } catch (e) {
+    // fallback to estimate
+  }
+  return fallback
+}
+
+function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fontSize, alignment, marginV, highlightAss, fontFamily, bold) {
   const marginL = 10
   const marginR = 10
   const availableWidth = playResX - marginL - marginR
-  const charWidth = fontSize * 0.63
-  const spaceWidth = fontSize * 0.315
   const padX = fontSize * SUBTITLE_HIGHLIGHT_BOX.paddingXRatio
   const padY = fontSize * SUBTITLE_HIGHLIGHT_BOX.paddingYRatio
   const radius = Math.max(1, Math.round(fontSize * SUBTITLE_HIGHLIGHT_BOX.borderRadiusRatio))
 
-  const numLines = Math.max(...blockWords.map(w => w.lineIdx)) + 1
-  const lineHeight = fontSize * 1.0
-  const ascentHeight = fontSize * 0.8
-  const descent = fontSize * 0.2
+  const spaceWidth = measureTextMetrics(' ', fontSize, fontFamily, bold).width
+  const wordMetrics = blockWords.map(w => measureTextMetrics(w.text.toUpperCase(), fontSize, fontFamily, bold))
+  const wordWidths = wordMetrics.map(m => m.width)
 
-  let baseline0
-  if (alignment <= 3) {
-    baseline0 = playResY - marginV - descent
-    baseline0 -= (numLines - 1) * lineHeight
-  } else if (alignment >= 7) {
-    baseline0 = marginV + ascentHeight
-  } else {
-    baseline0 = playResY / 2 - (numLines * lineHeight) / 2 + ascentHeight
+  const fontMetrics = measureTextMetrics('Ag(', fontSize, fontFamily, bold)
+  const ascentRatio = fontMetrics.ascent / fontSize
+  const descentRatio = fontMetrics.descent / fontSize
+  const numLines = Math.max(...blockWords.map(w => w.lineIdx)) + 1
+  const lineHeight = (ascentRatio + descentRatio) * fontSize * 1.25
+
+  const lineWordWidths = {}
+  for (const w of blockWords) {
+    const li = w.lineIdx
+    if (!lineWordWidths[li]) lineWordWidths[li] = []
+    lineWordWidths[li].push(wordWidths[blockWords.indexOf(w)])
   }
 
   const lineWidths = {}
-  for (const w of blockWords) {
-    if (lineWidths[w.lineIdx] === undefined) lineWidths[w.lineIdx] = 0
-    lineWidths[w.lineIdx] += w.text.length * charWidth
-    lineWidths[w.lineIdx] += spaceWidth
-  }
-  for (const li in lineWidths) {
-    lineWidths[li] -= spaceWidth
+  for (const li in lineWordWidths) {
+    const widths = lineWordWidths[li]
+    lineWidths[li] = widths.reduce((acc, ww) => acc + ww, 0) + (widths.length - 1) * spaceWidth
   }
 
   const lineStarts = {}
@@ -399,24 +432,31 @@ function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fo
     lineStarts[li] = marginL + (availableWidth - lineWidths[li]) / 2
   }
 
-  const xOffsets = {}
   const activeWord = blockWords[activeIndex]
   let cursorX = lineStarts[activeWord.lineIdx]
+  let wordX = cursorX
   for (let i = 0; i <= activeIndex; i++) {
-    const w = blockWords[i]
-    if (w.lineIdx === activeWord.lineIdx) {
-      xOffsets[i] = cursorX
-      cursorX += w.text.length * charWidth + spaceWidth
+    if (blockWords[i].lineIdx === activeWord.lineIdx) {
+      wordX = cursorX
+      cursorX += wordWidths[i] + spaceWidth
     }
   }
 
-  const wordX = xOffsets[activeIndex]
-  const wordWidth = activeWord.text.length * charWidth
-  const boxW = wordWidth + padX * 2
-  const boxH = fontSize + padY * 2
+  let baseline0
+  if (alignment <= 3) {
+    baseline0 = playResY - marginV
+    baseline0 -= (numLines - 1) * lineHeight
+  } else if (alignment >= 7) {
+    baseline0 = marginV
+  } else {
+    baseline0 = playResY / 2 - (numLines * lineHeight) / 2
+  }
+
+  const boxH = (ascentRatio + descentRatio) * fontSize + padY * 2
+  const boxW = activeMetrics.width + padX * 2
   const boxX = wordX - padX
   const baselineY = baseline0 + activeWord.lineIdx * lineHeight
-  const boxY = baselineY - ascentHeight - padY
+  const boxY = baselineY - ascentRatio * fontSize - padY
 
   const k = radius * 0.5523
   const x = (v) => Math.round(v)
