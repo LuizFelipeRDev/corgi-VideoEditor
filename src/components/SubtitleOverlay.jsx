@@ -1,6 +1,6 @@
 import { SUBTITLE_STYLES, SUBTITLE_POSITIONS, hasPopEffect } from '../lib/subtitleStyles'
 import { parseSrtTimeToSecondsExport } from '../lib/subtitleRender'
-import { SUBTITLE_DISPLAY_DEFAULTS, getPreviewFontSize } from '../global_config/subtitleConfig'
+import { SUBTITLE_DISPLAY_DEFAULTS, getPreviewFontSize, SUBTITLE_HIGHLIGHT_BOX } from '../global_config/subtitleConfig'
 import { FONTS } from '../global_config/fonts'
 
 function hashString(str) {
@@ -164,13 +164,19 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
         }
       }
 
-      case 'popline': {
+      case 'highlightbox': {
         const isActive = wordStart !== null && wordEnd !== null && now >= wordStart && now < wordEnd
+        const radius = Math.round(previewFontSize * SUBTITLE_HIGHLIGHT_BOX.borderRadiusRatio)
+        const padX = Math.round(previewFontSize * SUBTITLE_HIGHLIGHT_BOX.paddingXRatio)
+        const padY = Math.round(previewFontSize * SUBTITLE_HIGHLIGHT_BOX.paddingYRatio)
         return {
           ...base,
-          color: isActive ? highlightColor : primaryColor,
-          textDecoration: isActive ? 'underline' : 'none',
-          animation: isActive && popOn ? `subtitle-popline-bounce ${popDur}s ease-out` : 'none',
+          display: 'inline-block',
+          color: primaryColor,
+          backgroundColor: isActive ? highlightColor : 'transparent',
+          borderRadius: `${radius}px`,
+          padding: isActive ? `${padY}px ${padX}px` : '0',
+          margin: isActive ? `-${padY}px -${padX}px` : '0',
         }
       }
     }
@@ -188,8 +194,9 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
             const isLast = i === visibleWords.length - 1
             const isLineEnd = (i + 1) % wpl === 0 && !isLast
             return (
-              <span key={i} style={getWordStyle(word, i)}>
-                {word.text}{isLast ? '' : isLineEnd ? '\n' : ' '}
+              <span key={i}>
+                <span style={getWordStyle(word, i)}>{word.text}</span>
+                {isLast ? '' : isLineEnd ? '\n' : ' '}
               </span>
             )
           })

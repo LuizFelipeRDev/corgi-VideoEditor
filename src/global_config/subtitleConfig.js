@@ -28,6 +28,12 @@ export const SUBTITLE_DISPLAY_DEFAULTS = {
   },
 }
 
+export const SUBTITLE_HIGHLIGHT_BOX = {
+  borderRadiusRatio: 0.18,
+  paddingXRatio: 0.16,
+  paddingYRatio: 0.08,
+}
+
 export function getPreviewFontSize(baseFontSize, fullscreen = false) {
   const displayFontSize = fullscreen
     ? SUBTITLE_DISPLAY_DEFAULTS.fullscreen.fontSize

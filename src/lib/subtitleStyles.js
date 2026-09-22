@@ -18,13 +18,17 @@
  *            15 = escala de 85% -> 115% -> 100% (forte)
  *
  * animationType: Determina O TIPO de animacao (ainda necessario):
- *   'highlight'  = muda cor da palavra ativa
- *   'simple'     = cor estatica, sem animacao
- *   'bounce'     = animacao no BLOCO inteiro (pop no bloco)
- *   'karaoke'    = palavras ficam destacadas apos faladas
- *   'scale'      = escala na PALAVRA ativa (pop por palavra)
- *   'wordpop'    = animacao de pop na PALAVRA ativa
- *   'popline'    = pop + sublinhado na PALAVRA ativa
+ *   'highlight'    = muda cor da palavra ativa
+ *   'simple'       = cor estatica, sem animacao
+ *   'bounce'       = animacao no BLOCO inteiro (pop no bloco)
+ *   'karaoke'      = palavras ficam destacadas apos faladas
+ *   'scale'        = escala na PALAVRA ativa (pop por palavra)
+ *   'wordpop'      = animacao de pop na PALAVRA ativa
+ *   'highlightbox' = caixa de fundo na PALAVRA ativa (sem pop)
+ *
+ * O raio dos cantos e o padding da caixa do 'highlightbox' sao
+ * controlados centralmente em global_config/subtitleConfig.js
+ * (SUBTITLE_HIGHLIGHT_BOX), valendo para preview, fullscreen e export.
  *
  * Para adicionar um novo estilo com pop, basta definir:
  *   animationType + popIntensity + popDuration + popSize
@@ -170,9 +174,9 @@ export const SUBTITLE_STYLES = {
     popSize: 0,
     bestFor: 'Podcast & conversation',
   },
-  popline: {
-    id: 'popline',
-    name: 'Pop Line',
+  highlightbox: {
+    id: 'highlightbox',
+    name: 'Highlight Box',
     fontFamily: 'Montserrat, sans-serif',
     fontNameFallback: 'IBM Plex Sans, sans-serif',
     fontSize: 105,
@@ -187,10 +191,10 @@ export const SUBTITLE_STYLES = {
     italic: false,
     letterSpacing: 0,
     wordSpacing: 100,
-    animationType: 'popline',
-    popIntensity: 1,
-    popDuration: 0.18,
-    popSize: 5,
+    animationType: 'highlightbox',
+    popIntensity: 0,
+    popDuration: 0,
+    popSize: 0,
     bestFor: 'Viral & trending content',
   },
 }

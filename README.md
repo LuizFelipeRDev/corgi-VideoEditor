@@ -19,7 +19,7 @@ CORGI-EDITOR is a desktop application for automatic video and audio editing. It 
 
 - **Auto-silence removal** — Automatically cuts silences from video/audio using auto-editor
 - **AI subtitle generation** — Word-level transcription via whisper.cpp with CUDA GPU support
-- **7 subtitle styles** — Hormozi, MrBeast, Karaoke, Minimal, Word Pop, Simple, Pop Line
+- **7 subtitle styles** — Hormozi, MrBeast, Karaoke, Minimal, Word Pop, Simple, Highlight Box
 - **Live preview** — Real-time subtitle overlay with word-by-word animation
 - **Per-style configuration** — Custom fonts, colors, font size, words per line per style
 - **Smart subtitle mode** — Automatic sentence-break detection at punctuation
@@ -94,12 +94,12 @@ Click **EXPORTAR** to process the file:
 | Style | Font | Animation | Best For |
 |-------|------|-----------|----------|
 | **Hormozi** | Montserrat | Highlight (cyan) | Business & motivation |
-| **MrBeast** | Bangers | Bounce (gold) | Gaming & entertainment |
+| **MrBeast** | Komika Axis | Bounce (gold) | Gaming & entertainment |
 | **Karaoke** | Montserrat | Cumulative fill | Music & sing-alongs |
 | **Minimal** | Bebas Neue | Scale | Professional & clean |
 | **Word Pop** | Montserrat | Pop animation (cyan) | TikTok & viral content |
 | **Simple** | Montserrat | Static | Podcast & conversation |
-| **Pop Line** | Montserrat | Pop + underline (purple) | Viral & trending content |
+| **Highlight Box** | Montserrat | Background box on active word (purple) | Viral & trending content |
 
 ### Per-Style Configuration
 
@@ -197,7 +197,7 @@ CORGI-EDITOR é uma aplicação desktop para edição automática de vídeo e á
 
 - **Remoção automática de silêncios** — Corta silêncios automaticamente usando auto-editor
 - **Geração de legendas com IA** — Transcrição nível de palavra via whisper.cpp com suporte CUDA GPU
-- **7 estilos de legenda** — Hormozi, MrBeast, Karaoke, Minimal, Word Pop, Simple, Pop Line
+- **7 estilos de legenda** — Hormozi, MrBeast, Karaoke, Minimal, Word Pop, Simple, Highlight Box
 - **Pré-visualização em tempo real** — Overlay de legendas com animação palavra por palavra
 - **Configuração por estilo** — Fontes, cores, tamanho, palavras por linha personalizáveis
 - **Modo legenda inteligente** — Detecção automática de quebra de frase em pontuação
@@ -265,12 +265,12 @@ Clique em **EXPORTAR** para processar o arquivo:
 | Estilo | Fonte | Animação | Ideal Para |
 |--------|-------|----------|------------|
 | **Hormozi** | Montserrat | Highlight (ciano) | Business e motivação |
-| **MrBeast** | Bangers | Bounce (dourado) | Gaming e entretenimento |
+| **MrBeast** | Komika Axis | Bounce (dourado) | Gaming e entretenimento |
 | **Karaoke** | Montserrat | Preenchimento acumulado | Música e karaoke |
 | **Minimal** | Bebas Neue | Escala | Profissional e limpo |
 | **Word Pop** | Montserrat | Pop animação (ciano) | TikTok e conteúdo viral |
 | **Simple** | Montserrat | Estático | Podcast e conversação |
-| **Pop Line** | Montserrat | Pop + sublinhado (roxo) | Viral e trending |
+| **Highlight Box** | Montserrat | Caixa de fundo na palavra ativa (roxo) | Viral e trending |
 
 ---
 

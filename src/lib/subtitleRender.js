@@ -1,5 +1,5 @@
 import { SUBTITLE_STYLES, hasPopEffect } from './subtitleStyles'
-import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize } from '../global_config/subtitleConfig'
+import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize, SUBTITLE_HIGHLIGHT_BOX } from '../global_config/subtitleConfig'
 import { FONTS } from '../global_config/fonts'
 
 const resolveAssFontName = (fontId, styleFontFamily) => {
@@ -206,21 +206,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           } else {
             parts.push(wUpper)
           }
-        } else if (styleConfig.animationType === 'popline') {
+        } else if (styleConfig.animationType === 'highlightbox') {
           if (j === i) {
-            const popSz = styleConfig.popSize || 5
-            const popDur = styleConfig.popDuration || 0.18
-            const popStart = 100 - popSz
-            const popPeak = 100 + popSz
-            const durCs = Math.round(popDur * 1000)
-            const growCs = Math.round(durCs * 0.55)
-            const shrinkCs = durCs
-            parts.push(`{\\u1\\c${highlightAss}\\fscx${popStart}\\fscy${popStart}\\t(0,${growCs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growCs},${shrinkCs},\\fscx100\\fscy100)}`)
+            const boxTag = computeHighlightBoxRect(blockWords, i, playResX, playResY, scaledFontSize, alignment, marginV, highlightAss)
+            assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${boxTag}\n`
           }
           parts.push(wUpper)
-          if (j === i) {
-            parts.push('{\\u0\\c' + primaryAss + '}')
-          }
         } else {
           if (j === i) {
             parts.push(getAnimationTag(styleConfig, highlightAss, w, w.end - w.start))
@@ -250,7 +241,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           .join('')
       }
 
-      assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${text}\n`
+      const isHighlightBox = styleConfig.animationType === 'highlightbox'
+      assContent += `Dialogue: ${isHighlightBox ? 1 : 0},${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${text}\n`
     }
   }
 
@@ -367,6 +359,81 @@ function buildBlockText(block, activeWordIndex, styleConfig, highlightAss, event
   return text
 }
 
+function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fontSize, alignment, marginV, highlightAss) {
+  const marginL = 10
+  const marginR = 10
+  const availableWidth = playResX - marginL - marginR
+  const charWidth = fontSize * 0.63
+  const spaceWidth = fontSize * 0.315
+  const padX = fontSize * SUBTITLE_HIGHLIGHT_BOX.paddingXRatio
+  const padY = fontSize * SUBTITLE_HIGHLIGHT_BOX.paddingYRatio
+  const radius = Math.max(1, Math.round(fontSize * SUBTITLE_HIGHLIGHT_BOX.borderRadiusRatio))
+
+  const numLines = Math.max(...blockWords.map(w => w.lineIdx)) + 1
+  const lineHeight = fontSize * 1.0
+  const ascentHeight = fontSize * 0.8
+  const descent = fontSize * 0.2
+
+  let baseline0
+  if (alignment <= 3) {
+    baseline0 = playResY - marginV - descent
+    baseline0 -= (numLines - 1) * lineHeight
+  } else if (alignment >= 7) {
+    baseline0 = marginV + ascentHeight
+  } else {
+    baseline0 = playResY / 2 - (numLines * lineHeight) / 2 + ascentHeight
+  }
+
+  const lineWidths = {}
+  for (const w of blockWords) {
+    if (lineWidths[w.lineIdx] === undefined) lineWidths[w.lineIdx] = 0
+    lineWidths[w.lineIdx] += w.text.length * charWidth
+    lineWidths[w.lineIdx] += spaceWidth
+  }
+  for (const li in lineWidths) {
+    lineWidths[li] -= spaceWidth
+  }
+
+  const lineStarts = {}
+  for (const li in lineWidths) {
+    lineStarts[li] = marginL + (availableWidth - lineWidths[li]) / 2
+  }
+
+  const xOffsets = {}
+  const activeWord = blockWords[activeIndex]
+  let cursorX = lineStarts[activeWord.lineIdx]
+  for (let i = 0; i <= activeIndex; i++) {
+    const w = blockWords[i]
+    if (w.lineIdx === activeWord.lineIdx) {
+      xOffsets[i] = cursorX
+      cursorX += w.text.length * charWidth + spaceWidth
+    }
+  }
+
+  const wordX = xOffsets[activeIndex]
+  const wordWidth = activeWord.text.length * charWidth
+  const boxW = wordWidth + padX * 2
+  const boxH = fontSize + padY * 2
+  const boxX = wordX - padX
+  const baselineY = baseline0 + activeWord.lineIdx * lineHeight
+  const boxY = baselineY - ascentHeight - padY
+
+  const k = radius * 0.5523
+  const x = (v) => Math.round(v)
+  const path =
+    `m ${x(radius)} 0 ` +
+    `l ${x(boxW - radius)} 0 ` +
+    `b ${x(boxW - radius + k)} 0 ${x(boxW)} ${x(radius - k)} ${x(boxW)} ${x(radius)} ` +
+    `l ${x(boxW)} ${x(boxH - radius)} ` +
+    `b ${x(boxW)} ${x(boxH - radius + k)} ${x(boxW - radius + k)} ${x(boxH)} ${x(boxW - radius)} ${x(boxH)} ` +
+    `l ${x(radius)} ${x(boxH)} ` +
+    `b ${x(radius - k)} ${x(boxH)} 0 ${x(boxH - radius + k)} 0 ${x(boxH - radius)} ` +
+    `l 0 ${x(radius)} ` +
+    `b 0 ${x(radius - k)} ${x(radius - k)} 0 ${x(radius)} 0`
+
+  return `{\\an7\\pos(${x(boxX)},${x(boxY)})\\p1\\bord0\\shad0\\c${highlightAss}}${path}{\\p0}`
+}
+
 function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {
   const { animationType } = styleConfig
   const popSz = styleConfig.popSize || 5
@@ -387,8 +454,6 @@ function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {
       const shrinkMs = Math.min(150, Math.floor(durationMs / 2))
       return `{\\fscx${popStart}\\fscy${popStart}\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growMs},${growMs + shrinkMs},\\fscx100\\fscy100)\\c${highlightAss}}`
     }
-    case 'popline':
-      return ''
     case 'highlight':
     default:
       return `{\\c${highlightAss}}`
