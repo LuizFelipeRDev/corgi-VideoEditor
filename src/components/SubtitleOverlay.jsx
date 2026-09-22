@@ -93,6 +93,7 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
     textAlign: 'center',
     lineHeight: 1.3,
     whiteSpace: 'pre-line',
+    textTransform: 'uppercase',
     textShadow: `0 0 2px ${stylePreset.outlineColor}, 0 0 4px ${stylePreset.outlineColor}`,
     maxWidth: isPortrait ? '90%' : '85%',
     wordBreak: 'break-word',
