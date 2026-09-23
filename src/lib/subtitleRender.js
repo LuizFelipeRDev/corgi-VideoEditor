@@ -230,7 +230,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
       let text = parts.join('')
 
-      if (styleConfig.wordSpacing !== 100) {
+      const isHighlightBox = styleConfig.animationType === 'highlightbox'
+
+      if (isHighlightBox) {
+        text = computeHighlightBoxText(blockWords, playResX, playResY, scaledFontSize, alignment, marginV, cssFontFamily, styleConfig.bold)
+      } else if (styleConfig.wordSpacing !== 100) {
         const spaceParts = text.split(' ')
         text = spaceParts
           .map((part, idx) => {
@@ -242,7 +246,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           .join('')
       }
 
-      const isHighlightBox = styleConfig.animationType === 'highlightbox'
       assContent += `Dialogue: ${isHighlightBox ? 1 : 0},${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${text}\n`
     }
   }
@@ -396,7 +399,7 @@ function measureTextMetrics(text, fontSize, fontFamily, bold) {
   return fallback
 }
 
-function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fontSize, alignment, marginV, highlightAss, fontFamily, bold) {
+function computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold) {
   const marginL = 10
   const marginR = 10
   const availableWidth = playResX - marginL - marginR
@@ -432,16 +435,6 @@ function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fo
     lineStarts[li] = marginL + (availableWidth - lineWidths[li]) / 2
   }
 
-  const activeWord = blockWords[activeIndex]
-  let cursorX = lineStarts[activeWord.lineIdx]
-  let wordX = cursorX
-  for (let i = 0; i <= activeIndex; i++) {
-    if (blockWords[i].lineIdx === activeWord.lineIdx) {
-      wordX = cursorX
-      cursorX += wordWidths[i] + spaceWidth
-    }
-  }
-
   let baseline0
   if (alignment <= 3) {
     baseline0 = playResY - marginV
@@ -452,10 +445,34 @@ function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fo
     baseline0 = playResY / 2 - (numLines * lineHeight) / 2
   }
 
+  const wordLayouts = blockWords.map((w, idx) => {
+    let cursorX = lineStarts[w.lineIdx]
+    let wordX = cursorX
+    for (let i = 0; i < blockWords.length; i++) {
+      if (blockWords[i].lineIdx === w.lineIdx) {
+        if (i === idx) wordX = cursorX
+        cursorX += wordWidths[i] + spaceWidth
+      }
+    }
+    const baselineY = baseline0 + w.lineIdx * lineHeight
+    return { wordX, baselineY }
+  })
+
+  return { wordWidths, wordLayouts, padX, padY, radius, ascentRatio, descentRatio, lineHeight, numLines }
+}
+
+function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fontSize, alignment, marginV, highlightAss, fontFamily, bold) {
+  const { wordWidths, wordLayouts, padX, padY, radius, ascentRatio, descentRatio, lineHeight } =
+    computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold)
+
+  const activeWord = blockWords[activeIndex]
+  const { wordX } = wordLayouts[activeIndex]
+
+  const baselineY = wordLayouts[activeIndex].baselineY
+
   const boxH = (ascentRatio + descentRatio) * fontSize + padY * 2
   const boxW = wordWidths[activeIndex] + padX * 2
   const boxX = wordX - padX
-  const baselineY = baseline0 + activeWord.lineIdx * lineHeight
   const boxY = baselineY - ascentRatio * fontSize - padY
 
   const k = radius * 0.5523
@@ -472,6 +489,17 @@ function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fo
     `b 0 ${x(radius - k)} ${x(radius - k)} 0 ${x(radius)} 0`
 
   return `{\\an7\\pos(${x(boxX)},${x(boxY)})\\p1\\bord0\\shad0\\c${highlightAss}}${path}{\\p0}`
+}
+
+function computeHighlightBoxText(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold) {
+  const layout = computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold)
+  return blockWords
+    .map((w, j) => {
+      const { wordX, baselineY } = layout.wordLayouts[j]
+      const topY = baselineY - layout.ascentRatio * fontSize
+      return `{\\an7\\pos(${Math.round(wordX)},${Math.round(topY)})}${w.text.toUpperCase()}`
+    })
+    .join(' ')
 }
 
 function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {
