@@ -11,7 +11,7 @@ import CudaDownloadModal from './components/CudaDownloadModal'
 import Toast from './components/Toast'
 import SubtitlesPanel from './components/SubtitlesPanel'
 import Waveform from './components/Waveform'
-import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps } from './lib/subtitleRender'
+import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps, ensureExportFontLoaded } from './lib/subtitleRender'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 import { SUBTITLE_DISPLAY_DEFAULTS } from './global_config/subtitleConfig'
 
@@ -58,6 +58,7 @@ function App() {
   const [linesCount, setLinesCount] = useState(2)
   const [subtitlePersistence, setSubtitlePersistence] = useState(1)
   const [smartSubtitle, setSmartSubtitle] = useState(false)
+  const [autoLineWrap, setAutoLineWrap] = useState(false)
   const [subtitleConfigs, setSubtitleConfigs] = useState({})
   const [subtitlesEdited, setSubtitlesEdited] = useState(false)
 
@@ -80,6 +81,7 @@ function App() {
       setLinesCount(Number(c.lines_count) || 2)
       setSubtitlePersistence(Number(c.subtitle_persistence) || 1)
       setSmartSubtitle(c.smart_subtitle === 'true')
+      setAutoLineWrap(c.auto_line_wrap === 'true')
       try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
     })
 
@@ -328,6 +330,13 @@ function App() {
           const inputH = videoRef.current?.videoHeight || 1080
           const videoW = outputResolution === 'portrait' ? 1080 : outputResolution === 'landscape' ? 1920 : inputW
           const videoH = outputResolution === 'portrait' ? 1920 : outputResolution === 'landscape' ? 1080 : inputH
+          console.log(`[export] ASS: style=${subtitleStyle} ${styleCfg.wordsPerLine || wordsPerLine}palavras/${styleCfg.linesCount || linesCount}linha(s) wrap=${autoLineWrap} res=${videoW}x${videoH}`)
+          // O canvas so mede com a webfont depois que ela carrega; sem isto o
+          // highlightbox sai com as palavras coladas no video final.
+          const fontLoaded = await ensureExportFontLoaded(styleCfg.fontId || undefined, subtitleStyle, styleCfg.fontSize || undefined)
+          if (!fontLoaded) {
+            console.warn(`[export] AVISO: fonte de medicao nao confirmada (${styleCfg.fontId || 'default'}) - palavras podem sair coladas`)
+          }
           const assContent = generateAssContent(
             exportSubtitles,
             subtitleStyle,
@@ -341,16 +350,27 @@ function App() {
             styleCfg.fontId || undefined,
             styleCfg.fontSize || undefined,
             positionMode,
-            positionPercent
+            positionPercent,
+            autoLineWrap
           )
           if (assContent) {
             await window.api.writeFile(assPath, assContent)
 
             setProgress({ pct: 95, text: 'Imbutindo legenda...' })
 
+            // fontsdir: informa ao libass onde procurar fontes que nao estao instaladas no Windows
+            // (ex: Komika Axis). Sem isso o export cai no fallback (Arial). Escaping validado com o ffmpeg:
+            // unidade precisa de 2 barras (E\\:) e espacos de 1 barra (fonts\ com\ espaco).
             const fontsDir = await window.api.getFontsPath()
-            const escapedFontsDir = fontsDir.replace(/\\/g, '/').replace(/^([A-Za-z]):/, '$1\\\\:')
+            if (!(await window.api.pathExists(fontsDir))) {
+              console.warn(`[export] AVISO: pasta de fontes ausente (${fontsDir}) - video saindo com a fonte padrao do sistema`)
+            }
+            const escapedFontsDir = fontsDir
+              .replace(/\\/g, '/')
+              .replace(/^([A-Za-z]):/, '$1\\\\:')
+              .replace(/ /g, '\\ ')
             videoFilters.push(`ass=corgi_sub.ass:fontsdir=${escapedFontsDir}`)
+            console.log(`[export] fontsdir: ${escapedFontsDir}`)
           }
 
           if (videoFilters.length > 0) {
@@ -590,6 +610,7 @@ function App() {
     if (newConfig.lines_count !== undefined) setLinesCount(newConfig.lines_count)
     if (newConfig.subtitle_persistence !== undefined) setSubtitlePersistence(newConfig.subtitle_persistence)
     if (newConfig.smart_subtitle !== undefined) setSmartSubtitle(newConfig.smart_subtitle)
+    if (newConfig.auto_line_wrap !== undefined) setAutoLineWrap(newConfig.auto_line_wrap)
     if (newConfig.subtitle_configs !== undefined) setSubtitleConfigs(newConfig.subtitle_configs)
 
     await window.api.saveConfig({
@@ -609,6 +630,7 @@ function App() {
       lines_count: String(newConfig.lines_count ?? linesCount),
       subtitle_persistence: String(newConfig.subtitle_persistence ?? subtitlePersistence),
       smart_subtitle: String(newConfig.smart_subtitle ?? smartSubtitle),
+      auto_line_wrap: String(newConfig.auto_line_wrap ?? autoLineWrap),
       subtitle_configs: JSON.stringify(newConfig.subtitle_configs ?? subtitleConfigs),
     })
   }
@@ -730,6 +752,7 @@ function App() {
           linesCount={linesCount}
           subtitlePersistence={subtitlePersistence}
           smartSubtitle={smartSubtitle}
+          autoLineWrap={autoLineWrap}
           positionMode={positionMode}
           positionPercent={positionPercent}
           whisperCliInstalled={whisperCliInstalled}

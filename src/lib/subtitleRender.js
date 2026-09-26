@@ -1,11 +1,45 @@
 import { SUBTITLE_STYLES, hasPopEffect } from './subtitleStyles'
 import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize, SUBTITLE_HIGHLIGHT_BOX } from '../global_config/subtitleConfig'
 import { FONTS } from '../global_config/fonts'
+import { getFontRenderScale } from '../global_config/fontMetrics'
 
 const resolveAssFontName = (fontId, styleFontFamily) => {
   const picked = FONTS.find(f => f.id === fontId)
   if (picked) return picked.assName
-  return fontId || styleFontFamily.split(',')[0].trim()
+  // Sem fontId explicito (default da style) ou com id desconhecido, resolve
+  // pela FAMILIA CSS: o nome real da fonte embutida pode diferir do nome CSS
+  // (Montserrat -> Montserrat ExtraBold, Poppins -> Poppins ExtraBold,
+  // Roboto -> Roboto Black). Usando o nome CSS no Style, o libass seleciona
+  // OUTRA fonte do sistema e as larguras renderizadas deixam de bater com as
+  // medidas no canvas — palavras coladas/espacadas no export (highlightbox
+  // posiciona cada palavra por coordenada absoluta).
+  const cssFamily = (styleFontFamily || '').split(',')[0].trim()
+  const byFamily = FONTS.find(f => f.family.split(',')[0].trim() === cssFamily)
+    || FONTS.find(f => f.id === cssFamily)
+  if (byFamily) return byFamily.assName
+  return cssFamily || fontId || 'Arial'
+}
+
+// Garante que a webfont esta CARREGADA no documento antes do canvas medir.
+// O ctx.measureText nao dispara o carregamento do @font-face: se a fonte
+// ainda estiver "loading"/"unloaded", o canvas cai na fonte do sistema,
+// mede palavras/espacos ~5-10% mais estreitas que o Montserrat ExtraBold e
+// o layout absoluto do highlightbox exporta as palavras COLADAS (a caixa
+// tambem sai menor). O preview nao afeta: ele e DOM, com espacos reais.
+// Retorna true se a fonte de medicao esta utilizavel.
+export async function ensureExportFontLoaded(fontId, styleId, fontSizeOverride) {
+  if (typeof document === 'undefined' || !document.fonts || !document.fonts.load) return true
+  const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
+  const cssFontFamily = (FONTS.find(f => f.id === fontId)?.family || styleConfig?.fontFamily || 'Montserrat, sans-serif')
+  const family = cssFontFamily.split(',')[0].replace(/['"]/g, '').trim()
+  const spec = `${styleConfig?.bold === false ? 'normal' : 'bold'} ${fontSizeOverride || styleConfig?.fontSize || 105}px "${family}"`
+  try {
+    await document.fonts.load(spec)
+    await document.fonts.ready
+    return document.fonts.check(spec)
+  } catch (e) {
+    return false
+  }
 }
 
 function hexToRgb(hex) {
@@ -61,7 +95,7 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, positionMode, positionPercent) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, positionMode, positionPercent, autoLineWrap = false) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
   const playResX = videoWidth || 1920
@@ -116,40 +150,70 @@ Style: Default,${assFontName},${scaledFontSize},${primaryAss},${highlightAss},${
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `
 
-  const allWords = []
-  for (const sub of subtitles) {
+  // Coleta as palavras de um segmento (subtitulo) ja agrupado na geracao.
+  const collectSegmentWords = (sub) => {
+    const out = []
     if (sub.words && sub.words.length > 0) {
       for (const word of sub.words) {
         const wordText = stripEmojis(word.text)
         if (!wordText) continue
-        allWords.push({
+        out.push({
           text: wordText,
           start: parseSrtTimeToSeconds(word.start),
           end: parseSrtTimeToSeconds(word.end),
         })
       }
-    } else {
-      const words = sub.text.split(/\s+/).filter(Boolean)
-      const subStart = parseSrtTimeToSeconds(sub.start)
-      const subEnd = parseSrtTimeToSeconds(sub.end)
-      const duration = subEnd - subStart
-      const wordDuration = duration / words.length
-
-      for (let i = 0; i < words.length; i++) {
-        const wordText = stripEmojis(words[i])
-        if (!wordText) continue
-        allWords.push({
-          text: wordText,
-          start: subStart + i * wordDuration,
-          end: subStart + (i + 1) * wordDuration,
-        })
-      }
+      return out
     }
+
+    const words = (sub.text || '').split(/\s+/).filter(Boolean)
+    const subStart = parseSrtTimeToSeconds(sub.start)
+    const subEnd = parseSrtTimeToSeconds(sub.end)
+    const wordDuration = words.length > 0 ? (subEnd - subStart) / words.length : 0
+
+    for (let i = 0; i < words.length; i++) {
+      const wordText = stripEmojis(words[i])
+      if (!wordText) continue
+      out.push({
+        text: wordText,
+        start: subStart + i * wordDuration,
+        end: subStart + (i + 1) * wordDuration,
+      })
+    }
+    return out
   }
 
-  if (allWords.length === 0) return null
+  // Cada segmento vira blocos proprios: as quebras feitas na geracao
+  // (legenda inteligente por pontuacao, gap de silencio e persistencia)
+  // sao preservadas, igual ao preview e a tela cheia.
+  const segments = []
+  for (const sub of subtitles) {
+    const words = collectSegmentWords(sub)
+    if (words.length === 0) continue
+    segments.push({ sub, words })
+  }
 
-  const blocks = groupWordsIntoBlocks(allWords, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, styleId)
+  if (segments.length === 0) return null
+
+  const blocks = []
+  for (let i = 0; i < segments.length; i++) {
+    const { sub, words } = segments[i]
+    const segmentBlocks = groupWordsIntoBlocks(words, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, styleId, autoLineWrap)
+    if (segmentBlocks.length === 0) continue
+
+    // O ultimo bloco do segmento vale ate sub.end (persistencia aplicada na
+    // geracao ou edicao manual), limitado ao inicio do proximo segmento.
+    const lastBlock = segmentBlocks[segmentBlocks.length - 1]
+    const blockStart = lastBlock.words[0].start
+    const subEnd = parseSrtTimeToSeconds(sub.end)
+    const nextStart = i < segments.length - 1 ? segments[i + 1].words[0].start : Infinity
+    const visibleEnd = Math.min(subEnd, nextStart)
+    if (Number.isFinite(visibleEnd) && visibleEnd > blockStart) {
+      lastBlock.end = visibleEnd
+    }
+
+    blocks.push(...segmentBlocks)
+  }
 
   for (const block of blocks) {
     const blockWords = block.words
@@ -183,6 +247,38 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       continue
     }
 
+    // HIGHLIGHT BOX: caixa de fundo na palavra ativa. O layout e calculado
+    // UMA vez por bloco e usado pelo texto e pela caixa, entao a caixa
+    // sempre envolve exatamente a palavra visivel. O texto sai uma unica
+    // vez por bloco (camada 1) e a caixa uma vez por fatia de palavra
+    // (camada 0, atras do texto) - sem texto duplicado.
+    if (styleConfig.animationType === 'highlightbox') {
+      const layout = computeHighlightBoxLayout(
+        blockWords, playResX, playResY, scaledFontSize, alignment, marginV,
+        cssFontFamily, styleConfig.bold, styleConfig.wordSpacing, assFontName
+      )
+
+      const textStart = secondsToAssTime(blockWords[0].start)
+      const textEnd = secondsToAssTime(block.end)
+      for (let j = 0; j < blockWords.length; j++) {
+        const w = blockWords[j]
+        const wordTag = `{\\an7\\pos(${Math.round(layout.wordXs[j])},${Math.round(layout.lineTops[w.lineIdx])})}`
+        assContent += `Dialogue: 1,${textStart},${textEnd},Default,,0,0,0,,${wordTag}${w.text.toUpperCase()}\n`
+      }
+
+      for (let i = 0; i < blockWords.length; i++) {
+        const nextStart = i < blockWords.length - 1 ? blockWords[i + 1].start : block.end
+        const boxX = Math.round(layout.wordXs[i] - layout.padX)
+        const boxY = Math.round(layout.lineTops[blockWords[i].lineIdx] - layout.padY)
+        const boxW = Math.round(layout.wordWidths[i] + layout.padX * 2)
+        const boxH = Math.round(scaledFontSize + layout.padY * 2)
+        const path = highlightBoxPath(boxW, boxH, layout.radius)
+        const boxTag = `{\\an7\\pos(${boxX},${boxY})\\p1\\bord0\\shad0\\c${highlightAss}}${path}{\\p0}`
+        assContent += `Dialogue: 0,${secondsToAssTime(blockWords[i].start)},${secondsToAssTime(nextStart)},Default,,0,0,0,,${boxTag}\n`
+      }
+      continue
+    }
+
     for (let i = 0; i < blockWords.length; i++) {
       const word = blockWords[i]
       const nextStart = i < blockWords.length - 1 ? blockWords[i + 1].start : block.end
@@ -207,12 +303,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           } else {
             parts.push(wUpper)
           }
-        } else if (styleConfig.animationType === 'highlightbox') {
-          if (j === i) {
-            const boxTag = computeHighlightBoxRect(blockWords, i, playResX, playResY, scaledFontSize, alignment, marginV, highlightAss, cssFontFamily, styleConfig.bold)
-            assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${boxTag}\n`
-          }
-          parts.push(wUpper)
         } else {
           if (j === i) {
             parts.push(getAnimationTag(styleConfig, highlightAss, w, w.end - w.start))
@@ -230,11 +320,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
       let text = parts.join('')
 
-      const isHighlightBox = styleConfig.animationType === 'highlightbox'
-
-      if (isHighlightBox) {
-        text = computeHighlightBoxText(blockWords, playResX, playResY, scaledFontSize, alignment, marginV, cssFontFamily, styleConfig.bold)
-      } else if (styleConfig.wordSpacing !== 100) {
+      if (styleConfig.wordSpacing !== 100) {
         const spaceParts = text.split(' ')
         text = spaceParts
           .map((part, idx) => {
@@ -246,14 +332,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           .join('')
       }
 
-      assContent += `Dialogue: ${isHighlightBox ? 1 : 0},${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${text}\n`
+      assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${text}\n`
     }
   }
 
   return assContent
 }
 
-function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, styleId = null) {
+function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, styleId = null, autoLineWrap = false) {
   const maxWordsPerLine = wordsPerLine
   const maxLines = linesCount
   const maxWordsPerBlock = maxWordsPerLine * maxLines
@@ -292,7 +378,9 @@ function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPe
       currentBlock.lineIdx++
       currentBlock.wordsInLine = 0
       currentBlock.lineWidth = 0
-      if (currentBlock.lineIdx >= maxLines) {
+      // Com quebra automatica a linha extra nao fecha o grupo: ele so
+      // termina quando completa o numero de palavras (palavras x linhas).
+      if (!autoLineWrap && currentBlock.lineIdx >= maxLines) {
         pushBlock()
         currentBlock.start = word.start
       }
@@ -302,7 +390,7 @@ function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPe
       currentBlock.lineIdx++
       currentBlock.wordsInLine = 0
       currentBlock.lineWidth = 0
-      if (currentBlock.lineIdx >= maxLines) {
+      if (!autoLineWrap && currentBlock.lineIdx >= maxLines) {
         pushBlock()
         currentBlock.start = word.start
       }
@@ -399,85 +487,91 @@ function measureTextMetrics(text, fontSize, fontFamily, bold) {
   return fallback
 }
 
-function computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold) {
+// Layout do estilo "highlight box": a caixa e o texto compartilham as
+// MESMAS coordenadas, entao a caixa sempre envolve a palavra visivel.
+//
+// Ancoragem validada por sonda com o ffmpeg embutido (bin/ffmpeg.exe),
+// renderizando "HHH" em size=200 e lendo a linha de base nos pixels:
+//   - a caixa de linha do libass vale 1.0 x tamanho de fonte nominal
+//     (asc + desc = 1.000) nas 16 fontes do app;
+//   - o avanco entre linhas tambem vale 1.0 x tamanho nominal;
+//   - {\an7\pos(x,y)} ancora o TOPO da caixa de linha em y e a origem da
+//     "caneta" (advance) em x - mesma regra dos alinhamentos nativos
+//     \an2 (base = playResY - marginV - desc), \an8 (topo = marginV) e
+//     \an5 (centro do bloco no meio do quadro);
+//   - o desenho {\p1} usa 1 unidade = 1 px, independente do tamanho.
+// Trocando o ffmpeg, revalidar com a mesma sonda.
+//
+// Larguras: o libass posiciona a caixa de linha no tamanho nominal mas
+// renderiza os glifos em nominal*renderScale (ver fontMetrics.js), ja que
+// normaliza pelo par winAscent+winDescent do OS/2. O canvas mede em "em
+// real", entao as larguras sao multiplicadas por renderScale - sem isso
+// as palavras saem espacadas demais e a caixa nao envolve a palavra.
+function computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold, wordSpacing = 100, assFontName = '') {
   const marginL = 10
   const marginR = 10
   const availableWidth = playResX - marginL - marginR
-  const padX = fontSize * SUBTITLE_HIGHLIGHT_BOX.paddingXRatio
+
+  const renderScale = getFontRenderScale(assFontName)
+
+  // padX acompanha a escala de render: a caixa deve guardar a MESMA
+  // proporcao da palavra que o preview (padX/palavra = paddingXRatio/em em
+  // ambos). Sem escalar, para fontes com renderScale baixo o padX nominal
+  // (16.8px) fica maior que o espaco visivel e a caixa encosta na palavra
+  // vizinha. padY e radius ficam em unidades nominais porque se prendem a
+  // caixa de linha (altura nominal = fontSize), nao aos glifos.
+  const padX = fontSize * SUBTITLE_HIGHLIGHT_BOX.paddingXRatio * renderScale
   const padY = fontSize * SUBTITLE_HIGHLIGHT_BOX.paddingYRatio
   const radius = Math.max(1, Math.round(fontSize * SUBTITLE_HIGHLIGHT_BOX.borderRadiusRatio))
 
-  const spaceWidth = measureTextMetrics(' ', fontSize, fontFamily, bold).width
-  const wordMetrics = blockWords.map(w => measureTextMetrics(w.text.toUpperCase(), fontSize, fontFamily, bold))
-  const wordWidths = wordMetrics.map(m => m.width)
-
-  const fontMetrics = measureTextMetrics('Ag(', fontSize, fontFamily, bold)
-  const ascentRatio = fontMetrics.ascent / fontSize
-  const descentRatio = fontMetrics.descent / fontSize
+  const lineHeight = fontSize
   const numLines = Math.max(...blockWords.map(w => w.lineIdx)) + 1
-  const lineHeight = (ascentRatio + descentRatio) * fontSize * 1.25
 
-  const lineWordWidths = {}
-  for (const w of blockWords) {
-    const li = w.lineIdx
-    if (!lineWordWidths[li]) lineWordWidths[li] = []
-    lineWordWidths[li].push(wordWidths[blockWords.indexOf(w)])
-  }
+  const spaceWidth = measureTextMetrics(' ', fontSize, fontFamily, bold).width * (wordSpacing / 100) * renderScale
+  const wordWidths = blockWords.map(w => measureTextMetrics(w.text.toUpperCase(), fontSize, fontFamily, bold).width * renderScale)
 
-  const lineWidths = {}
-  for (const li in lineWordWidths) {
-    const widths = lineWordWidths[li]
-    lineWidths[li] = widths.reduce((acc, ww) => acc + ww, 0) + (widths.length - 1) * spaceWidth
-  }
-
-  const lineStarts = {}
-  for (const li in lineWidths) {
-    lineStarts[li] = marginL + (availableWidth - lineWidths[li]) / 2
-  }
-
-  let baseline0
+  // topo da primeira linha replicando a ancoragem nativa do libass
+  let lineTop0
   if (alignment <= 3) {
-    baseline0 = playResY - marginV
-    baseline0 -= (numLines - 1) * lineHeight
+    // base da ultima linha = playResY - marginV - desc*fontSize
+    lineTop0 = playResY - marginV - (numLines - 1) * lineHeight - fontSize
   } else if (alignment >= 7) {
-    baseline0 = marginV
+    lineTop0 = marginV
   } else {
-    baseline0 = playResY / 2 - (numLines * lineHeight) / 2
+    lineTop0 = playResY / 2 - (numLines * lineHeight) / 2
   }
 
-  const wordLayouts = blockWords.map((w, idx) => {
-    let cursorX = lineStarts[w.lineIdx]
-    let wordX = cursorX
+  const lineTops = []
+  for (let li = 0; li < numLines; li++) lineTops.push(lineTop0 + li * lineHeight)
+
+  // cada linha centrada como o libass faz, sem ultrapassar as margens
+  const lineStarts = []
+  for (let li = 0; li < numLines; li++) {
+    const idxs = []
     for (let i = 0; i < blockWords.length; i++) {
-      if (blockWords[i].lineIdx === w.lineIdx) {
-        if (i === idx) wordX = cursorX
-        cursorX += wordWidths[i] + spaceWidth
-      }
+      if (blockWords[i].lineIdx === li) idxs.push(i)
     }
-    const baselineY = baseline0 + w.lineIdx * lineHeight
-    return { wordX, baselineY }
+    const lineWidth = idxs.reduce((acc, i) => acc + wordWidths[i], 0) +
+      Math.max(0, idxs.length - 1) * spaceWidth
+    lineStarts[li] = Math.max(marginL, marginL + (availableWidth - lineWidth) / 2)
+  }
+
+  // x de avanco de cada palavra (origem da caneta, como o \an7\pos usa)
+  const wordXs = blockWords.map((w, idx) => {
+    let x = lineStarts[w.lineIdx]
+    for (let j = 0; j < idx; j++) {
+      if (blockWords[j].lineIdx === w.lineIdx) x += wordWidths[j] + spaceWidth
+    }
+    return x
   })
 
-  return { wordWidths, wordLayouts, padX, padY, radius, ascentRatio, descentRatio, lineHeight, numLines }
+  return { wordWidths, wordXs, lineTops, padX, padY, radius, lineHeight, numLines }
 }
 
-function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fontSize, alignment, marginV, highlightAss, fontFamily, bold) {
-  const { wordWidths, wordLayouts, padX, padY, radius, ascentRatio, descentRatio, lineHeight } =
-    computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold)
-
-  const activeWord = blockWords[activeIndex]
-  const { wordX } = wordLayouts[activeIndex]
-
-  const baselineY = wordLayouts[activeIndex].baselineY
-
-  const boxH = (ascentRatio + descentRatio) * fontSize + padY * 2
-  const boxW = wordWidths[activeIndex] + padX * 2
-  const boxX = wordX - padX
-  const boxY = baselineY - ascentRatio * fontSize - padY
-
+function highlightBoxPath(boxW, boxH, radius) {
   const k = radius * 0.5523
   const x = (v) => Math.round(v)
-  const path =
+  return (
     `m ${x(radius)} 0 ` +
     `l ${x(boxW - radius)} 0 ` +
     `b ${x(boxW - radius + k)} 0 ${x(boxW)} ${x(radius - k)} ${x(boxW)} ${x(radius)} ` +
@@ -487,19 +581,7 @@ function computeHighlightBoxRect(blockWords, activeIndex, playResX, playResY, fo
     `b ${x(radius - k)} ${x(boxH)} 0 ${x(boxH - radius + k)} 0 ${x(boxH - radius)} ` +
     `l 0 ${x(radius)} ` +
     `b 0 ${x(radius - k)} ${x(radius - k)} 0 ${x(radius)} 0`
-
-  return `{\\an7\\pos(${x(boxX)},${x(boxY)})\\p1\\bord0\\shad0\\c${highlightAss}}${path}{\\p0}`
-}
-
-function computeHighlightBoxText(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold) {
-  const layout = computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold)
-  return blockWords
-    .map((w, j) => {
-      const { wordX, baselineY } = layout.wordLayouts[j]
-      const topY = baselineY - layout.ascentRatio * fontSize
-      return `{\\an7\\pos(${Math.round(wordX)},${Math.round(topY)})}${w.text.toUpperCase()}`
-    })
-    .join(' ')
+  )
 }
 
 function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {

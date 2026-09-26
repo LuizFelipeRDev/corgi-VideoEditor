@@ -4,6 +4,7 @@ const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const https = require('https');
 const windowConfig = require('../src/global_config/window.js');
+const { syncFontsDir } = require('./fontSync.cjs');
 
 const isDev = !app.isPackaged;
 const devRoot = app.getAppPath();
@@ -13,17 +14,36 @@ const configPath = path.join(userDataPath, 'config.ini');
 
 function copyBundledFiles() {
   if (isDev) return;
-  const srcBin = path.join(process.resourcesPath, 'bin');
-  const dstBin = path.join(userDataPath, 'bin');
-  if (fs.existsSync(dstBin)) return;
-  fs.mkdirSync(dstBin, { recursive: true });
-  fs.cpSync(srcBin, dstBin, { recursive: true });
-  const srcFonts = path.join(process.resourcesPath, 'fonts');
-  const dstFonts = path.join(userDataPath, 'fonts');
-  if (fs.existsSync(dstFonts)) return;
-  fs.mkdirSync(dstFonts, { recursive: true });
-  fs.cpSync(srcFonts, dstFonts, { recursive: true });
-  console.log('[setup] bundled files copied to userData');
+  // Nunca pode lancar excecao: quem chama e
+  // app.whenReady().then(() => { copyBundledFiles(); createWindow(); }),
+  // entao um erro aqui fecharia o app sem abrir janela e sem aviso.
+  try {
+    const srcBin = path.join(process.resourcesPath, 'bin');
+    const dstBin = path.join(userDataPath, 'bin');
+    if (!fs.existsSync(dstBin)) {
+      fs.mkdirSync(dstBin, { recursive: true });
+      fs.cpSync(srcBin, dstBin, { recursive: true });
+      console.log('[setup] bundled bin copied to userData');
+    }
+  } catch (err) {
+    console.error('[setup] AVISO: falha ao copiar binarios:', err.message);
+  }
+
+  // Fontes espelhadas a cada inicializacao (ver fontSync.cjs): instalacoes
+  // antigas recebem as fontes que faltavam, senao o export cai na fonte do
+  // sistema (Arial) mesmo com o fontsdir no filtro ass.
+  try {
+    const res = syncFontsDir(path.join(process.resourcesPath, 'fonts'), path.join(userDataPath, 'fonts'));
+    if (res.missingSrc) {
+      console.warn(`[setup] AVISO: pasta de fontes da build ausente: ${path.join(process.resourcesPath, 'fonts')}`);
+    } else if (res.emptySrc) {
+      console.warn(`[setup] AVISO: pasta de fontes da build vazia: ${path.join(process.resourcesPath, 'fonts')}`);
+    } else if (res.added || res.removed) {
+      console.log(`[setup] fontes sincronizadas: ${res.added} adicionada(s), ${res.removed} removida(s) de ${res.total}`);
+    }
+  } catch (err) {
+    console.error('[setup] AVISO: falha ao sincronizar fontes:', err.message);
+  }
 }
 
 function getBinPath() {
@@ -81,6 +101,7 @@ function readConfig() {
     subtitle_position_percent: '80',
     subtitle_persistence: '1',
     smart_subtitle: 'false',
+    auto_line_wrap: 'false',
   };
   if (!fs.existsSync(configPath)) return defaults;
   try {
@@ -98,7 +119,7 @@ function readConfig() {
 
 function writeConfig(config) {
   fs.writeFileSync(configPath,
-    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\noutput_resolution = ${config.output_resolution || 'original'}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\nsubtitle_persistence = ${config.subtitle_persistence || '1'}\nsmart_subtitle = ${config.smart_subtitle || 'false'}\n`, 'utf-8');
+    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\noutput_resolution = ${config.output_resolution || 'original'}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\nsubtitle_persistence = ${config.subtitle_persistence || '1'}\nsmart_subtitle = ${config.smart_subtitle || 'false'}\nauto_line_wrap = ${config.auto_line_wrap || 'false'}\n`, 'utf-8');
 }
 
 let mainWindow;
@@ -148,6 +169,9 @@ ipcMain.handle('close', () => mainWindow?.close());
 ipcMain.handle('get-config', () => readConfig());
 ipcMain.handle('save-config', (e, config) => writeConfig(config));
 ipcMain.handle('get-fonts-path', () => getFontsDir());
+ipcMain.handle('path-exists', (e, targetPath) => {
+  try { return fs.existsSync(targetPath); } catch { return false; }
+});
 ipcMain.handle('get-whisper-dir', () => getWhisperDir());
 
 ipcMain.handle('resize-window', (e, width, height) => {

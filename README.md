@@ -104,7 +104,7 @@ Click **EXPORTAR** to process the file:
 ### Per-Style Configuration
 
 Click the gear icon next to any style to customize:
-- **Font** — 6 bundled fonts (Montserrat, Bebas Neue, Bangers, Lilita One, Komika Axis, IBM Plex Sans)
+- **Font** — 16 bundled fonts: Montserrat, Bebas Neue, Bangers, Lilita One, Komika Axis, IBM Plex Sans, Anton, Archivo Black, Poppins, Rubik, Roboto, Oswald, Inter, Fira Sans Condensed, Luckiest Guy, Titan One (all free for commercial use — see `src/global_config/fonts/LICENSES.md`)
 - **Font Size** — 60-200 range
 - **Colors** — Primary (text) and Highlight (active word)
 - **Words per Line** — 3-6 words
@@ -200,7 +200,9 @@ CORGI-EDITOR é uma aplicação desktop para edição automática de vídeo e á
 - **7 estilos de legenda** — Hormozi, MrBeast, Karaoke, Minimal, Word Pop, Simple, Highlight Box
 - **Pré-visualização em tempo real** — Overlay de legendas com animação palavra por palavra
 - **Configuração por estilo** — Fontes, cores, tamanho, palavras por linha personalizáveis
+- **16 fontes embutidas** — Montserrat, Bebas Neue, Bangers, Lilita One, Komika Axis, IBM Plex Sans, Anton, Archivo Black, Poppins, Rubik, Roboto, Oswald, Inter, Fira Sans Condensed, Luckiest Guy e Titan One (todas gratuitas para uso comercial — veja `src/global_config/fonts/LICENSES.md`)
 - **Modo legenda inteligente** — Detecção automática de quebra de frase em pontuação
+- **Quebra automática de linha** — Quando o texto não cabe na largura, quebra a linha e mantém o mesmo grupo (opcional)
 - **Resolução de saída** — Original, Paisagem (16:9) ou Retrato (9:16)
 - **Modo tela verde** — Gera vídeo com legendas e fundo verde para chroma key
 - **Múltiplos formatos** — MP3, WAV, FLAC, OGG, AAC, M4A, MP4, MKV, MOV, WEBM, AVI
@@ -236,7 +238,7 @@ Clique no ícone de engrenagem para abrir Configurações:
 |-----|--------|
 | **Geral** | Pasta de destino, download GPU, modelo whisper |
 | **Saída** | Formato, resolução (Original/Paisagem/Retrato) |
-| **Legendas** | Ativar legendas, posição, palavras por linha, persistência, modo inteligente |
+| **Legendas** | Ativar legendas, posição, palavras por linha, persistência, modo inteligente, quebra automática de linha |
 
 ### 3. Ajustar Processamento de Áudio
 

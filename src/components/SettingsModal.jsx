@@ -26,7 +26,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', desc: 'Maxima qualidade, bem lento' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
   const [tab, setTab] = useState('geral')
   const [localFolder, setLocalFolder] = useState(outputFolder)
   const [localFormat, setLocalFormat] = useState(outputFormat)
@@ -41,6 +41,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   const [localLinesCount, setLocalLinesCount] = useState(linesCount || 2)
   const [localPersistence, setLocalPersistence] = useState(subtitlePersistence ?? 1)
   const [localSmartSubtitle, setLocalSmartSubtitle] = useState(smartSubtitle)
+  const [localAutoLineWrap, setLocalAutoLineWrap] = useState(autoLineWrap)
   const [localPositionMode, setLocalPositionMode] = useState(positionMode || 'fixed')
   const [localPositionPercent, setLocalPositionPercent] = useState(positionPercent ?? 80)
 
@@ -106,6 +107,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
       lines_count: localLinesCount,
       subtitle_persistence: localPersistence,
       smart_subtitle: localSmartSubtitle,
+      auto_line_wrap: localAutoLineWrap,
       subtitle_position_mode: localPositionMode,
       subtitle_position_percent: localPositionPercent,
     })
@@ -648,6 +650,24 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                   Requer formato de video (MP4, MKV, etc)
                 </p>
               )}
+            </div>
+
+            <div className={`mb-4 ${!localSubtitles ? 'opacity-40 pointer-events-none' : ''}`}>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localAutoLineWrap}
+                  onChange={(e) => setLocalAutoLineWrap(e.target.checked)}
+                  disabled={!localSubtitles}
+                  className="w-4 h-4 accent-retro-black disabled:opacity-50"
+                />
+                <span className="font-pixel text-[7px] text-retro-black uppercase">
+                  Quebra Automatica de Linha
+                </span>
+                <Tooltip text="Marcado: se o texto nao couber na largura, quebra a linha e continua no mesmo grupo ate completar o numero de palavras. Desmarcado: o que nao cabe em uma linha vai para o proximo grupo de legenda.">
+                  <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+                </Tooltip>
+              </label>
             </div>
 
             {isInputAudio && (

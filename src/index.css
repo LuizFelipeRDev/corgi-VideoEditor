@@ -56,6 +56,82 @@
   font-style: normal;
 }
 
+/*
+  Font-weight segue a regra validada com o ffmpeg: o libass so engorda o glifo quando o
+  peso do arquivo e menor que 700 (Anton, Archivo Black, Luckiest Guy, Titan One) - nesses
+  casos declaramos 'normal' para o navegador tambem sintetizar negrito no preview; nos
+  demais (>=700) declaramos 'bold' para o navegador NAO sintetizar, igual ao export.
+*/
+@font-face {
+  font-family: 'Anton';
+  src: url('./global_config/fonts/Anton-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Archivo Black';
+  src: url('./global_config/fonts/ArchivoBlack-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('./global_config/fonts/Poppins-ExtraBold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Rubik';
+  src: url('./global_config/fonts/Rubik-ExtraBold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto';
+  src: url('./global_config/fonts/Roboto-Black.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Oswald';
+  src: url('./global_config/fonts/Oswald-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./global_config/fonts/Inter-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Fira Sans Condensed';
+  src: url('./global_config/fonts/FiraSansCondensed-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Luckiest Guy';
+  src: url('./global_config/fonts/LuckiestGuy-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Titan One';
+  src: url('./global_config/fonts/TitanOne-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

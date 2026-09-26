@@ -107,6 +107,7 @@ contextBridge.exposeInMainWorld('api', {
   getConfig: () => ipcRenderer.invoke('get-config'),
   saveConfig: (config) => ipcRenderer.invoke('save-config', config),
   getFontsPath: () => ipcRenderer.invoke('get-fonts-path'),
+  pathExists: (targetPath) => ipcRenderer.invoke('path-exists', targetPath),
   getWhisperDir: () => ipcRenderer.invoke('get-whisper-dir'),
   resizeWindow: (width, height) => ipcRenderer.invoke('resize-window', width, height),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
