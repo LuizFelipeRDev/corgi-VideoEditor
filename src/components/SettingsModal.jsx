@@ -39,7 +39,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   const [showResPopup, setShowResPopup] = useState(false)
   const resPopupRef = useRef(null)
   const [localSubtitles, setLocalSubtitles] = useState(subtitles)
-  const [localSubtitleModel, setLocalSubtitleModel] = useState(subtitleModel || 'small')
+  const [localSubtitleModel, setLocalSubtitleModel] = useState(subtitleModel || 'tiny')
   const [localGreenScreen, setLocalGreenScreen] = useState(greenScreen)
   const [localBurnSubtitles, setLocalBurnSubtitles] = useState(burnSubtitles)
   const [localWordsPerLine, setLocalWordsPerLine] = useState(wordsPerLine || 4)

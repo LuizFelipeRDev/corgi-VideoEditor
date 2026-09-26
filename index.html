@@ -11,12 +11,12 @@
       if (!window.api) {
         const defaults = {
           threshold: '-30', margin: '0.5', output_folder: '', output_format: 'mp4',
-          output_resolution: 'original', subtitles: 'false', subtitle_model: 'small',
+          output_resolution: 'original', subtitles: 'false', subtitle_model: 'tiny',
           subtitle_position: 'bottom', subtitle_style: 'hormozi', green_screen: 'false',
           burn_subtitles: 'true', words_per_line: '4', lines_count: '2',
           subtitle_configs: '{}', subtitle_position_mode: 'fixed',
           subtitle_position_percent: '80', subtitle_persistence: '1',
-          smart_subtitle: 'false', auto_line_wrap: 'false', language: 'en', theme: 'retro',
+          smart_subtitle: 'false', auto_line_wrap: 'false', language: 'en', theme: 'modern',
         };
         window.api = new Proxy({}, {
           get(_, prop) {

@@ -6,11 +6,12 @@
 - `bin/ffplay.exe`
 - `bin/ffprobe.exe`
 - `bin/whisper/ggml-tiny.bin` — UNICO modelo permitido no pacote
+- `bin/whisper-cpu/` — build CPU oficial do whisper.cpp (whisper-cli.exe + whisper.dll + ggml.dll + ggml-base.dll + ggml-cpu-*.dll + runtime VC++ msvcp140/vcruntime140/vcomp140, ~11 MB) — permite gerar legenda com o tiny SEM nenhum download
 
 ## Binarios PROIBIDOS na build
-- `bin/whisper/whisper-cli.exe` — usuario baixa via CUDA download
+- `bin/whisper/whisper-cli.exe` e `bin/whisper/*.dll` — set CUDA de DEV; em producao o whisper embutido vem de `bin/whisper-cpu/`
 - `bin/whisper/ggml-*.bin` (exceto tiny) — usuario baixa pelo menu
-- `bin/whisper/*.dll` — CUDA DLLs baixadas pelo usuario
+- CUDA DLLs (ggml-cuda.dll, cublas64_12.dll, cudart64_12.dll, nvrtc...) — baixadas pelo usuario via download GPU
 - `dist/win-unpacked/` — output do electron-builder, nao empacotar
 
 ## CUDA (GPU NVIDIA)
@@ -36,7 +37,8 @@
     ffprobe.exe
     whisper/
       ggml-tiny.bin          (bundled)
-      whisper-cli.exe        (downloaded via CUDA)
+      whisper-cli.exe        (bundled CPU; CUDA download substitui)
+      ggml*.dll / ggml-cpu-*.dll / runtime VC++ (bundled CPU)
       ggml-cuda.dll          (downloaded via CUDA)
       cublas64_12.dll        (downloaded via CUDA)
       ...                    (outros modelos downloads)

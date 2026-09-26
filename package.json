@@ -1,6 +1,6 @@
 {
   "name": "corgi-editor",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "CORGI-EDITOR - Edição automática de vídeo/áudio",
   "main": "dist/electron/main.js",
   "scripts": {
@@ -58,6 +58,10 @@
       {
         "from": "bin/whisper/ggml-tiny.bin",
         "to": "bin/whisper/ggml-tiny.bin"
+      },
+      {
+        "from": "bin/whisper-cpu",
+        "to": "bin/whisper"
       },
       {
         "from": "src/global_config/fonts/",

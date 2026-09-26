@@ -20,11 +20,25 @@ function copyBundledFiles() {
   try {
     const srcBin = path.join(process.resourcesPath, 'bin');
     const dstBin = path.join(userDataPath, 'bin');
-    if (!fs.existsSync(dstBin)) {
-      fs.mkdirSync(dstBin, { recursive: true });
-      fs.cpSync(srcBin, dstBin, { recursive: true });
-      console.log('[setup] bundled bin copied to userData');
-    }
+    // Copia apenas o que FALTA (nunca sobrescreve): instalacoes antigas
+    // ganham os arquivos novos (whisper CPU embutido) e o set CUDA/modelos
+    // baixados pelo usuario em %APPDATA% permanecem intactos.
+    const copyMissing = (src, dst) => {
+      let added = 0;
+      fs.mkdirSync(dst, { recursive: true });
+      for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const s = path.join(src, entry.name);
+        const d = path.join(dst, entry.name);
+        if (entry.isDirectory()) added += copyMissing(s, d);
+        else if (!fs.existsSync(d)) {
+          fs.copyFileSync(s, d);
+          added++;
+        }
+      }
+      return added;
+    };
+    const added = copyMissing(srcBin, dstBin);
+    if (added) console.log(`[setup] bundled bin: ${added} arquivo(s) ausente(s) copiado(s) para userData`);
   } catch (err) {
     console.error('[setup] AVISO: falha ao copiar binarios:', err.message);
   }
@@ -89,7 +103,7 @@ function readConfig() {
     output_format: 'mp3',
     output_resolution: 'original',
     subtitles: 'false',
-    subtitle_model: 'small',
+    subtitle_model: 'tiny',
     subtitle_position: 'bottom',
     subtitle_style: 'hormozi',
     green_screen: 'false',
@@ -103,7 +117,7 @@ function readConfig() {
     smart_subtitle: 'false',
     auto_line_wrap: 'false',
     language: 'en',
-    theme: 'retro',
+    theme: 'modern',
   };
   if (!fs.existsSync(configPath)) return defaults;
   try {

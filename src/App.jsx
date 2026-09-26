@@ -45,7 +45,7 @@ function App() {
   const waveSurferRef = useRef(null)
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
-  const [subtitleModel, setSubtitleModel] = useState('small')
+  const [subtitleModel, setSubtitleModel] = useState('tiny')
   const [subtitlePosition, setSubtitlePosition] = useState('bottom')
   const [positionMode, setPositionMode] = useState('fixed')
   const [positionPercent, setPositionPercent] = useState(80)
@@ -72,7 +72,7 @@ function App() {
       setOutputResolution(c.output_resolution || 'original')
       if (c.output_folder) setOutputFolder(c.output_folder)
       setSubtitlesEnabled(c.subtitles === 'true')
-      setSubtitleModel(c.subtitle_model || 'small')
+      setSubtitleModel(c.subtitle_model || 'tiny')
       setSubtitlePosition(c.subtitle_position || 'bottom')
       setPositionMode(c.subtitle_position_mode || 'fixed')
       setPositionPercent(Math.min(70, Math.max(5, Number(c.subtitle_position_percent) || 80)))
