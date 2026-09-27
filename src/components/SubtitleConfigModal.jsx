@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useLang } from '../lib/i18n'
 import { SUBTITLE_STYLES } from '../lib/subtitleStyles'
 import { FONTS } from '../global_config/fonts'
 
 function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defaultLinesCount, onSave, onClose }) {
+  const { t } = useLang()
   const styleConfig = SUBTITLE_STYLES[subtitleStyle] || SUBTITLE_STYLES.hormozi
   const defaultFont = FONTS.find(f => f.family === styleConfig.fontFamily)?.id || 'Montserrat'
   const [localPrimary, setLocalPrimary] = useState(config.primaryColor || styleConfig.primaryColor)
@@ -40,11 +42,11 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
         className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro h-auto w-80 p-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-pixel text-[8px] text-retro-black uppercase mb-4">Configuracao - {styleConfig.name}</h3>
+        <h3 className="font-pixel text-[8px] text-retro-black uppercase mb-4">{t('subConfig.title', { name: styleConfig.name })}</h3>
 
         <div className="flex flex-col gap-3">
           <div>
-            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Fonte</label>
+            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.font')}</label>
             <select
               value={localFont}
               onChange={(e) => setLocalFont(e.target.value)}
@@ -57,7 +59,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
           </div>
 
           <div>
-            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Tamanho da Fonte - {localFontSize}</label>
+            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.fontSize', { size: localFontSize })}</label>
             <input
               type="range"
               min="60"
@@ -73,7 +75,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
           </div>
 
           <div>
-            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Cor Primaria (texto)</label>
+            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.primaryColor')}</label>
             <div className="flex gap-2 items-center">
               <input
                 type="color"
@@ -86,7 +88,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
           </div>
 
           <div>
-            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Cor Secundaria (destaque)</label>
+            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.highlightColor')}</label>
             <div className="flex gap-2 items-center">
               <input
                 type="color"
@@ -102,11 +104,11 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
             <div className={`w-4 h-4 border-2 border-retro-black rounded flex items-center justify-center ${useGlobalConfig ? 'bg-retro-black' : 'bg-retro-bg'}`}>
               {useGlobalConfig && <span className="text-retro-bg text-[8px] leading-none">✓</span>}
             </div>
-            <span className="font-pixel text-[6px] text-retro-black uppercase">Usar configuracoes globais</span>
+            <span className="font-pixel text-[6px] text-retro-black uppercase">{t('subConfig.useGlobal')}</span>
           </div>
 
           <div>
-            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Palavras por linha</label>
+            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.wordsPerLine')}</label>
             <select
               value={localWordsPerLine}
               onChange={(e) => setLocalWordsPerLine(Number(e.target.value))}
@@ -120,7 +122,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
           </div>
 
           <div>
-            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">Linhas da legenda</label>
+            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.linesCount')}</label>
             <select
               value={localLinesCount}
               onChange={(e) => setLocalLinesCount(Number(e.target.value))}
@@ -139,13 +141,13 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
             onClick={handleReset}
             className="flex-1 h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm font-pixel text-[6px] text-retro-black uppercase hover:bg-gray-200"
           >
-            RESETAR
+            {t('subConfig.reset')}
           </button>
           <button
             onClick={handleSave}
             className="flex-1 h-7 border-2 border-retro-black rounded bg-retro-black text-retro-bg shadow-retro-sm font-pixel text-[6px] uppercase hover:bg-gray-800"
           >
-            SALVAR
+            {t('common.save')}
           </button>
         </div>
       </div>

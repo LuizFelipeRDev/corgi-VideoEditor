@@ -24,7 +24,7 @@ export default {
 
   // --- Aba Sistema ---
   'system.language': 'LANGUAGE',
-  'system.languageHint': 'Applied immediately and kept after closing the app.',
+  'system.languageHint': 'System Language.',
   'system.theme': 'THEME',
   'system.themeHint': 'Interface appearance, applied immediately.',
 
@@ -136,4 +136,54 @@ export default {
     'The model "{model}" is not installed.\n\nGo to Settings (gear icon) > General and download the model.',
   'app.exportToast': 'Export completed!',
   'app.openFolder': 'OPEN FOLDER',
+
+  // --- DropZone (zona de arraste + info do arquivo) ---
+  'dropzone.clear': 'Clear',
+  'dropzone.orClickHere': 'or click here',
+  'dropzone.fullscreen': 'Fullscreen',
+  'dropzone.exitFullscreen': 'Exit fullscreen',
+  'dropzone.usePlayerBelow': 'Use the player below',
+  'dropzone.name': 'NAME:',
+  'dropzone.size': 'SIZE:',
+
+  // --- SubtitleConfigModal (configuracao por estilo) ---
+  'subConfig.title': 'Settings - {name}',
+  'subConfig.font': 'Font',
+  'subConfig.fontSize': 'Font size - {size}',
+  'subConfig.primaryColor': 'Primary color (text)',
+  'subConfig.highlightColor': 'Highlight color (accent)',
+  'subConfig.useGlobal': 'Use global settings',
+  'subConfig.wordsPerLine': 'Words per line',
+  'subConfig.linesCount': 'Subtitle lines',
+  'subConfig.reset': 'RESET',
+
+  // --- CudaDownloadModal (download GPU) ---
+  'cuda.downloading': 'Downloading GPU files...',
+  'cuda.progress': 'Progress',
+  'cuda.dontClose': 'Do not close the program',
+  'cuda.desc':
+    'Downloads the files needed to use the NVIDIA GPU for subtitle generation. Without this, processing uses the CPU and can be slow for models above tiny.',
+  'cuda.size': 'Size: ~420 MB',
+  'cuda.cancel': 'CANCEL',
+  'cuda.download': 'DOWNLOAD',
+
+  // --- Export (textos de progresso) ---
+  'export.converting': 'Converting...',
+  'export.analyzingCut': 'Analyzing cut...',
+  'export.burning': 'Burning subtitles...',
+
+  // --- Painel (legendas) ---
+  'panel.newSubtitle': 'New subtitle',
+
+  // --- Posicoes da legenda (botoes do painel) ---
+  'positions.top': 'TOP',
+  'positions.middle': 'MIDDLE',
+  'positions.bottom': 'BOTTOM',
+
+  // --- Settings > Saida: idioma de saida da legenda ---
+  'settings.subtitleLangLabel': 'SUBTITLE LANGUAGE',
+  'settings.subtitleLangAuto': 'AUTO (DETECT SPOKEN LANGUAGE)',
+  'settings.subtitleLangTooltip':
+    'Auto detects the language spoken in the audio (subtitle comes out in that language). English translates any audio to English. Other languages force the spoken language — only use them when the audio really is in that language, otherwise the result comes out wrong.',
+  'app.detectedLanguage': 'Detected language: {lang}',
 }

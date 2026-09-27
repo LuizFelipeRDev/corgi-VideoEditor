@@ -218,6 +218,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   for (const block of blocks) {
     const blockWords = block.words
 
+    // Medida da palavra ativa em unidade do PlayRes - alimenta a
+    // compensacao de \fsp do pop (ver getAnimationTag). renderScale
+    // alinha a medida nominal do canvas ao glifo real (fontMetrics),
+    // igual ao layout do highlightbox.
+    const popMeasure = (t) => measureTextMetrics(t, scaledFontSize, cssFontFamily, styleConfig.bold).width * getFontRenderScale(assFontName)
+
     if (styleConfig.animationType === 'simple' || styleConfig.animationType === 'bounce') {
       const useHighlight = styleConfig.animationType === 'bounce' && Math.random() > 0.5
       const popOn = hasPopEffect(styleId)
@@ -359,7 +365,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           }
         } else {
           if (j === i) {
-            parts.push(getAnimationTag(styleConfig, highlightAss, w, w.end - w.start))
+            parts.push(getAnimationTag(styleConfig, highlightAss, w, w.end - w.start, popMeasure))
             parts.push(wUpper)
             parts.push('{\\r}')
           } else {
@@ -656,25 +662,46 @@ function highlightBoxPath(boxW, boxH, radius) {
   )
 }
 
-function getAnimationTag(styleConfig, highlightAss, word, eventDuration) {
+function getAnimationTag(styleConfig, highlightAss, word, eventDuration, measure) {
   const { animationType } = styleConfig
   const popSz = styleConfig.popSize || 5
   const popDur = styleConfig.popDuration || 0.18
   const popStart = 100 - popSz
   const popPeak = 100 + popSz
 
+  // COMPENSACAO DE LAYOUT (empurrar a frase):
+  // no libass o \fscx participa da medicao da linha - o avanco do glifo e
+  // escalado, entao a palavra ativa "empurra" os vizinhos durante o pop.
+  // O \fsp proporcional (width * (escala-100)/100 / nLetras) devolve
+  // exatamente os pixels ganhos no avanco: a linha fica PARADA e a
+  // palavra cresce sobre o lugar - igual ao preview (transform CSS nao
+  // reflowa). \fsp negativo quando a escala > 100 (encolhe os gaps
+  // internos) e positivo quando < 100 (compenca o encolhimento).
+  // measure vem do call site (largura em unidade do PlayRes, ja com
+  // renderScale) - sem ele mantem o comportamento antigo sem \fsp.
+  const wordUpper = (word.text || '').toUpperCase()
+  const nLetters = wordUpper.length
+  const widthPx = measure && nLetters > 0 ? measure(wordUpper) : null
+  const fspAt = (scale) => {
+    if (widthPx === null) return null
+    const v = -widthPx * ((scale - 100) / 100) / nLetters
+    return Math.abs(v) < 0.05 ? 0 : parseFloat(v.toFixed(2))
+  }
+  const fspTag = (v) => (v === null || v === 0 ? '' : `\\fsp${v}`)
+
   switch (animationType) {
     case 'karaoke': {
       const durationCs = Math.round(eventDuration * 100)
       return `{\\kf${durationCs}}`
     }
-    case 'scale':
-      return `{\\fscx${popPeak}\\fscy${popPeak}\\c${highlightAss}}`
+    case 'scale': {
+      return `{\\fscx${popPeak}\\fscy${popPeak}${fspTag(fspAt(popPeak))}\\c${highlightAss}}`
+    }
     case 'wordpop': {
       const durationMs = Math.round((word.end - word.start) * 1000)
       const growMs = Math.min(100, Math.floor(durationMs / 3))
       const shrinkMs = Math.min(150, Math.floor(durationMs / 2))
-      return `{\\fscx${popStart}\\fscy${popStart}\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak})\\t(${growMs},${growMs + shrinkMs},\\fscx100\\fscy100)\\c${highlightAss}}`
+      return `{\\fscx${popStart}\\fscy${popStart}${fspTag(fspAt(popStart))}\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak}${fspTag(fspAt(popPeak))})\\t(${growMs},${growMs + shrinkMs},\\fscx100\\fscy100\\fsp0)\\c${highlightAss}}`
     }
     case 'highlight':
     default:

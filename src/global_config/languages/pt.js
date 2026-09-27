@@ -19,7 +19,7 @@ export default {
 
   // --- Aba Sistema ---
   'system.language': 'IDIOMA',
-  'system.languageHint': 'Aplicado imediatamente e mantido ao fechar o aplicativo.',
+  'system.languageHint': 'Idioma do Sistema.',
   'system.theme': 'TEMA',
   'system.themeHint': 'Aparência da interface, aplicada imediatamente.',
 
@@ -131,4 +131,54 @@ export default {
     'O modelo "{model}" não está instalado.\n\nVá em Configurações (ícone de engrenagem) > Geral e baixe o modelo.',
   'app.exportToast': 'Exportacao concluida!',
   'app.openFolder': 'ABRIR PASTA',
+
+  // --- DropZone (zona de arraste + info do arquivo) ---
+  'dropzone.clear': 'Limpar',
+  'dropzone.orClickHere': 'ou clique aqui',
+  'dropzone.fullscreen': 'Tela cheia',
+  'dropzone.exitFullscreen': 'Sair da tela cheia',
+  'dropzone.usePlayerBelow': 'Use o player abaixo',
+  'dropzone.name': 'NOME:',
+  'dropzone.size': 'TAMANHO:',
+
+  // --- SubtitleConfigModal (configuracao por estilo) ---
+  'subConfig.title': 'Configuracao - {name}',
+  'subConfig.font': 'Fonte',
+  'subConfig.fontSize': 'Tamanho da Fonte - {size}',
+  'subConfig.primaryColor': 'Cor Primaria (texto)',
+  'subConfig.highlightColor': 'Cor Secundaria (destaque)',
+  'subConfig.useGlobal': 'Usar configuracoes globais',
+  'subConfig.wordsPerLine': 'Palavras por linha',
+  'subConfig.linesCount': 'Linhas da legenda',
+  'subConfig.reset': 'RESETAR',
+
+  // --- CudaDownloadModal (download GPU) ---
+  'cuda.downloading': 'Baixando arquivos GPU...',
+  'cuda.progress': 'Progresso',
+  'cuda.dontClose': 'Nao feche o programa',
+  'cuda.desc':
+    'Isso baixa os arquivos necessarios para usar a GPU NVIDIA na geracao de legendas. Sem isso, o processamento usa o processador e pode ser lento para modelos acima de tiny.',
+  'cuda.size': 'Tamanho: ~420 MB',
+  'cuda.cancel': 'CANCELAR',
+  'cuda.download': 'BAIXAR',
+
+  // --- Export (textos de progresso) ---
+  'export.converting': 'Convertendo...',
+  'export.analyzingCut': 'Analisando corte...',
+  'export.burning': 'Imbutindo legenda...',
+
+  // --- Painel (legendas) ---
+  'panel.newSubtitle': 'Nova legenda',
+
+  // --- Posicoes da legenda (botoes do painel) ---
+  'positions.top': 'TOPO',
+  'positions.middle': 'MEIO',
+  'positions.bottom': 'BAIXO',
+
+  // --- Settings > Saida: idioma de saida da legenda ---
+  'settings.subtitleLangLabel': 'IDIOMA DA LEGENDA',
+  'settings.subtitleLangAuto': 'AUTO (IDIOMA FALADO)',
+  'settings.subtitleLangTooltip':
+    'Auto detecta o idioma falado no audio (a legenda sai nesse idioma). English traduz qualquer audio para ingles. Outros idiomas forcam o idioma falado — use apenas quando o audio realmente for desse idioma, senao o resultado sai errado.',
+  'app.detectedLanguage': 'Idioma detectado: {lang}',
 }

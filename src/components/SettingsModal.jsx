@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { IconZoomScan, IconRectangle, IconRectangleVertical } from '@tabler/icons-react'
 import Tooltip from './Tooltip'
 import { useLang } from '../lib/i18n'
+import { SUBTITLE_LANGS, SUBTITLE_LANG_AUTO } from '../global_config/subtitleLanguages'
 import { useTheme } from '../lib/theme'
 import { LANGS } from '../global_config/languages'
 
@@ -29,7 +30,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', descKey: 'settings.modelDesc.large-v3' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
   const { lang, setLang, t } = useLang()
   const { theme, setTheme } = useTheme()
   const [tab, setTab] = useState('sistema')
@@ -40,6 +41,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   const resPopupRef = useRef(null)
   const [localSubtitles, setLocalSubtitles] = useState(subtitles)
   const [localSubtitleModel, setLocalSubtitleModel] = useState(subtitleModel || 'tiny')
+  const [localSubtitleLanguage, setLocalSubtitleLanguage] = useState(subtitleLanguage || 'auto')
   const [localGreenScreen, setLocalGreenScreen] = useState(greenScreen)
   const [localBurnSubtitles, setLocalBurnSubtitles] = useState(burnSubtitles)
   const [localWordsPerLine, setLocalWordsPerLine] = useState(wordsPerLine || 4)
@@ -134,6 +136,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
       output_resolution: localResolution,
       subtitles: localSubtitles,
       subtitle_model: localSubtitleModel,
+      subtitle_language: localSubtitleLanguage,
       green_screen: localGreenScreen,
       burn_subtitles: localBurnSubtitles,
       words_per_line: localWordsPerLine,
@@ -516,6 +519,27 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="flex items-center">
+              <label className="font-pixel text-[7px] text-retro-black uppercase block mb-2">{t('settings.subtitleLangLabel')}</label>
+              <div className="mb-[10px]">
+                <Tooltip text={t('settings.subtitleLangTooltip')}>
+                  <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+                </Tooltip>
+              </div>
+            </div>
+            <select
+              value={localSubtitleLanguage}
+              onChange={(e) => setLocalSubtitleLanguage(e.target.value)}
+              className="w-full h-8 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[8px] text-retro-black outline-none appearance-none cursor-pointer"
+            >
+              <option value={SUBTITLE_LANG_AUTO}>{t('settings.subtitleLangAuto')}</option>
+              {SUBTITLE_LANGS.filter((l) => l.id !== SUBTITLE_LANG_AUTO).map((l) => (
+                <option key={l.id} value={l.id}>{l.label}</option>
+              ))}
+            </select>
           </div>
 
           {needsVideo && isOutputAudio && (

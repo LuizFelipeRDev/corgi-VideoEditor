@@ -1,7 +1,24 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLang } from '../lib/i18n'
 import SubtitleOverlay from './SubtitleOverlay'
 
+// Bytes -> "20 MB" / "1.5 GB" (uma casa decimal só quando agrega info)
+const formatFileSize = (bytes) => {
+  if (typeof bytes !== 'number' || !isFinite(bytes) || bytes < 0) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let unit = -1
+  do {
+    value /= 1024
+    unit++
+  } while (value >= 1024 && unit < units.length - 1)
+  const rounded = value >= 100 ? Math.round(value) : Math.round(value * 10) / 10
+  return `${rounded} ${units[unit]}`
+}
+
 function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp, wordsPerLine, linesCount }) {
+  const { t } = useLang()
   const [isDragOver, setIsDragOver] = useState(false)
   const [videoFullscreen, setVideoFullscreen] = useState(false)
   const [videoTime, setVideoTime] = useState(0)
@@ -21,7 +38,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
     if (selectedFile || processing) return
     const p = await window.api.selectFile()
     if (p) {
-      setSelectedFile({ path: p, name: p.split(/[/\\]/).pop(), folder: p.replace(/[\\/][^\\/]+$/, '') })
+      const size = await window.api.getFileSize?.(p)
+      setSelectedFile({ path: p, name: p.split(/[/\\]/).pop(), folder: p.replace(/[\\/][^\\/]+$/, ''), size: typeof size === 'number' ? size : undefined })
     }
   }
 
@@ -32,11 +50,13 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
     const f = e.dataTransfer.files
     if (f.length > 0) {
       const filePath = window.api.getPathForFile(f[0])
-      setSelectedFile({ path: filePath, name: f[0].name, folder: filePath.replace(/[\\/][^\\/]+$/, '') })
+      // O File do drag/drop ja traz o tamanho em bytes — sem IPC
+      setSelectedFile({ path: filePath, name: f[0].name, folder: filePath.replace(/[\\/][^\\/]+$/, ''), size: f[0].size })
     } else {
       const p = await window.api.selectFile()
       if (p) {
-        setSelectedFile({ path: p, name: p.split(/[/\\]/).pop(), folder: p.replace(/[\\/][^\\/]+$/, '') })
+        const size = await window.api.getFileSize?.(p)
+        setSelectedFile({ path: p, name: p.split(/[/\\]/).pop(), folder: p.replace(/[\\/][^\\/]+$/, ''), size: typeof size === 'number' ? size : undefined })
       }
     }
   }
@@ -78,7 +98,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
           <button
             onClick={clearFile}
             className="absolute top-1 right-1 w-5 h-5 bg-red-500 border border-red-700 rounded text-white text-[10px] font-bold hover:bg-red-600 z-10"
-            title="Limpar"
+            title={t('dropzone.clear')}
           >
             ✕
           </button>
@@ -91,7 +111,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             </svg>
             <p className="font-pixel text-[8px] text-retro-black text-center leading-loose">
               DROP AUDIO / VIDEO<br/>
-              <span className="text-[7px] opacity-60">ou clique aqui</span>
+              <span className="text-[7px] opacity-60">{t('dropzone.orClickHere')}</span>
             </p>
           </div>
         ) : isVideo && !videoFullscreen ? (
@@ -138,7 +158,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 }
               }}
               className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
-              title="Tela cheia"
+              title={t('dropzone.fullscreen')}
             >
               <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
@@ -176,7 +196,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 }, 100)
               }}
               className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
-              title="Tela cheia"
+              title={t('dropzone.fullscreen')}
             >
               <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
@@ -189,7 +209,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
             </svg>
             <p className="font-pixel text-[8px] text-green-700">{selectedFile.name}</p>
-            <p className="font-pixel text-[6px] text-retro-black/40">Use o player abaixo</p>
+            <p className="font-pixel text-[6px] text-retro-black/40">{t('dropzone.usePlayerBelow')}</p>
           </div>
         ) : (
           <div className="text-center">
@@ -203,12 +223,12 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
 
       <div className="mt-3 space-y-1.5 shrink-0">
         <div className="flex justify-between items-center border-b border-retro-black/20 pb-1">
-          <span className="font-pixel text-[7px] text-retro-black/60">NOME:</span>
+          <span className="font-pixel text-[7px] text-retro-black/60">{t('dropzone.name')}</span>
           <span className="font-pixel text-[7px] text-retro-black">{selectedFile?.name || '—'}</span>
         </div>
         <div className="flex justify-between items-center border-b border-retro-black/20 pb-1">
-          <span className="font-pixel text-[7px] text-retro-black/60">TAMANHO:</span>
-          <span className="font-pixel text-[7px] text-retro-black">—</span>
+          <span className="font-pixel text-[7px] text-retro-black/60">{t('dropzone.size')}</span>
+          <span className="font-pixel text-[7px] text-retro-black">{formatFileSize(selectedFile?.size)}</span>
         </div>
       </div>
 
@@ -295,7 +315,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               }, 100)
             }}
             className="absolute top-2 right-2 w-7 h-7 bg-white/20 hover:bg-white/40 border border-white/30 rounded flex items-center justify-center text-white text-[12px] transition-colors"
-            title="Sair da tela cheia"
+            title={t('dropzone.exitFullscreen')}
           >
             ✕
           </button>

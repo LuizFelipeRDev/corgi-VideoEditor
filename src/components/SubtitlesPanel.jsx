@@ -170,7 +170,7 @@ function SubtitlesPanel({
                         : 'bg-retro-bg text-retro-black hover:bg-gray-200'
                     }`}
                   >
-                    {p.name}
+                    {t(`positions.${p.id}`)}
                   </button>
                 ))}
               </div>

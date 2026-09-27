@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useLang } from '../lib/i18n'
 
 export default function CudaDownloadModal({ open, onClose, onComplete }) {
+  const { t } = useLang()
   const [downloading, setDownloading] = useState(false)
   const [progress, setProgress] = useState(0)
 
@@ -43,11 +45,11 @@ export default function CudaDownloadModal({ open, onClose, onComplete }) {
         {downloading ? (
           <div>
             <p className="font-pixel text-[7px] text-retro-black mb-3">
-              Baixando arquivos GPU...
+              {t('cuda.downloading')}
             </p>
             <div className="flex items-center justify-between mb-1">
               <span className="font-pixel text-[6px] text-retro-black">
-                Progresso
+                {t('cuda.progress')}
               </span>
               <span className="font-pixel text-[6px] text-retro-black">
                 {progress}%
@@ -60,29 +62,29 @@ export default function CudaDownloadModal({ open, onClose, onComplete }) {
               />
             </div>
             <p className="font-pixel text-[6px] text-retro-black/50">
-              Nao feche o programa
+              {t('cuda.dontClose')}
             </p>
           </div>
         ) : (
           <div>
             <p className="font-pixel text-[7px] text-retro-black mb-4 leading-relaxed">
-              Isso baixa os arquivos necessarios para usar a GPU NVIDIA na geracao de legendas. Sem isso, o processamento usa o processador e pode ser lento para modelos acima de tiny.
+              {t('cuda.desc')}
             </p>
             <p className="font-pixel text-[6px] text-retro-black/50 mb-4">
-              Tamanho: ~420 MB
+              {t('cuda.size')}
             </p>
             <div className="flex gap-2">
               <button
                 onClick={onClose}
                 className="btn-retro flex-1 h-8 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[7px] hover:bg-gray-200"
               >
-                CANCELAR
+                {t('cuda.cancel')}
               </button>
               <button
                 onClick={handleDownload}
                 className="btn-retro flex-1 h-8 bg-yellow-100 border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[7px] hover:bg-yellow-200"
               >
-                BAIXAR
+                {t('cuda.download')}
               </button>
             </div>
           </div>

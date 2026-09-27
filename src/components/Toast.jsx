@@ -47,12 +47,14 @@ function Toast({ message, linkLabel, onLinkClick, duration = 5000, onClose }) {
             ✕
           </button>
         </div>
-        <button
-          onClick={onLinkClick}
-          className="btn-retro w-full h-7 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[6px] text-retro-black hover:bg-green-100"
-        >
-          {linkLabel}
-        </button>
+        {linkLabel && (
+          <button
+            onClick={onLinkClick}
+            className="btn-retro w-full h-7 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm font-pixel text-[6px] text-retro-black hover:bg-green-100"
+          >
+            {linkLabel}
+          </button>
+        )}
         <div className="mt-2 h-1 bg-retro-bg border border-retro-black/30 rounded-full overflow-hidden">
           <div
             className="h-full bg-retro-accent/40"

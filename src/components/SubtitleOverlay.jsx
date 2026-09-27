@@ -157,7 +157,11 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     const wordEnd = word.end ? parseSrtTimeToSecondsExport(word.end) : null
 
     const base = {
-      display: 'inline',
+      // inline-block: transform so se aplica fora de caixas inline. Sem ele
+      // o pop do wordpop/scale simplesmente nao renderizava. E como
+      // transform NUNCA participa do layout, a palavra cresce "por cima"
+      // das vizinhas sem empurra-las (mesma base que o popline usa).
+      display: 'inline-block',
       transition: 'color 0.05s, transform 0.1s',
     }
 

@@ -15,6 +15,8 @@ import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubt
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 import { SUBTITLE_DISPLAY_DEFAULTS } from './global_config/subtitleConfig'
 import { useLang } from './lib/i18n'
+import { LANGS } from './global_config/languages'
+import { SUBTITLE_LANG_AUTO } from './global_config/subtitleLanguages'
 
 function App() {
   const { t, lang } = useLang()
@@ -33,6 +35,7 @@ function App() {
   const whisperGenRef = useRef(0)
   const [showAbout, setShowAbout] = useState(false)
   const [showExportToast, setShowExportToast] = useState(false)
+  const [infoToast, setInfoToast] = useState(null)
   const [exportedFolderPath, setExportedFolderPath] = useState('')
   const [showCudaModal, setShowCudaModal] = useState(false)
   const [whisperCliInstalled, setWhisperCliInstalled] = useState(false)
@@ -46,6 +49,7 @@ function App() {
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
   const [subtitleModel, setSubtitleModel] = useState('tiny')
+  const [subtitleLanguage, setSubtitleLanguage] = useState('auto')
   const [subtitlePosition, setSubtitlePosition] = useState('bottom')
   const [positionMode, setPositionMode] = useState('fixed')
   const [positionPercent, setPositionPercent] = useState(80)
@@ -73,6 +77,7 @@ function App() {
       if (c.output_folder) setOutputFolder(c.output_folder)
       setSubtitlesEnabled(c.subtitles === 'true')
       setSubtitleModel(c.subtitle_model || 'tiny')
+      setSubtitleLanguage(c.subtitle_language || 'auto')
       setSubtitlePosition(c.subtitle_position || 'bottom')
       setPositionMode(c.subtitle_position_mode || 'fixed')
       setPositionPercent(Math.min(70, Math.max(5, Number(c.subtitle_position_percent) || 80)))
@@ -231,6 +236,9 @@ function App() {
     const inputExt = selectedFile.name.split('.').pop().toLowerCase()
     const hasSubtitles = subtitles.length > 0
     const shouldBurn = burnSubtitles && hasSubtitles
+    // Burn DESLIGADO + legendas geradas: grava um .srt lateral com o MESMO
+    // nome do arquivo exportado (a promessa do hint settings.burnSrtOnly)
+    const writeSidecarSrt = hasSubtitles && !burnSubtitles
     const videoExts = ['mp4', 'mkv', 'mov', 'webm', 'avi']
     const isVideoInput = videoExts.includes(inputExt)
     // O formato escolhido no Config e quem manda no container de saida: o
@@ -265,14 +273,16 @@ function App() {
       return
     }
 
-    setProgress({ pct: 90, text: 'Convertendo...' })
+    setProgress({ pct: 90, text: t('export.converting') })
 
     const outputDir = outputFolder || selectedFile.folder
 
     let exportSubtitles = subtitles
-    if (shouldBurn && hasSubtitles) {
+    // O corte do auto-editor muda a timeline: remapeia quando as legendas
+    // vao ser aplicadas ao video cortado (queima OU SRT lateral)
+    if (shouldBurn || writeSidecarSrt) {
       try {
-        setProgress({ pct: 91, text: 'Analisando corte...' })
+        setProgress({ pct: 91, text: t('export.analyzingCut') })
         const xmlPath = await window.api.joinPath(outputDir, 'corgi_cutmap.xml')
         const xmlArgs = [
           selectedFile.path,
@@ -366,7 +376,7 @@ function App() {
           if (assContent) {
             await window.api.writeFile(assPath, assContent)
 
-            setProgress({ pct: 95, text: 'Imbutindo legenda...' })
+            setProgress({ pct: 95, text: t('export.burning') })
 
             // fontsdir: informa ao libass onde procurar fontes que nao estao instaladas no Windows
             // (ex: Komika Axis). Sem isso o export cai no fallback (Arial). Escaping validado com o ffmpeg:
@@ -421,6 +431,25 @@ function App() {
         }
       }
 
+      // Burn DESLIGADO: grava o .srt lateral com o MESMO nome do arquivo
+      // exportado (exportSubtitles ja remapeado para a timeline cortada)
+      if (writeSidecarSrt) {
+        try {
+          const srtPath = outPath.replace(/\.[^.]+$/, '.srt')
+          const srtLines = []
+          exportSubtitles.forEach((sub, i) => {
+            srtLines.push(String(i + 1))
+            srtLines.push(`${sub.start} --> ${sub.end}`)
+            srtLines.push(sub.text)
+            srtLines.push('')
+          })
+          await window.api.writeFile(srtPath, srtLines.join('\n'))
+          console.log(`[export] SRT lateral gravado: ${srtPath} (${exportSubtitles.length} legendas)`)
+        } catch (e) {
+          console.warn('[export] Falha ao gravar SRT lateral:', e.message)
+        }
+      }
+
       if (assPath) await window.api.deleteFile(assPath)
 
       videoDurationRef.current = 0
@@ -463,7 +492,7 @@ function App() {
         audioFile: selectedFile.path,
         model: subtitleModel,
         output: wordsSrtPath,
-        language: lang,
+        language: subtitleLanguage,
         splitWords: true
       })
 
@@ -471,7 +500,7 @@ function App() {
         audioFile: selectedFile.path,
         model: subtitleModel,
         output: wordsSrtPath,
-        language: lang,
+        language: subtitleLanguage,
         splitWords: true
       })
 
@@ -511,6 +540,12 @@ function App() {
         setSubtitles(enriched)
       }
       setGeneratingSubtitles(false)
+      // AUTO: informa o idioma que o whisper detectou no audio
+      if (subtitleLanguage === SUBTITLE_LANG_AUTO && result?.detectedLanguage) {
+        const detected = LANGS.find((l) => l.id === result.detectedLanguage)?.label
+          || result.detectedLanguage.toUpperCase()
+        setInfoToast(t('app.detectedLanguage', { lang: detected }))
+      }
     }, 1000)
     } catch (err) {
       console.error('[subtitle] Error:', err)
@@ -575,7 +610,7 @@ function App() {
         {
           start: formatSrtTime(startMs),
           end: formatSrtTime(endMs),
-          text: 'Nova legenda',
+          text: t('panel.newSubtitle'),
         },
       ]
     })
@@ -624,6 +659,7 @@ function App() {
     if (newConfig.output_resolution !== undefined) setOutputResolution(newConfig.output_resolution)
     if (newConfig.subtitles !== undefined) setSubtitlesEnabled(newConfig.subtitles === true || newConfig.subtitles === 'true')
     if (newConfig.subtitle_model !== undefined) setSubtitleModel(newConfig.subtitle_model)
+    if (newConfig.subtitle_language !== undefined) setSubtitleLanguage(newConfig.subtitle_language)
     if (newConfig.subtitle_position !== undefined) setSubtitlePosition(newConfig.subtitle_position)
     if (newConfig.subtitle_position_mode !== undefined) setPositionMode(newConfig.subtitle_position_mode)
     if (newConfig.subtitle_position_percent !== undefined) setPositionPercent(newConfig.subtitle_position_percent)
@@ -644,6 +680,7 @@ function App() {
       output_format: newConfig.output_format ?? outputFormat,
       subtitles: String(newConfig.subtitles ?? subtitlesEnabled),
       subtitle_model: newConfig.subtitle_model ?? subtitleModel,
+      subtitle_language: newConfig.subtitle_language ?? subtitleLanguage,
       subtitle_position: newConfig.subtitle_position ?? subtitlePosition,
       subtitle_position_mode: newConfig.subtitle_position_mode ?? positionMode,
       subtitle_position_percent: String(newConfig.subtitle_position_percent ?? positionPercent),
@@ -770,6 +807,7 @@ function App() {
           outputResolution={outputResolution}
           subtitles={subtitlesEnabled}
           subtitleModel={subtitleModel}
+          subtitleLanguage={subtitleLanguage}
           greenScreen={greenScreen}
           burnSubtitles={burnSubtitles}
           selectedFile={selectedFile}
@@ -813,6 +851,13 @@ function App() {
           onLinkClick={() => window.api.openFolder(exportedFolderPath)}
           duration={5000}
           onClose={() => setShowExportToast(false)}
+        />
+      )}
+      {infoToast && (
+        <Toast
+          message={infoToast}
+          duration={5000}
+          onClose={() => setInfoToast(null)}
         />
       )}
     </div>

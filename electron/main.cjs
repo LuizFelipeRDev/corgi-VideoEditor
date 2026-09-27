@@ -117,6 +117,7 @@ function readConfig() {
     smart_subtitle: 'false',
     auto_line_wrap: 'false',
     language: 'en',
+    subtitle_language: 'auto',
     theme: 'modern',
   };
   if (!fs.existsSync(configPath)) return defaults;
@@ -135,7 +136,7 @@ function readConfig() {
 
 function writeConfig(config) {
   fs.writeFileSync(configPath,
-    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\noutput_resolution = ${config.output_resolution || 'original'}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\nsubtitle_persistence = ${config.subtitle_persistence || '1'}\nsmart_subtitle = ${config.smart_subtitle || 'false'}\nauto_line_wrap = ${config.auto_line_wrap || 'false'}\nlanguage = ${config.language || 'en'}\ntheme = ${config.theme || 'retro'}\n`, 'utf-8');
+    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\noutput_resolution = ${config.output_resolution || 'original'}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\nsubtitle_persistence = ${config.subtitle_persistence || '1'}\nsmart_subtitle = ${config.smart_subtitle || 'false'}\nauto_line_wrap = ${config.auto_line_wrap || 'false'}\nlanguage = ${config.language || 'en'}\nsubtitle_language = ${config.subtitle_language || 'auto'}\ntheme = ${config.theme || 'modern'}\n`, 'utf-8');
 }
 
 let mainWindow;
@@ -193,6 +194,9 @@ ipcMain.handle('save-config', (e, config) => writeConfig({ ...readConfig(), ...c
 ipcMain.handle('get-fonts-path', () => getFontsDir());
 ipcMain.handle('path-exists', (e, targetPath) => {
   try { return fs.existsSync(targetPath); } catch { return false; }
+});
+ipcMain.handle('get-file-size', (e, targetPath) => {
+  try { return fs.statSync(targetPath).size; } catch { return null; }
 });
 ipcMain.handle('get-whisper-dir', () => getWhisperDir());
 
@@ -423,7 +427,9 @@ function parseJsonAndResolve(jsonFile, code, cudaDetected, resolve) {
     console.log(`[whisper-cli] word-level SRT written: ${words.length} words → ${srtFile}`);
 
     mainWindow?.webContents.send('whisper-cli-done', true);
-    resolve({ success: true, cuda: cudaDetected, code });
+    // Idioma detectado pelo whisper (result.language do JSON -ojf)
+    const detectedLanguage = jsonData.result?.language || null;
+    resolve({ success: true, cuda: cudaDetected, code, detectedLanguage });
   } catch (err) {
     console.error('[whisper-cli] JSON parse error:', err.message);
     mainWindow?.webContents.send('whisper-cli-error', `Erro ao processar JSON: ${err.message}`);
@@ -470,14 +476,18 @@ ipcMain.handle('run-whisper-cli', async (event, { audioFile, model, output, lang
     console.log('[whisper-cli] WAV conversion done');
   }
 
+  // Idioma de saida da legenda (Settings > Saida): 'auto' (padrao) detecta o
+  // idioma falado; 'en' traduz qualquer audio para ingles (-tr so traduz PARA
+  // ingles); demais codigos forcam o idioma falado.
+  const whisperLang = language || readConfig().subtitle_language || 'auto';
+  const langArgs = whisperLang === 'en' ? ['-l', 'auto', '-tr'] : ['-l', whisperLang];
+
   const args = [
     '-m', modelFile,
     '-f', wavFile,
     '-ojf',
     '-of', output,
-    // Idioma de transcricao segue o idioma da UI (padrao de primeira
-    // instalacao: en). Fallback: config persistido, depois en.
-    '-l', language || readConfig().language || 'en',
+    ...langArgs,
     '-pp',
   ];
 
