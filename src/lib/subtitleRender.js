@@ -198,7 +198,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   const blocks = []
   for (let i = 0; i < segments.length; i++) {
     const { sub, words } = segments[i]
-    const segmentBlocks = groupWordsIntoBlocks(words, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, styleId, autoLineWrap)
+    const segmentBlocks = groupWordsIntoBlocks(words, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, styleId, autoLineWrap, cssFontFamily, assFontName)
     if (segmentBlocks.length === 0) continue
 
     // O ultimo bloco do segmento vale ate sub.end (persistencia aplicada na
@@ -399,7 +399,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   return assContent
 }
 
-function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, styleId = null, autoLineWrap = false) {
+function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, styleId = null, autoLineWrap = false, cssFontFamily = '', assFontName = '') {
   const maxWordsPerLine = wordsPerLine
   const maxLines = linesCount
   const maxWordsPerBlock = maxWordsPerLine * maxLines
@@ -410,8 +410,16 @@ function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPe
   const marginL = 10
   const marginR = 10
   const availableWidth = playResX - marginL - marginR
-  const charWidth = fontSize * 0.63
-  const spaceWidth = fontSize * 0.315
+
+  // Largura REAL (canvas + renderScale), a MESMA do layout do highlightbox e
+  // da compensacao de \fsp do pop. A estimativa antiga por caracteres
+  // (0.63em/palavra) superestima o texto: a linha "crescia" mais que o
+  // libass desenha e quebrava mesmo quando ela coube - com autoLineWrap
+  // desligado essa quebra falsa estourava maxLines e jogava a ultima
+  // palavra para um Dialogue proprio, enquanto o preview (que so quebra
+  // por contagem) mantinha tudo junto na mesma legenda.
+  const renderScale = getFontRenderScale(assFontName)
+  const spaceWidth = measureTextMetrics(' ', fontSize, cssFontFamily, styleConfig.bold).width * ((styleConfig.wordSpacing || 100) / 100) * renderScale
 
   const blocks = []
   let currentBlock = { words: [], start: 0, end: 0, lineIdx: 0, wordsInLine: 0, lineWidth: 0 }
@@ -432,7 +440,7 @@ function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPe
       currentBlock.start = word.start
     }
 
-    const wordWidth = word.text.length * charWidth * popScale
+    const wordWidth = measureTextMetrics(word.text.toUpperCase(), fontSize, cssFontFamily, styleConfig.bold).width * renderScale * popScale
 
     if (currentBlock.wordsInLine >= maxWordsPerLine) {
       currentBlock.lineIdx++
