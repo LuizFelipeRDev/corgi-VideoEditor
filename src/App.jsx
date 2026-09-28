@@ -10,8 +10,10 @@ import AboutModal from './components/AboutModal'
 import CudaDownloadModal from './components/CudaDownloadModal'
 import Toast from './components/Toast'
 import SubtitlesPanel from './components/SubtitlesPanel'
+import SoundConfigModal from './components/SoundConfigModal'
 import Waveform from './components/Waveform'
 import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps, ensureExportFontLoaded } from './lib/subtitleRender'
+import { buildSoundChain, mergeSoundConfig, shortHash, DEFAULT_SOUND_CONFIG } from './lib/soundChain'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 import { SUBTITLE_DISPLAY_DEFAULTS } from './global_config/subtitleConfig'
 import { useLang } from './lib/i18n'
@@ -68,6 +70,21 @@ function App() {
   const [subtitleConfigs, setSubtitleConfigs] = useState({})
   const [subtitlesEdited, setSubtitlesEdited] = useState(false)
 
+  // --- v1.7.0: tratamento de som -----------------------------------------
+  // soundConfig.enabled é o interruptor MESTRE (botão 🎤): com ele desligado
+  // o modal fica inacessível e NENHUMA cadeia vai para o export.
+  const [soundConfig, setSoundConfig] = useState(DEFAULT_SOUND_CONFIG)
+  const [customPresets, setCustomPresets] = useState([])
+  const [showSound, setShowSound] = useState(false)
+  const [treatedUrl, setTreatedUrl] = useState(null) // file:// da prévia tratada
+  const [treatedHash, setTreatedHash] = useState('') // hash do último render ok (indicador do modal)
+  const [soundRendering, setSoundRendering] = useState(false)
+  const [abMode, setAbMode] = useState(null) // null = segue o 🎤 | 'original' | 'treated'
+  const [playRequest, setPlayRequest] = useState(0) // incrementa para tocar (A/B)
+  const treatedRef = useRef({ hash: '', url: null }) // cache da prévia renderizada
+  const renderGenRef = useRef(0) // geração do render (descarta concorrentes)
+  const lastTreatedFileRef = useRef(null) // último .m4a gerado no temp
+
   useEffect(() => {
     window.api.getConfig().then((c) => {
       setThreshold(c.threshold)
@@ -90,6 +107,8 @@ function App() {
       setSmartSubtitle(c.smart_subtitle === 'true')
       setAutoLineWrap(c.auto_line_wrap === 'true')
       try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
+      try { setSoundConfig(mergeSoundConfig(JSON.parse(c.sound_config || 'null'))) } catch { setSoundConfig(mergeSoundConfig(null)) }
+      try { setCustomPresets(JSON.parse(c.sound_presets || '[]') || []) } catch { setCustomPresets([]) }
     })
 
     window.api.checkWhisperCli().then(setWhisperCliInstalled)
@@ -218,6 +237,142 @@ function App() {
     }
   }, [subtitlesEnabled])
 
+  // --- v1.7.0: prévia do som tratado ---------------------------------------
+  // Renderiza o áudio com a MESMA cadeia -af do export para um .m4a no temp e
+  // devolve um file:// — o wavesurfer passa a tocar essa fonte (o vídeo é mudo,
+  // então vale no player normal e na tela cheia, fiel 100% ao export).
+  const previewHash = (cfg, file) => {
+    const chain = buildSoundChain(cfg)
+    return chain && file ? `${chain}||${file.path}` : ''
+  }
+
+  const ensureTreatedPreview = async (cfg, file) => {
+    const chain = buildSoundChain(cfg)
+    if (!chain || !file) {
+      treatedRef.current = { hash: '', url: null }
+      setTreatedUrl(null)
+      setTreatedHash('')
+      return null
+    }
+    const hash = `${chain}||${file.path}`
+    if (treatedRef.current.hash === hash) return treatedRef.current.url
+
+    const gen = ++renderGenRef.current
+    setSoundRendering(true)
+    try {
+      const tempDir = await window.api.getTempDir()
+      const outPath = await window.api.joinPath(tempDir, `corgi_treated_${shortHash(hash)}.m4a`)
+      // runFfmpegAnalysis: mesmo binário, porém SEM os eventos de progresso/
+      // erro do export — falha aqui vira toast, nunca modal de erro.
+      const res = await window.api.runFfmpegAnalysis([
+        '-y', '-i', file.path, '-vn', '-af', chain, '-c:a', 'aac', '-b:a', '192k', outPath,
+      ])
+      if (gen !== renderGenRef.current) return null // um render mais novo assumiu
+      if (res.success) {
+        if (lastTreatedFileRef.current && lastTreatedFileRef.current !== outPath) {
+          window.api.deleteFile(lastTreatedFileRef.current)
+        }
+        lastTreatedFileRef.current = outPath
+        const url = `file:///${outPath.replace(/\\/g, '/')}`
+        treatedRef.current = { hash, url }
+        setTreatedUrl(url)
+        setTreatedHash(hash)
+        return url
+      }
+      treatedRef.current = { hash: '', url: null }
+      setTreatedUrl(null)
+      setTreatedHash('')
+      setInfoToast(t('sound.toastRenderFail'))
+      return null
+    } catch (e) {
+      console.warn('[sound] falha na prévia tratada:', e)
+      if (gen === renderGenRef.current) {
+        treatedRef.current = { hash: '', url: null }
+        setTreatedUrl(null)
+        setTreatedHash('')
+        setInfoToast(t('sound.toastRenderFail'))
+      }
+      return null
+    } finally {
+      if (gen === renderGenRef.current) setSoundRendering(false)
+    }
+  }
+
+  // Troca/limpeza de arquivo invalida a prévia (o hash inclui o caminho) e,
+  // com o 🎤 ligado, já gera em silêncio a prévia do arquivo novo.
+  useEffect(() => {
+    renderGenRef.current++
+    setSoundRendering(false)
+    treatedRef.current = { hash: '', url: null }
+    setTreatedUrl(null)
+    setTreatedHash('')
+    setAbMode(null)
+    if (selectedFile && soundConfig.enabled) {
+      ensureTreatedPreview(soundConfig, selectedFile)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFile])
+
+  // 🎤: interruptor mestre do Som Avançado — toast + prévia tratada
+  const handleToggleSound = async () => {
+    if (!selectedFile || processing || generatingSubtitles) return
+    // Pausa tudo antes de trocar a fonte de áudio (mantém sincronismo)
+    if (videoRef.current) videoRef.current.pause()
+    if (waveSurferRef?.current) waveSurferRef.current.pause()
+    const next = { ...soundConfig, enabled: !soundConfig.enabled }
+    setSoundConfig(next)
+    setAbMode(null)
+    await handleSaveSettings({ sound_config: next })
+    if (next.enabled) {
+      setInfoToast(t('sound.toastOn'))
+      ensureTreatedPreview(next, selectedFile)
+    } else {
+      setInfoToast(t('sound.toastOff'))
+    }
+  }
+
+  // Prévia A/B do modal: 'original' volta à fonte real; 'treated' renderiza o
+  // RASCUNHO (preset/ajustes ainda não aplicados) se desatualizado e toca da
+  // posição atual. NUNCA trata o arquivo final.
+  const handleListenSound = async (mode, draftCfg) => {
+    if (!selectedFile || processing || soundRendering) return
+    if (videoRef.current) videoRef.current.pause()
+    if (waveSurferRef?.current) waveSurferRef.current.pause()
+    if (mode === 'treated') {
+      const cfg = draftCfg || soundConfig
+      // Cadeia vazia (tudo desligado) não tem o que tratar — toca o original
+      if (!buildSoundChain(cfg)) {
+        setAbMode('original')
+      } else {
+        const fresh = treatedRef.current.hash === previewHash(cfg, selectedFile)
+        if (!fresh) setInfoToast(t('sound.toastRendering'))
+        const url = await ensureTreatedPreview(cfg, selectedFile)
+        if (!url) return // falha: o próprio ensure já mostrou o toast de erro
+        if (!fresh) setInfoToast(null)
+        setAbMode('treated')
+      }
+    } else {
+      setAbMode('original')
+    }
+    setPlayRequest((r) => r + 1)
+  }
+
+  // APLICAR do modal: só SALVA e fecha — nada é tratado naquele momento (o
+  // tratamento roda apenas na exportação). Prévia, se o 🎤 estiver ligado,
+  // é re-renderizada em silêncio para o player continuar coerente.
+  const handleApplySound = async (cfg) => {
+    setShowSound(false)
+    setAbMode(null)
+    await handleSaveSettings({ sound_config: cfg })
+    if (cfg.enabled && selectedFile) ensureTreatedPreview(cfg, selectedFile)
+  }
+
+  const handleSoundPresets = (presets) => handleSaveSettings({ sound_presets: presets })
+
+  // Fonte de áudio do player: segue o 🎤, salvo quando o modal força um lado
+  // do A/B ('original' = tocar o som real por cima do estado do 🎤).
+  const previewAudioUrl = abMode === 'original' ? null : soundConfig.enabled ? treatedUrl : null
+
   const handleExport = async () => {
     if (!selectedFile || processing || generatingSubtitles) return
     // Player para imediatamente ao iniciar a exportacao — video e wavesurfer
@@ -231,6 +386,11 @@ function App() {
     lastPct.current = 0
     videoDurationRef.current = 0
     setProgress({ pct: 0, text: '0%' })
+
+    // 🎤 gate: o Som Avançado só vai para o export com o interruptor mestre
+    // LIGADO — mesmo com preset escolhido, desligado não monta cadeia nenhuma.
+    const soundChain = soundConfig.enabled ? buildSoundChain(soundConfig) : ''
+    if (soundChain) console.log('[export] som avançado (🎤 ligado):', soundChain)
 
     const base = selectedFile.name.replace(/\.[^.]+$/, '')
     const inputExt = selectedFile.name.split('.').pop().toLowerCase()
@@ -406,6 +566,8 @@ function App() {
         } else {
           ffmpegArgs.push('-c:v', 'libx264', '-c:a', 'aac')
         }
+        // Tratamento de som (v1.7.0): mesma cadeia ouvida na prévia
+        if (soundChain) ffmpegArgs.push('-af', soundChain)
         ffmpegArgs.push('-shortest', outPath)
         const ffmpegResult = await window.api.runFfmpeg(ffmpegArgs, outputDir)
         if (!ffmpegResult.success) {
@@ -419,8 +581,14 @@ function App() {
         // escolhido (o '-c:a aac' fixo antigo era rejeitado por mp3/wav/flac/ogg).
         const audioCodecs = { mp3: 'libmp3lame', wav: 'pcm_s16le', flac: 'flac', ogg: 'libvorbis', aac: 'aac', m4a: 'aac' }
         const ffmpegArgs = ['-y', '-i', tempOutPath, '-vn']
-        // Mesmo formato da entrada: corta sem reencodar (perda zero)
-        ffmpegArgs.push('-c:a', inputExt === outputFormat ? 'copy' : (audioCodecs[outputFormat] || 'aac'))
+        if (soundChain) {
+          // Som avançado ligado: -af exige re-encode (impossível com 'copy')
+          ffmpegArgs.push('-af', soundChain)
+          ffmpegArgs.push('-c:a', audioCodecs[outputFormat] || 'aac')
+        } else {
+          // Mesmo formato da entrada: corta sem reencodar (perda zero)
+          ffmpegArgs.push('-c:a', inputExt === outputFormat ? 'copy' : (audioCodecs[outputFormat] || 'aac'))
+        }
         ffmpegArgs.push(outPath)
         const ffmpegResult = await window.api.runFfmpeg(ffmpegArgs)
         if (!ffmpegResult.success) {
@@ -672,6 +840,8 @@ function App() {
     if (newConfig.smart_subtitle !== undefined) setSmartSubtitle(newConfig.smart_subtitle)
     if (newConfig.auto_line_wrap !== undefined) setAutoLineWrap(newConfig.auto_line_wrap)
     if (newConfig.subtitle_configs !== undefined) setSubtitleConfigs(newConfig.subtitle_configs)
+    if (newConfig.sound_config !== undefined) setSoundConfig(newConfig.sound_config)
+    if (newConfig.sound_presets !== undefined) setCustomPresets(newConfig.sound_presets)
 
     await window.api.saveConfig({
       threshold: newConfig.threshold ?? threshold,
@@ -693,6 +863,8 @@ function App() {
       smart_subtitle: String(newConfig.smart_subtitle ?? smartSubtitle),
       auto_line_wrap: String(newConfig.auto_line_wrap ?? autoLineWrap),
       subtitle_configs: JSON.stringify(newConfig.subtitle_configs ?? subtitleConfigs),
+      sound_config: JSON.stringify(newConfig.sound_config ?? soundConfig),
+      sound_presets: JSON.stringify(newConfig.sound_presets ?? customPresets),
       language: newConfig.language ?? lang,
     })
   }
@@ -745,6 +917,10 @@ function App() {
               onExport={handleExport}
               progress={progress}
               onSaveConfig={handleSaveSettings}
+              soundEnabled={soundConfig.enabled}
+              onOpenSound={() => setShowSound(true)}
+              onToggleSound={handleToggleSound}
+              hasFile={!!selectedFile}
             />
           </div>
           <div className="px-4 pb-2 shrink-0">
@@ -756,6 +932,8 @@ function App() {
               waveSurferRef={waveSurferRef}
               processing={processing}
               generatingSubtitles={generatingSubtitles}
+              audioOverrideUrl={previewAudioUrl}
+              playRequest={playRequest}
             />
           </div>
         </div>
@@ -822,6 +1000,25 @@ function App() {
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
           onRequestCudaDownload={() => setShowCudaModal(true)}
+        />
+      )}
+      {showSound && (
+        <SoundConfigModal
+          config={soundConfig}
+          customPresets={customPresets}
+          rendering={soundRendering}
+          treatedHash={treatedHash}
+          hashOf={(c) => previewHash(c, selectedFile)}
+          onPreview={(c) => ensureTreatedPreview(c, selectedFile)}
+          onClose={() => {
+            setShowSound(false)
+            setAbMode(null)
+            // Rascunho descartado (sem APLICAR): volta a tocar a prévia SALVA
+            if (selectedFile && soundConfig.enabled) ensureTreatedPreview(soundConfig, selectedFile)
+          }}
+          onApply={handleApplySound}
+          onPresetsChange={handleSoundPresets}
+          onListen={handleListenSound}
         />
       )}
       <CudaDownloadModal

@@ -51,7 +51,7 @@ const fmtHMS = (s) => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles }) {
+function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles, audioOverrideUrl, playRequest }) {
   const containerRef = useRef(null)
   const wsRef = useRef(null)
   const { theme } = useTheme()
@@ -66,6 +66,13 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   const rulerInnerRef = useRef(null)
   const playheadRef = useRef(null)
   const durationRef = useRef(0)
+  // v1.7.0 (som tratado): a fonte de áudio pode trocar (original ↔ prévia
+  // tratada) SEM mudar o arquivo — a posição precisa sobreviver à troca.
+  const lastTimeRef = useRef(0) // última posição conhecida do transporte
+  const lastFileRef = useRef(null) // arquivo que "detém" a posição atual
+  const restoreTimeRef = useRef(0) // posição a restaurar no próximo 'ready'
+  const pendingPlayRef = useRef(false) // play pedido antes do wavesurfer ficar pronto
+  const appliedSeekRef = useRef(null) // último seekTo já aplicado (evita reaplicar no 'ready')
 
   // Elemento com overflow-x que realmente rola (dentro do Shadow DOM do
   // wavesurfer) — a regua acompanha o scroll por ele.
@@ -100,6 +107,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       setDuration(0)
       setRulerW(0)
       setCurTime(0)
+      lastFileRef.current = null
+      lastTimeRef.current = 0
       return
     }
 
@@ -110,6 +119,12 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     durationRef.current = 0
     setDuration(0)
     setCurTime(0)
+    // v1.7.0: se só a FONTE de áudio mudou (original ↔ prévia tratada do 🎤),
+    // a posição do transporte sobrevive à troca; arquivo novo começa em 0.
+    const sameFile = lastFileRef.current === selectedFile.path
+    restoreTimeRef.current = sameFile ? lastTimeRef.current : 0
+    lastFileRef.current = selectedFile.path
+    if (!sameFile) appliedSeekRef.current = null
     let detachScroll = () => {}
 
     const ws = WaveSurfer.create({
@@ -137,7 +152,9 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       shadow.appendChild(styleEl)
     }
 
-    ws.load(`file:///${selectedFile.path.replace(/\\/g, '/')}`)
+    // 🎤 som avançado: prévia tratada substitui temporariamente a fonte
+    // (o vídeo é mudo — o wavesurfer é a saída de áudio do app inteiro)
+    ws.load(audioOverrideUrl || `file:///${selectedFile.path.replace(/\\/g, '/')}`)
 
     ws.on('ready', () => {
       setReady(true)
@@ -145,6 +162,20 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       const d = ws.getDuration() || 0
       durationRef.current = d
       setDuration(d)
+      // Restaura a posição após a troca de fonte (não mexe em arquivo novo)
+      const restore = restoreTimeRef.current
+      if (restore > 0 && (!d || restore < d)) {
+        ws.setTime(restore)
+        lastTimeRef.current = restore
+        updatePlayhead(restore)
+        syncClock(restore)
+      }
+      // Play pedido durante a recarga (prévia A/B do modal de som)
+      if (pendingPlayRef.current) {
+        pendingPlayRef.current = false
+        ws.play()
+        if (videoRef?.current) videoRef.current.play()
+      }
       // Regua: acompanha o scroll horizontal da faixa (.scroll do shadow DOM)
       const scroller = getScroller()
       if (scroller) {
@@ -174,12 +205,14 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     })
 
     ws.on('timeupdate', (time) => {
+      lastTimeRef.current = time
       if (onTimeUpdate) onTimeUpdate(time)
       updatePlayhead(time)
       syncClock(time)
     })
 
     ws.on('seeking', (time) => {
+      lastTimeRef.current = time
       if (videoRef?.current) videoRef.current.currentTime = time
       updatePlayhead(time)
       syncClock(time)
@@ -195,7 +228,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       wsRef.current = null
       if (waveSurferRef) waveSurferRef.current = null
     }
-  }, [selectedFile, theme])
+  }, [selectedFile, theme, audioOverrideUrl])
 
   // Scroll horizontal com a roda do mouse: a faixa interna do wavesurfer so
   // roda na horizontal via Shift+roda ou barra de rolagem; aqui a roda
@@ -250,10 +283,33 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   }, [fadingOut])
 
   useEffect(() => {
-    if (wsRef.current && seekTo !== null && ready) {
+    if (seekTo === null) {
+      appliedSeekRef.current = null
+      return
+    }
+    // Aplica cada seekTo UMA vez: no 'ready' da recarga de fonte (🎤/A-B) a
+    // posição volta a ser a do transporte, não o último clique do painel.
+    if (appliedSeekRef.current === seekTo) return
+    if (wsRef.current && ready) {
+      appliedSeekRef.current = seekTo
+      lastTimeRef.current = seekTo
       wsRef.current.setTime(seekTo)
     }
   }, [seekTo, ready])
+
+  // v1.7.0: play pedido pelo SoundConfigModal (prévia A/B). Se o wavesurfer
+  // está recarregando a fonte de áudio, o 'ready' consome a intenção; se já
+  // está pronto, toca na hora.
+  useEffect(() => {
+    if (!playRequest) return
+    if (wsRef.current && ready) {
+      wsRef.current.play()
+      if (videoRef?.current) videoRef.current.play()
+    } else {
+      pendingPlayRef.current = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playRequest])
 
   // Botoes DEDICADOS: [▶] so toca, [⏸] so pausa (o estado atual fica
   // desabilitado, virando leitura visual imediata — wireframe v1.5.0).

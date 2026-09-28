@@ -2,7 +2,7 @@
 
 Automatic video/audio editing with AI-powered subtitles.
 
-![Version](https://img.shields.io/badge/version-1.6.0-blue)
+![Version](https://img.shields.io/badge/version-1.7.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -29,6 +29,20 @@ CORGI-EDITOR is a desktop application for automatic video and audio editing. It 
 - **Green screen mode** — Generate subtitle video with green background for chroma key
 - **Multiple formats** — MP3, WAV, FLAC, OGG, AAC, M4A, MP4, MKV, MOV, WEBM, AVI
 - **Bilingual UI** — English and Portuguese (Settings > Sistema)
+
+---
+
+## System Requirements
+
+CORGI-EDITOR itself is lightweight — the heavy parts are whisper transcription and FFmpeg encoding. A dedicated GPU is optional (CUDA is downloaded separately); without one, everything still runs on CPU.
+
+| Tier | Features that run comfortably | Machine specs |
+|------|-------------------------------|---------------|
+| **Minimum** | Silence cutting with auto-editor, export via FFmpeg, live preview and subtitles with the bundled **tiny** model (short files) | Windows 10/11 (64-bit) · dual-core CPU (Intel Core i3 / AMD Ryzen 3) · 4 GB RAM · integrated graphics · ~2 GB free disk |
+| **Recommended** | Everything above plus **base / small / medium** models, GPU subtitles (CUDA), 1080p exports with burned-in subtitles | Windows 10/11 (64-bit) · quad-core CPU (Intel Core i5 10th gen or newer / AMD Ryzen 5) · 8–16 GB RAM · NVIDIA GPU with 6–8 GB VRAM (GTX 1060 / RTX 2060 or newer) · SSD with ≥5 GB free |
+| **Maximum** *(optional)* | **Large-v3** subtitles, 4K exports, long files and large batches without waiting | Windows 10/11 (64-bit) · 8-core CPU (Intel Core i7 / AMD Ryzen 7) · 32 GB RAM · NVIDIA RTX 3060 12 GB or newer (large-v3 needs ~10 GB VRAM) · NVMe SSD with ≥10 GB free |
+
+> VRAM figures match the [Whisper Models](#whisper-models) table below. Any NVIDIA GPU supports the **DOWNLOAD GPU** download; the tier only defines how large a model you can run comfortably.
 
 ---
 
@@ -242,6 +256,20 @@ CORGI-EDITOR é uma aplicação desktop para edição automática de vídeo e á
 - **Modo tela verde** — Gera vídeo com legendas e fundo verde para chroma key
 - **Múltiplos formatos** — MP3, WAV, FLAC, OGG, AAC, M4A, MP4, MKV, MOV, WEBM, AVI
 - **Interface bilíngue** — Inglês e Português (Configurações > Sistema)
+
+---
+
+## Requisitos do Sistema
+
+O próprio CORGI-EDITOR é leve — as partes pesadas são a transcrição do whisper e a codificação do FFmpeg. A GPU dedicada é opcional (o CUDA é baixado à parte); sem ela, tudo roda em CPU.
+
+| Nível | O que roda confortavelmente | Especificações da máquina |
+|-------|-----------------------------|----------------------------|
+| **Mínimo** | Corte de silêncios com auto-editor, exportação via FFmpeg, prévia em tempo real e legendas com o modelo **tiny** embutido (arquivos curtos) | Windows 10/11 (64-bit) · CPU dual-core (Intel Core i3 / AMD Ryzen 3) · 4 GB de RAM · gráficos integrados · ~2 GB de disco livre |
+| **Recomendado** | Tudo acima + modelos **base / small / medium**, legendas com GPU (CUDA), exports em 1080p com legendas queimadas | Windows 10/11 (64-bit) · CPU quad-core (Intel Core i5 10ª geração ou mais nova / AMD Ryzen 5) · 8–16 GB de RAM · GPU NVIDIA com 6–8 GB de VRAM (GTX 1060 / RTX 2060 ou mais nova) · SSD com ≥5 GB livres |
+| **Máximo** *(opcional)* | Legendas com **large-v3**, exports em 4K, arquivos longos e lotes grandes sem esperar | Windows 10/11 (64-bit) · CPU 8-core (Intel Core i7 / AMD Ryzen 7) · 32 GB de RAM · NVIDIA RTX 3060 12 GB ou mais nova (large-v3 precisa de ~10 GB de VRAM) · NVMe SSD com ≥10 GB livres |
+
+> Os valores de VRAM batem com a tabela de modelos da seção em inglês ([Whisper Models](#whisper-models)). Qualquer GPU NVIDIA aceita o download **BAIXAR GPU**; o nível só define qual modelo você roda confortavelmente.
 
 ---
 

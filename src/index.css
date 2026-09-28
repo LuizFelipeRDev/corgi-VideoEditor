@@ -166,6 +166,17 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
   100% { width: 0%; }
 }
 
+/* Ampulheta da prévia tratada (SoundConfigModal) — estilo XP: gira 180°,
+   pausa, gira mais 180°, pausa; o ciclo fecha em 360° sem salto visual. */
+@keyframes hourglass-flip {
+  0%, 40%  { transform: rotate(0deg); }
+  50%, 90% { transform: rotate(180deg); }
+  100%     { transform: rotate(360deg); }
+}
+.hourglass-flip {
+  animation: hourglass-flip 1.8s ease-in-out infinite;
+}
+
 /* =====================================================================
    TEMA (data-theme no <html>, aplicado por src/lib/theme.jsx)
    ---------------------------------------------------------------------
