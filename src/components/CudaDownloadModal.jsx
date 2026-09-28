@@ -5,32 +5,37 @@ export default function CudaDownloadModal({ open, onClose, onComplete }) {
   const { t } = useLang()
   const [downloading, setDownloading] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (!open) {
       setDownloading(false)
       setProgress(0)
+      setError('')
     }
   }, [open])
 
   useEffect(() => {
     const handler = (data) => {
       setProgress(data.progress)
-      if (data.progress >= 100) {
-        setDownloading(false)
-        setProgress(0)
-        onComplete()
-        onClose()
-      }
     }
     window.api.onCudaDownloadProgress(handler)
     return () => window.api.onCudaDownloadProgress(null)
   }, [])
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     setDownloading(true)
     setProgress(0)
-    window.api.downloadCuda()
+    setError('')
+    const res = await window.api.downloadCuda()
+    setDownloading(false)
+    setProgress(0)
+    if (res && res.success) {
+      onComplete()
+      onClose()
+    } else {
+      setError((res && res.error) || 'unknown error')
+    }
   }
 
   if (!open) return null
@@ -73,6 +78,11 @@ export default function CudaDownloadModal({ open, onClose, onComplete }) {
             <p className="font-pixel text-[6px] text-retro-black/50 mb-4">
               {t('cuda.size')}
             </p>
+            {error && (
+              <p className="font-pixel text-[6px] text-red-600 mb-4 leading-relaxed break-words">
+                {t('cuda.error')}: {error}
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={onClose}

@@ -40,7 +40,7 @@ function App() {
   const [infoToast, setInfoToast] = useState(null)
   const [exportedFolderPath, setExportedFolderPath] = useState('')
   const [showCudaModal, setShowCudaModal] = useState(false)
-  const [whisperCliInstalled, setWhisperCliInstalled] = useState(false)
+  const [cudaInstalled, setCudaInstalled] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const errorBuffer = useRef('')
   const lastPct = useRef(0)
@@ -111,7 +111,7 @@ function App() {
       try { setCustomPresets(JSON.parse(c.sound_presets || '[]') || []) } catch { setCustomPresets([]) }
     })
 
-    window.api.checkWhisperCli().then(setWhisperCliInstalled)
+    window.api.checkCudaInstalled().then(setCudaInstalled)
 
     window.api.onOutput((raw) => {
       const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\[\?[0-9]*[a-zA-Z]/g, '')
@@ -996,7 +996,7 @@ function App() {
           autoLineWrap={autoLineWrap}
           positionMode={positionMode}
           positionPercent={positionPercent}
-          whisperCliInstalled={whisperCliInstalled}
+          cudaInstalled={cudaInstalled}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
           onRequestCudaDownload={() => setShowCudaModal(true)}
@@ -1024,7 +1024,7 @@ function App() {
       <CudaDownloadModal
         open={showCudaModal}
         onClose={() => setShowCudaModal(false)}
-        onComplete={() => setWhisperCliInstalled(true)}
+        onComplete={() => window.api.checkCudaInstalled().then(setCudaInstalled)}
       />
       {showError && !whisperStoppingRef.current && (
         <ErrorModal

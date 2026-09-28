@@ -161,6 +161,7 @@ export default {
   'cuda.size': 'Tamanho: ~420 MB',
   'cuda.cancel': 'CANCELAR',
   'cuda.download': 'BAIXAR',
+  'cuda.error': 'Falha no download',
 
   // --- Export (textos de progresso) ---
   'export.converting': 'Convertendo...',

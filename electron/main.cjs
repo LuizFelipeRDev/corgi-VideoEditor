@@ -817,21 +817,28 @@ ipcMain.handle('download-model', async (e, modelName) => {
   });
 });
 
-ipcMain.handle('check-whisper-cli', () => {
-  const whisperCliPath = getWhisperCliPath();
-  return fs.existsSync(whisperCliPath);
+// "GPU installed" requires EVERY CUDA dll to be present. whisper-cli.exe alone does
+// not count: the bundled CPU build already ships it, so the old check reported
+// "GPU installed" even with none of the GPU dlls downloaded.
+const CUDA_REQUIRED_DLLS = ['ggml-cuda.dll', 'cublas64_12.dll', 'cublasLt64_12.dll', 'cudart64_12.dll'];
+
+ipcMain.handle('check-cuda-installed', () => {
+  const dir = getWhisperDir();
+  return CUDA_REQUIRED_DLLS.every((dll) => fs.existsSync(path.join(dir, dll)));
 });
 
 ipcMain.handle('download-cuda', async () => {
   const whisperDir = getWhisperDir();
   const AdmZip = require('adm-zip');
   const os = require('os');
-  const tempDir = os.tmpdir();
-  const zipPath = path.join(tempDir, 'whisper-cuda.zip');
-
-  const url = isDev
-    ? 'http://localhost:18923/whisper-cuda.zip'
-    : 'https://github.com/LuizFelipeRDev/corgi-editor/releases/download/v1.0.0/whisper-cuda.zip';
+  const zipPath = path.join(os.tmpdir(), 'whisper-cuda.zip');
+  // Fixed URL from AGENTS.md (the old "corgi-editor" repo name 301-redirects to
+  // "corgi-VideoEditor" and GitHub then 302-redirects to the asset host).
+  // fetch follows the whole chain; the old https.get code followed ONE redirect
+  // and piped the second (empty) redirect body, so extraction always failed.
+  // Dev and prod share this URL: the old http://localhost:18923 dev branch pointed
+  // to a server that does not exist anywhere in the app (always ECONNREFUSED).
+  const url = 'https://github.com/LuizFelipeRDev/corgi-editor/releases/download/v1.0.0/whisper-cuda.zip';
 
   console.log('[CUDA] download-cuda handler called, url:', url);
   console.log('[CUDA] whisperDir:', whisperDir);
@@ -840,79 +847,40 @@ ipcMain.handle('download-cuda', async () => {
     fs.mkdirSync(whisperDir, { recursive: true });
   }
 
-  return new Promise((resolve) => {
-    const file = fs.createWriteStream(zipPath);
+  try {
+    const response = await fetch(url);
+    if (!response.ok || !response.body) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const totalBytes = parseInt(response.headers.get('content-length') || '', 10) || 0;
+    console.log('[CUDA] response status:', response.status, '| totalBytes:', totalBytes);
+
+    const nodeStream = require('stream').Readable.fromWeb(response.body);
     let downloadedBytes = 0;
-
-    const client = url.startsWith('https') ? https : require('http');
-    const request = client.get(url, (response) => {
-      console.log('[CUDA] response status:', response.statusCode);
-      if (response.statusCode === 301 || response.statusCode === 302) {
-        const redirectClient = response.headers.location.startsWith('https') ? https : require('http');
-        redirectClient.get(response.headers.location, (redirectResponse) => {
-          const totalBytes = parseInt(redirectResponse.headers['content-length'], 10) || 0;
-
-          redirectResponse.on('data', (chunk) => {
-            downloadedBytes += chunk.length;
-            const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
-            mainWindow?.webContents.send('cuda-download-progress', { progress });
-          });
-
-          redirectResponse.pipe(file);
-
-          file.on('finish', () => {
-            file.close();
-            try {
-              const zip = new AdmZip(zipPath);
-              zip.extractAllTo(whisperDir, true);
-              fs.unlinkSync(zipPath);
-              resolve({ success: true });
-            } catch (err) {
-              resolve({ success: false, error: err.message });
-            }
-          });
-        }).on('error', (err) => {
-          if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-          resolve({ success: false, error: err.message });
-        });
-        return;
-      }
-
-      const totalBytes = parseInt(response.headers['content-length'], 10) || 0;
-      console.log('[CUDA] totalBytes:', totalBytes);
-
-      response.on('data', (chunk) => {
-        downloadedBytes += chunk.length;
-        const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
-        if (progress % 10 === 0 || progress === 100) {
-          console.log('[CUDA] progress:', progress);
-        }
+    let lastProgress = -1;
+    nodeStream.on('data', (chunk) => {
+      downloadedBytes += chunk.length;
+      const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
+      if (progress !== lastProgress) {
+        lastProgress = progress;
+        if (progress % 10 === 0 || progress === 100) console.log('[CUDA] progress:', progress);
         mainWindow?.webContents.send('cuda-download-progress', { progress });
-      });
-
-      response.pipe(file);
-
-      file.on('finish', () => {
-        file.close();
-        console.log('[CUDA] download finished, extracting...');
-        try {
-          const zip = new AdmZip(zipPath);
-          zip.extractAllTo(whisperDir, true);
-          console.log('[CUDA] extraction done, cleaning up zip');
-          fs.unlinkSync(zipPath);
-          console.log('[CUDA] resolve success');
-          resolve({ success: true });
-        } catch (err) {
-          console.error('[CUDA] extraction error:', err.message);
-          resolve({ success: false, error: err.message });
-        }
-      });
+      }
     });
 
-    request.on('error', (err) => {
-      console.error('[CUDA] request error:', err.message);
-      if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-      resolve({ success: false, error: err.message });
-    });
-  });
+    await require('stream/promises').pipeline(nodeStream, fs.createWriteStream(zipPath));
+    console.log('[CUDA] download finished, extracting...');
+
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(whisperDir, true);
+    fs.unlinkSync(zipPath);
+    console.log('[CUDA] resolve success');
+    return { success: true };
+  } catch (err) {
+    console.error('[CUDA] download error:', err);
+    if (fs.existsSync(zipPath)) {
+      try { fs.unlinkSync(zipPath); } catch { /* ignore cleanup error */ }
+    }
+    return { success: false, error: (err && err.message) || String(err) };
+  }
 });

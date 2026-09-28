@@ -122,7 +122,7 @@ contextBridge.exposeInMainWorld('api', {
   checkModel: (modelName) => ipcRenderer.invoke('check-model', modelName),
   downloadModel: (modelName) => ipcRenderer.invoke('download-model', modelName),
   onModelDownloadProgress: (cb) => { _modelDownloadProgressCb = cb; },
-  checkWhisperCli: () => ipcRenderer.invoke('check-whisper-cli'),
+  checkCudaInstalled: () => ipcRenderer.invoke('check-cuda-installed'),
   downloadCuda: () => ipcRenderer.invoke('download-cuda'),
   onCudaDownloadProgress: (cb) => { _cudaDownloadProgressCb = cb; },
   getPathForFile: (file) => webUtils.getPathForFile(file),

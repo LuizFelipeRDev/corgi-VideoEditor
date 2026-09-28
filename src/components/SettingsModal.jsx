@@ -30,7 +30,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', descKey: 'settings.modelDesc.large-v3' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, whisperCliInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, cudaInstalled }) {
   const { lang, setLang, t } = useLang()
   const { theme, setTheme } = useTheme()
   const [tab, setTab] = useState('sistema')
@@ -349,7 +349,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
               </div>
             </div>
 
-            {whisperCliInstalled ? (
+            {cudaInstalled ? (
               <div className="flex items-center justify-between">
                 <p className="font-pixel text-[6px] text-green-600">
                   {t('settings.gpuInstalled')}
