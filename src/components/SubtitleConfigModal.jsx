@@ -62,14 +62,14 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
             <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.fontSize', { size: localFontSize })}</label>
             <input
               type="range"
-              min="60"
+              min="50"
               max="200"
               value={localFontSize}
               onChange={(e) => setLocalFontSize(Number(e.target.value))}
               className="w-full h-2 bg-retro-bg border border-retro-black rounded appearance-none cursor-pointer accent-retro-black"
             />
             <div className="flex justify-between mt-0.5">
-              <span className="font-pixel text-[5px] text-retro-black/50">60</span>
+              <span className="font-pixel text-[5px] text-retro-black/50">50</span>
               <span className="font-pixel text-[5px] text-retro-black/50">200</span>
             </div>
           </div>

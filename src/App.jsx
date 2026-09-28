@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import TitleBar from './components/TitleBar'
 import DropZone from './components/DropZone'
 import Controls from './components/Controls'
 import BottomBar from './components/BottomBar'
 import SettingsModal from './components/SettingsModal'
+import ConfirmModal from './components/ConfirmModal'
 import ErrorModal from './components/ErrorModal'
 import InfoModal from './components/InfoModal'
 import AboutModal from './components/AboutModal'
@@ -13,7 +14,8 @@ import SubtitlesPanel from './components/SubtitlesPanel'
 import SoundConfigModal from './components/SoundConfigModal'
 import Waveform from './components/Waveform'
 import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps, ensureExportFontLoaded } from './lib/subtitleRender'
-import { buildSoundChain, mergeSoundConfig, shortHash, DEFAULT_SOUND_CONFIG } from './lib/soundChain'
+import { buildSoundChain, mergeSoundConfig, DEFAULT_SOUND_CONFIG, findPreset } from './lib/soundChain'
+import realtimeChain from './lib/realtimeChain'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 import { SUBTITLE_DISPLAY_DEFAULTS } from './global_config/subtitleConfig'
 import { useLang } from './lib/i18n'
@@ -41,6 +43,8 @@ function App() {
   const [exportedFolderPath, setExportedFolderPath] = useState('')
   const [showCudaModal, setShowCudaModal] = useState(false)
   const [cudaInstalled, setCudaInstalled] = useState(false)
+  const [projectFilePath, setProjectFilePath] = useState(null) // v1.8.0: .corgi.json atual (salvo/aberto)
+  const [confirmNewOpen, setConfirmNewOpen] = useState(false) // modal "salvar antes de limpar?"
   const [errorMessage, setErrorMessage] = useState('')
   const errorBuffer = useRef('')
   const lastPct = useRef(0)
@@ -48,6 +52,7 @@ function App() {
   const videoRef = useRef(null)
   const exportingRef = useRef(false)
   const waveSurferRef = useRef(null)
+  const globalConfigRef = useRef(null) // v1.8.0: config.ini lido no boot (base do NOVO PROJETO)
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
   const [subtitleModel, setSubtitleModel] = useState('tiny')
@@ -76,39 +81,42 @@ function App() {
   const [soundConfig, setSoundConfig] = useState(DEFAULT_SOUND_CONFIG)
   const [customPresets, setCustomPresets] = useState([])
   const [showSound, setShowSound] = useState(false)
-  const [treatedUrl, setTreatedUrl] = useState(null) // file:// da prévia tratada
-  const [treatedHash, setTreatedHash] = useState('') // hash do último render ok (indicador do modal)
-  const [soundRendering, setSoundRendering] = useState(false)
   const [abMode, setAbMode] = useState(null) // null = segue o 🎤 | 'original' | 'treated'
+  const [realtimeDraft, setRealtimeDraft] = useState(null) // rascunho do modal em audição
   const [playRequest, setPlayRequest] = useState(0) // incrementa para tocar (A/B)
-  const treatedRef = useRef({ hash: '', url: null }) // cache da prévia renderizada
-  const renderGenRef = useRef(0) // geração do render (descarta concorrentes)
-  const lastTreatedFileRef = useRef(null) // último .m4a gerado no temp
+
+  // Aplica o config.ini (configuracoes GLOBAIS) nos estados — usado no boot e
+  // pelo NOVO PROJETO, que precisa desfazer o que um projeto aberto sobrescreveu.
+  const applyConfig = (c) => {
+    if (!c) return
+    setThreshold(c.threshold)
+    setMarginVal(c.margin)
+    setOutputFormat(c.output_format || 'mp3')
+    setOutputResolution(c.output_resolution || 'original')
+    if (c.output_folder) setOutputFolder(c.output_folder)
+    setSubtitlesEnabled(c.subtitles === 'true')
+    setSubtitleModel(c.subtitle_model || 'tiny')
+    setSubtitleLanguage(c.subtitle_language || 'auto')
+    setSubtitlePosition(c.subtitle_position || 'bottom')
+    setPositionMode(c.subtitle_position_mode || 'fixed')
+    setPositionPercent(Math.min(70, Math.max(5, Number(c.subtitle_position_percent) || 80)))
+    setSubtitleStyle(c.subtitle_style || 'hormozi')
+    setGreenScreen(c.green_screen === 'true')
+    setBurnSubtitles(c.burn_subtitles !== 'false')
+    setWordsPerLine(Number(c.words_per_line) || 4)
+    setLinesCount(Number(c.lines_count) || 2)
+    setSubtitlePersistence(Number(c.subtitle_persistence) || 1)
+    setSmartSubtitle(c.smart_subtitle === 'true')
+    setAutoLineWrap(c.auto_line_wrap === 'true')
+    try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
+    try { setSoundConfig(mergeSoundConfig(JSON.parse(c.sound_config || 'null'))) } catch { setSoundConfig(mergeSoundConfig(null)) }
+    try { setCustomPresets(JSON.parse(c.sound_presets || '[]') || []) } catch { setCustomPresets([]) }
+  }
 
   useEffect(() => {
     window.api.getConfig().then((c) => {
-      setThreshold(c.threshold)
-      setMarginVal(c.margin)
-      setOutputFormat(c.output_format || 'mp3')
-      setOutputResolution(c.output_resolution || 'original')
-      if (c.output_folder) setOutputFolder(c.output_folder)
-      setSubtitlesEnabled(c.subtitles === 'true')
-      setSubtitleModel(c.subtitle_model || 'tiny')
-      setSubtitleLanguage(c.subtitle_language || 'auto')
-      setSubtitlePosition(c.subtitle_position || 'bottom')
-      setPositionMode(c.subtitle_position_mode || 'fixed')
-      setPositionPercent(Math.min(70, Math.max(5, Number(c.subtitle_position_percent) || 80)))
-      setSubtitleStyle(c.subtitle_style || 'hormozi')
-      setGreenScreen(c.green_screen === 'true')
-      setBurnSubtitles(c.burn_subtitles !== 'false')
-      setWordsPerLine(Number(c.words_per_line) || 4)
-      setLinesCount(Number(c.lines_count) || 2)
-      setSubtitlePersistence(Number(c.subtitle_persistence) || 1)
-      setSmartSubtitle(c.smart_subtitle === 'true')
-      setAutoLineWrap(c.auto_line_wrap === 'true')
-      try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
-      try { setSoundConfig(mergeSoundConfig(JSON.parse(c.sound_config || 'null'))) } catch { setSoundConfig(mergeSoundConfig(null)) }
-      try { setCustomPresets(JSON.parse(c.sound_presets || '[]') || []) } catch { setCustomPresets([]) }
+      globalConfigRef.current = c
+      applyConfig(c)
     })
 
     window.api.checkCudaInstalled().then(setCudaInstalled)
@@ -237,118 +245,61 @@ function App() {
     }
   }, [subtitlesEnabled])
 
-  // --- v1.7.0: prévia do som tratado ---------------------------------------
-  // Renderiza o áudio com a MESMA cadeia -af do export para um .m4a no temp e
-  // devolve um file:// — o wavesurfer passa a tocar essa fonte (o vídeo é mudo,
-  // então vale no player normal e na tela cheia, fiel 100% ao export).
-  const previewHash = (cfg, file) => {
-    const chain = buildSoundChain(cfg)
-    return chain && file ? `${chain}||${file.path}` : ''
-  }
-
-  const ensureTreatedPreview = async (cfg, file) => {
-    const chain = buildSoundChain(cfg)
-    if (!chain || !file) {
-      treatedRef.current = { hash: '', url: null }
-      setTreatedUrl(null)
-      setTreatedHash('')
-      return null
-    }
-    const hash = `${chain}||${file.path}`
-    if (treatedRef.current.hash === hash) return treatedRef.current.url
-
-    const gen = ++renderGenRef.current
-    setSoundRendering(true)
-    try {
-      const tempDir = await window.api.getTempDir()
-      const outPath = await window.api.joinPath(tempDir, `corgi_treated_${shortHash(hash)}.m4a`)
-      // runFfmpegAnalysis: mesmo binário, porém SEM os eventos de progresso/
-      // erro do export — falha aqui vira toast, nunca modal de erro.
-      const res = await window.api.runFfmpegAnalysis([
-        '-y', '-i', file.path, '-vn', '-af', chain, '-c:a', 'aac', '-b:a', '192k', outPath,
-      ])
-      if (gen !== renderGenRef.current) return null // um render mais novo assumiu
-      if (res.success) {
-        if (lastTreatedFileRef.current && lastTreatedFileRef.current !== outPath) {
-          window.api.deleteFile(lastTreatedFileRef.current)
-        }
-        lastTreatedFileRef.current = outPath
-        const url = `file:///${outPath.replace(/\\/g, '/')}`
-        treatedRef.current = { hash, url }
-        setTreatedUrl(url)
-        setTreatedHash(hash)
-        return url
-      }
-      treatedRef.current = { hash: '', url: null }
-      setTreatedUrl(null)
-      setTreatedHash('')
-      setInfoToast(t('sound.toastRenderFail'))
-      return null
-    } catch (e) {
-      console.warn('[sound] falha na prévia tratada:', e)
-      if (gen === renderGenRef.current) {
-        treatedRef.current = { hash: '', url: null }
-        setTreatedUrl(null)
-        setTreatedHash('')
-        setInfoToast(t('sound.toastRenderFail'))
-      }
-      return null
-    } finally {
-      if (gen === renderGenRef.current) setSoundRendering(false)
-    }
-  }
-
-  // Troca/limpeza de arquivo invalida a prévia (o hash inclui o caminho) e,
-  // com o 🎤 ligado, já gera em silêncio a prévia do arquivo novo.
+  // --- v1.8.0: prévia em TEMPO REAL ("A/B instantâneo") ---------------------
+  // A cadeia do 🎤 roda em Web Audio DENTRO do AudioContext do wavesurfer
+  // (realtimeChain). Trocar de lado do A/B é um crossfade de ganho: sem
+  // render ffmpeg, sem recarregar a fonte — dá pra ouvir na hora, de onde a
+  // playhead estiver. O 'treated' ouve o RASCUNHO do modal; o resto, a cfg
+  // salva. O EXPORT continua usando o ffmpeg exato.
+  const realtimeActive = abMode === 'treated' || (soundConfig.enabled && abMode !== 'original')
+  const realtimeCfg = abMode === 'treated' && realtimeDraft ? realtimeDraft : soundConfig
+  // A FORMA da onda acompanha o que está sendo OUVIDO: tratada quando a
+  // prévia está ativa e há o que tratar, original no lado A / 🎤 off.
+  const shapeCfg = useMemo(
+    () => (realtimeActive && buildSoundChain(realtimeCfg) ? realtimeCfg : null),
+    [realtimeActive, realtimeCfg]
+  )
   useEffect(() => {
-    renderGenRef.current++
-    setSoundRendering(false)
-    treatedRef.current = { hash: '', url: null }
-    setTreatedUrl(null)
-    setTreatedHash('')
+    realtimeChain.setConfig(realtimeCfg)
+    realtimeChain.setBypass(!realtimeActive)
+  }, [realtimeCfg, realtimeActive])
+
+  // Player (WebAudioPlayer) entregue pelo Waveform a cada criação/destruição
+  const handlePlayerCreated = (player) => realtimeChain.attach(player)
+
+  // Troca/limpeza de arquivo: zera o A/B e o rascunho em audição — a cadeia
+  // em tempo real é religada no player novo pelo Waveform (handlePlayerCreated)
+  useEffect(() => {
     setAbMode(null)
-    if (selectedFile && soundConfig.enabled) {
-      ensureTreatedPreview(soundConfig, selectedFile)
-    }
+    setRealtimeDraft(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFile])
 
-  // 🎤: interruptor mestre do Som Avançado — toast + prévia tratada
+  // 🎤: interruptor mestre do Som Avançado — a prévia em tempo real acompanha
+  // na hora (crossfade no player, sem pausar nem renderizar nada)
   const handleToggleSound = async () => {
     if (!selectedFile || processing || generatingSubtitles) return
-    // Pausa tudo antes de trocar a fonte de áudio (mantém sincronismo)
-    if (videoRef.current) videoRef.current.pause()
-    if (waveSurferRef?.current) waveSurferRef.current.pause()
     const next = { ...soundConfig, enabled: !soundConfig.enabled }
     setSoundConfig(next)
     setAbMode(null)
+    setRealtimeDraft(null)
     await handleSaveSettings({ sound_config: next })
-    if (next.enabled) {
-      setInfoToast(t('sound.toastOn'))
-      ensureTreatedPreview(next, selectedFile)
-    } else {
-      setInfoToast(t('sound.toastOff'))
-    }
+    setInfoToast(next.enabled ? t('sound.toastOn') : t('sound.toastOff'))
   }
 
-  // Prévia A/B do modal: 'original' volta à fonte real; 'treated' renderiza o
-  // RASCUNHO (preset/ajustes ainda não aplicados) se desatualizado e toca da
-  // posição atual. NUNCA trata o arquivo final.
-  const handleListenSound = async (mode, draftCfg) => {
-    if (!selectedFile || processing || soundRendering) return
-    if (videoRef.current) videoRef.current.pause()
-    if (waveSurferRef?.current) waveSurferRef.current.pause()
+  // Prévia A/B do modal — em TEMPO REAL: 'original' só põe o bypass (crossfade),
+  // 'treated' troca a cfg do RASCUNHO (preset/ajustes ainda não aplicados) na
+  // cadeia. Troca na hora, na posição atual — sem render e sem recarga.
+  // NUNCA trata o arquivo final.
+  const handleListenSound = (mode, draftCfg) => {
+    if (!selectedFile || processing) return
     if (mode === 'treated') {
       const cfg = draftCfg || soundConfig
       // Cadeia vazia (tudo desligado) não tem o que tratar — toca o original
       if (!buildSoundChain(cfg)) {
         setAbMode('original')
       } else {
-        const fresh = treatedRef.current.hash === previewHash(cfg, selectedFile)
-        if (!fresh) setInfoToast(t('sound.toastRendering'))
-        const url = await ensureTreatedPreview(cfg, selectedFile)
-        if (!url) return // falha: o próprio ensure já mostrou o toast de erro
-        if (!fresh) setInfoToast(null)
+        setRealtimeDraft(cfg)
         setAbMode('treated')
       }
     } else {
@@ -358,20 +309,175 @@ function App() {
   }
 
   // APLICAR do modal: só SALVA e fecha — nada é tratado naquele momento (o
-  // tratamento roda apenas na exportação). Prévia, se o 🎤 estiver ligado,
-  // é re-renderizada em silêncio para o player continuar coerente.
+  // tratamento roda apenas na exportação). A prévia em tempo real passa a
+  // seguir a cfg salva (o efeito do realtimeChain já religa a cadeia) e a
+  // FORMA da onda redesenha conforme a nova cfg (render offline).
   const handleApplySound = async (cfg) => {
     setShowSound(false)
     setAbMode(null)
+    setRealtimeDraft(null)
     await handleSaveSettings({ sound_config: cfg })
-    if (cfg.enabled && selectedFile) ensureTreatedPreview(cfg, selectedFile)
   }
 
   const handleSoundPresets = (presets) => handleSaveSettings({ sound_presets: presets })
 
-  // Fonte de áudio do player: segue o 🎤, salvo quando o modal força um lado
-  // do A/B ('original' = tocar o som real por cima do estado do 🎤).
-  const previewAudioUrl = abMode === 'original' ? null : soundConfig.enabled ? treatedUrl : null
+  // --- v1.8.0: projetos ----------------------------------------------------
+  const cloneDeep = (o) => JSON.parse(JSON.stringify(o))
+
+  // Snapshot do que o projeto precisa para reabrir igual: mídia, legenda
+  // gerada, PRESET de som (id + 🎤; tweaks não salvos como preset se perdem),
+  // config de legenda e os ajustes de corte/exportação.
+  const buildProjectData = () => ({
+    version: 1,
+    savedAt: new Date().toISOString(),
+    mediaPath: selectedFile?.path || null,
+    subtitles,
+    subtitlesEdited,
+    sound: { enabled: soundConfig.enabled, presetId: soundConfig.presetId },
+    subtitle: {
+      enabled: subtitlesEnabled,
+      style: subtitleStyle,
+      position: subtitlePosition,
+      positionMode,
+      positionPercent,
+      wordsPerLine,
+      linesCount,
+      autoLineWrap,
+      greenScreen,
+      burnSubtitles,
+      configs: subtitleConfigs,
+    },
+    generation: { model: subtitleModel, language: subtitleLanguage, persistence: subtitlePersistence, smart: smartSubtitle },
+    edit: { threshold, margin: marginVal },
+    export: { format: outputFormat, resolution: outputResolution },
+  })
+
+  // [💾]: primeira vez abre o "Salvar como" (pasta da mídia + nome dela);
+  // depois que já existe caminho, regrava por cima sem perguntar.
+  const handleSaveProject = async () => {
+    if (processing || generatingSubtitles) return false
+    let target = projectFilePath
+    if (!target) {
+      const defaultName = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, '') : 'projeto'
+      target = await window.api.selectProjectSavePath({ defaultDir: selectedFile?.folder || '', defaultName })
+      if (!target) return false
+    }
+    const res = await window.api.writeFile(target, JSON.stringify(buildProjectData(), null, 2))
+    if (res && res.success) {
+      setProjectFilePath(target)
+      setInfoToast(t('project.saved'))
+      return true
+    }
+    setErrorMessage(res?.error || t('project.saveFailed'))
+    setShowError(true)
+    return false
+  }
+
+  const handleOpenProject = async () => {
+    if (processing || generatingSubtitles) return
+    const r = await window.api.openProject()
+    if (!r || r.canceled) return
+    if (!r.ok) {
+      setErrorMessage(r.error || t('project.openFailed'))
+      setShowError(true)
+      return
+    }
+    const d = r.data || {}
+    const mediaPath = typeof d.mediaPath === 'string' ? d.mediaPath : ''
+
+    // Som: o projeto guarda só o preset (sistema ou custom) + o estado do 🎤.
+    // Tweaks não salvos como preset não estão aqui e se perdem por definição;
+    // preset apagado → volta pras configurações globais.
+    const savedSound = d.sound || {}
+    let cfg
+    const preset = findPreset(savedSound.presetId, customPresets)
+    if (preset) {
+      cfg = { ...cloneDeep(DEFAULT_SOUND_CONFIG), ...cloneDeep(preset.params), presetId: preset.id, enabled: savedSound.enabled === true }
+    } else {
+      try { cfg = mergeSoundConfig(JSON.parse(globalConfigRef.current?.sound_config || 'null')) } catch { cfg = mergeSoundConfig(null) }
+      cfg = { ...cfg, enabled: savedSound.enabled === true }
+    }
+
+    // Restaura partindo dos GLOBAIS e aplicando por cima só o que o save tem
+    // (nada de estado sobrando do projeto anterior).
+    applyConfig(globalConfigRef.current)
+
+    let file = null
+    if (mediaPath && r.mediaExists) {
+      const size = await window.api.getFileSize(mediaPath)
+      file = { path: mediaPath, name: mediaPath.split(/[/\\]/).pop(), folder: mediaPath.replace(/[\\/][^\\/]+$/, ''), size: typeof size === 'number' ? size : undefined }
+    }
+    setSelectedFile(file)
+    setSubtitles(Array.isArray(d.subtitles) ? d.subtitles : [])
+    setSubtitlesEdited(d.subtitlesEdited === true)
+    setSoundConfig(cfg)
+
+    const s = d.subtitle || {}
+    if (typeof s.enabled === 'boolean') setSubtitlesEnabled(s.enabled)
+    if (typeof s.style === 'string') setSubtitleStyle(s.style)
+    if (typeof s.position === 'string') setSubtitlePosition(s.position)
+    if (typeof s.positionMode === 'string') setPositionMode(s.positionMode)
+    if (typeof s.positionPercent === 'number') setPositionPercent(Math.min(70, Math.max(5, s.positionPercent)))
+    if (s.wordsPerLine) setWordsPerLine(Number(s.wordsPerLine) || 4)
+    if (s.linesCount) setLinesCount(Number(s.linesCount) || 2)
+    if (typeof s.autoLineWrap === 'boolean') setAutoLineWrap(s.autoLineWrap)
+    if (typeof s.greenScreen === 'boolean') setGreenScreen(s.greenScreen)
+    if (typeof s.burnSubtitles === 'boolean') setBurnSubtitles(s.burnSubtitles)
+    if (s.configs && typeof s.configs === 'object') setSubtitleConfigs(s.configs)
+
+    const g = d.generation || {}
+    if (typeof g.model === 'string') setSubtitleModel(g.model)
+    if (typeof g.language === 'string') setSubtitleLanguage(g.language)
+    if (g.persistence !== undefined && g.persistence !== null) setSubtitlePersistence(Number(g.persistence) || 1)
+    if (typeof g.smart === 'boolean') setSmartSubtitle(g.smart)
+
+    const e = d.edit || {}
+    if (e.threshold !== undefined && e.threshold !== null && e.threshold !== '') setThreshold(String(e.threshold))
+    if (e.margin !== undefined && e.margin !== null && e.margin !== '') setMarginVal(String(e.margin))
+
+    const x = d.export || {}
+    if (typeof x.format === 'string') setOutputFormat(x.format)
+    if (typeof x.resolution === 'string') setOutputResolution(x.resolution)
+
+    setProjectFilePath(r.path)
+    setAbMode(null)
+    setRealtimeDraft(null)
+    setSeekTo(null)
+    setCurrentTime(0)
+
+    if (mediaPath && !r.mediaExists) {
+      setErrorMessage(`${t('project.mediaMissing')} ${mediaPath}`)
+      setShowInfo(true)
+    } else {
+      setInfoToast(t('project.loaded'))
+    }
+  }
+
+  const doNewProject = () => {
+    if (videoRef.current) {
+      videoRef.current.pause()
+      videoRef.current.removeAttribute('src')
+      videoRef.current.load()
+    }
+    setSelectedFile(null)
+    setSubtitles([])
+    setSubtitlesEdited(false)
+    setProjectFilePath(null)
+    setAbMode(null)
+    setRealtimeDraft(null)
+    setSeekTo(null)
+    setCurrentTime(0)
+    applyConfig(globalConfigRef.current) // de volta pras configurações globais
+    setInfoToast(t('project.created'))
+  }
+
+  // [📄]: com conteúdo, pergunta se salva antes de limpar (wireframe v1.8.0);
+  // vazio, limpa direto.
+  const requestNewProject = () => {
+    if (processing || generatingSubtitles) return
+    if (selectedFile || subtitles.length > 0 || projectFilePath) setConfirmNewOpen(true)
+    else doNewProject()
+  }
 
   const handleExport = async () => {
     if (!selectedFile || processing || generatingSubtitles) return
@@ -487,7 +593,9 @@ function App() {
             '-i', tempOutPath,
           ]
         } else {
-          const bgColor = greenScreen ? 'green' : 'black'
+          // #00A800 = mesmo verde do preview (DropZone); o 'green' nomeado do
+          // ffmpeg (#008000) saia escuro demais no video exportado.
+          const bgColor = greenScreen ? '0x00A800' : 'black'
           const bgRes = outputResolution === 'portrait' ? '1080x1920' : outputResolution === 'landscape' ? '1920x1080' : '1920x1080'
           ffmpegArgs = [
             '-y',
@@ -879,7 +987,12 @@ function App() {
 
   return (
     <div className="w-full h-full flex flex-col border-[4px] border-retro-black bg-retro-box">
-      <TitleBar />
+      <TitleBar
+        onNew={requestNewProject}
+        onSave={handleSaveProject}
+        onOpen={handleOpenProject}
+        disabled={processing || generatingSubtitles}
+      />
       <div className="flex flex-1 min-h-0">
         <div className={`flex flex-col min-w-0 ${subtitlesEnabled ? 'w-[75%]' : 'w-full'}`}>
           <div className="flex flex-1 min-h-0">
@@ -932,8 +1045,9 @@ function App() {
               waveSurferRef={waveSurferRef}
               processing={processing}
               generatingSubtitles={generatingSubtitles}
-              audioOverrideUrl={previewAudioUrl}
+              onPlayer={handlePlayerCreated}
               playRequest={playRequest}
+              shapeCfg={shapeCfg}
             />
           </div>
         </div>
@@ -1006,15 +1120,12 @@ function App() {
         <SoundConfigModal
           config={soundConfig}
           customPresets={customPresets}
-          rendering={soundRendering}
-          treatedHash={treatedHash}
-          hashOf={(c) => previewHash(c, selectedFile)}
-          onPreview={(c) => ensureTreatedPreview(c, selectedFile)}
+          onPreview={(c) => setRealtimeDraft(c)}
           onClose={() => {
             setShowSound(false)
             setAbMode(null)
-            // Rascunho descartado (sem APLICAR): volta a tocar a prévia SALVA
-            if (selectedFile && soundConfig.enabled) ensureTreatedPreview(soundConfig, selectedFile)
+            // Rascunho descartado (sem APLICAR): a cadeia volta a seguir a cfg SALVA
+            setRealtimeDraft(null)
           }}
           onApply={handleApplySound}
           onPresetsChange={handleSoundPresets}
@@ -1040,6 +1151,24 @@ function App() {
       )}
       {showAbout && (
         <AboutModal onClose={() => setShowAbout(false)} />
+      )}
+      {confirmNewOpen && (
+        <ConfirmModal
+          message={t('project.confirmNew')}
+          primaryLabel={t('project.saveAndClear')}
+          secondaryLabel={t('project.clear')}
+          cancelLabel={t('project.cancel')}
+          onPrimary={async () => {
+            setConfirmNewOpen(false)
+            const ok = await handleSaveProject()
+            if (ok) doNewProject()
+          }}
+          onSecondary={() => {
+            setConfirmNewOpen(false)
+            doNewProject()
+          }}
+          onCancel={() => setConfirmNewOpen(false)}
+        />
       )}
       {showExportToast && (
         <Toast

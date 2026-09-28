@@ -115,6 +115,8 @@ contextBridge.exposeInMainWorld('api', {
   getFontsPath: () => ipcRenderer.invoke('get-fonts-path'),
   pathExists: (targetPath) => ipcRenderer.invoke('path-exists', targetPath),
   getFileSize: (targetPath) => ipcRenderer.invoke('get-file-size', targetPath),
+  selectProjectSavePath: (opts) => ipcRenderer.invoke('select-project-save-path', opts),
+  openProject: () => ipcRenderer.invoke('open-project'),
   getWhisperDir: () => ipcRenderer.invoke('get-whisper-dir'),
   resizeWindow: (width, height) => ipcRenderer.invoke('resize-window', width, height),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),

@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import WaveSurfer from 'wavesurfer.js'
 import { useTheme } from '../lib/theme'
 import { useLang } from '../lib/i18n'
+import realtimeChain from '../lib/realtimeChain'
 
 // Pixels por segundo de audio renderizados. Mantem a densidade MINIMA de
 // ~0,5s por barra (barWidth 2 + barGap 1 = 3px; 3px / 6px-s = 0,5s): arquivos
@@ -51,7 +52,7 @@ const fmtHMS = (s) => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles, audioOverrideUrl, playRequest }) {
+function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles, playRequest, onPlayer, shapeCfg }) {
   const containerRef = useRef(null)
   const wsRef = useRef(null)
   const { theme } = useTheme()
@@ -66,13 +67,18 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   const rulerInnerRef = useRef(null)
   const playheadRef = useRef(null)
   const durationRef = useRef(0)
-  // v1.7.0 (som tratado): a fonte de áudio pode trocar (original ↔ prévia
-  // tratada) SEM mudar o arquivo — a posição precisa sobreviver à troca.
+  // v1.8.0: a prévia A/B é feita em TEMPO REAL (Web Audio dentro do player) —
+  // a fonte de áudio nunca troca mais; a posição só precisa sobreviver à
+  // recriação do wavesurfer (troca de tema/arquivo).
   const lastTimeRef = useRef(0) // última posição conhecida do transporte
   const lastFileRef = useRef(null) // arquivo que "detém" a posição atual
   const restoreTimeRef = useRef(0) // posição a restaurar no próximo 'ready'
   const pendingPlayRef = useRef(false) // play pedido antes do wavesurfer ficar pronto
   const appliedSeekRef = useRef(null) // último seekTo já aplicado (evita reaplicar no 'ready')
+  // v1.8.0: FORMA da onda seguindo o tratamento (render offline → envelope)
+  const shapeTokenRef = useRef(0) // descarta renders de cfgs antigas
+  const shapeTimerRef = useRef(null) // debounce do render offline
+  const shapeDrawnRef = useRef(null) // { ws, key } já desenhado (evita refazer)
 
   // Elemento com overflow-x que realmente rola (dentro do Shadow DOM do
   // wavesurfer) — a regua acompanha o scroll por ele.
@@ -119,8 +125,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     durationRef.current = 0
     setDuration(0)
     setCurTime(0)
-    // v1.7.0: se só a FONTE de áudio mudou (original ↔ prévia tratada do 🎤),
-    // a posição do transporte sobrevive à troca; arquivo novo começa em 0.
+    // Mesmo arquivo (ex.: troca de tema): a posição do transporte sobrevive
+    // à recriação do wavesurfer; arquivo novo começa em 0.
     const sameFile = lastFileRef.current === selectedFile.path
     restoreTimeRef.current = sameFile ? lastTimeRef.current : 0
     lastFileRef.current = selectedFile.path
@@ -152,9 +158,10 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       shadow.appendChild(styleEl)
     }
 
-    // 🎤 som avançado: prévia tratada substitui temporariamente a fonte
-    // (o vídeo é mudo — o wavesurfer é a saída de áudio do app inteiro)
-    ws.load(audioOverrideUrl || `file:///${selectedFile.path.replace(/\\/g, '/')}`)
+    // O vídeo é mudo — o wavesurfer é a saída de áudio do app inteiro. O
+    // tratamento do 🎤 acontece DESTE lado (Web Audio em tempo real), então a
+    // fonte é sempre o arquivo original.
+    ws.load(`file:///${selectedFile.path.replace(/\\/g, '/')}`)
 
     ws.on('ready', () => {
       setReady(true)
@@ -162,7 +169,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       const d = ws.getDuration() || 0
       durationRef.current = d
       setDuration(d)
-      // Restaura a posição após a troca de fonte (não mexe em arquivo novo)
+      // Restaura a posição quando o wavesurfer é recriado (não mexe em arquivo novo)
       const restore = restoreTimeRef.current
       if (restore > 0 && (!d || restore < d)) {
         ws.setTime(restore)
@@ -170,7 +177,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
         updatePlayhead(restore)
         syncClock(restore)
       }
-      // Play pedido durante a recarga (prévia A/B do modal de som)
+      // Play pedido antes do wavesurfer ficar pronto (prévia A/B do modal)
       if (pendingPlayRef.current) {
         pendingPlayRef.current = false
         ws.play()
@@ -220,6 +227,9 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
 
     wsRef.current = ws
     if (waveSurferRef) waveSurferRef.current = ws
+    // v1.8.0: entrega o player (WebAudioPlayer) pra cadeia de prévia em tempo
+    // real se conectar no AudioContext dele.
+    if (onPlayer) onPlayer(ws.getMediaElement())
 
     return () => {
       detachScroll()
@@ -227,8 +237,69 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       ws.destroy()
       wsRef.current = null
       if (waveSurferRef) waveSurferRef.current = null
+      if (onPlayer) onPlayer(null)
     }
-  }, [selectedFile, theme, audioOverrideUrl])
+  }, [selectedFile, theme])
+
+  // v1.8.0: a FORMA da onda acompanha o que está sendo OUVIDO — quando a
+  // prévia está tratada, a MESMA cadeia roda offline (realtimeChain.
+  // renderEnvelope) e os picos são redesenhados. Nada mexe no player nem na
+  // reprodução; lado original (ou 🎤 off) volta à forma do arquivo original.
+  // Debounce: refaz só quando a cfg para de mudar (preset/ajustes/A-B).
+  useEffect(() => {
+    const ws = wsRef.current
+    const token = ++shapeTokenRef.current
+    clearTimeout(shapeTimerRef.current)
+    if (!ready || !ws) return
+    const decoded = ws.getDecodedData()
+    if (!decoded) return
+    const key = shapeCfg ? JSON.stringify(shapeCfg) : 'original'
+    if (shapeDrawnRef.current && shapeDrawnRef.current.ws === ws && shapeDrawnRef.current.key === key) return
+
+    const draw = (env) => {
+      const renderer = ws.renderer
+      if (!renderer || typeof renderer.render !== 'function') return
+      try {
+        if (env) {
+          // Buffer "falso": o renderer mapeia array↔largura por tempo de
+          // duração — o envelope esticado na duração real vira a forma.
+          const dur = decoded.duration || 0
+          renderer.render({
+            duration: dur,
+            length: env[0].length,
+            sampleRate: dur > 0 ? env[0].length / dur : 48000,
+            numberOfChannels: env.length,
+            getChannelData: (i) => env[i] || env[0],
+          })
+        } else if (renderer.audioData !== decoded) {
+          renderer.render(decoded)
+        }
+        // repinta cursor/preenchimento na posição atual (sem dar play)
+        try {
+          ws.updateProgress()
+        } catch {
+          // sem progresso ainda — ok
+        }
+        shapeDrawnRef.current = { ws, key }
+      } catch (e) {
+        console.warn('[forma] falha ao redesenhar a onda:', e)
+      }
+    }
+
+    if (!shapeCfg) {
+      draw(null)
+      return
+    }
+    shapeTimerRef.current = setTimeout(() => {
+      realtimeChain
+        .renderEnvelope(decoded, shapeCfg, () => shapeTokenRef.current !== token)
+        .then((env) => {
+          if (shapeTokenRef.current !== token || wsRef.current !== ws) return
+          if (env) draw(env)
+        })
+    }, 350)
+    return () => clearTimeout(shapeTimerRef.current)
+  }, [shapeCfg, ready])
 
   // Scroll horizontal com a roda do mouse: a faixa interna do wavesurfer so
   // roda na horizontal via Shift+roda ou barra de rolagem; aqui a roda

@@ -231,6 +231,42 @@ ipcMain.handle('select-output-dir', async () => {
   return r.canceled ? null : r.filePaths[0];
 });
 
+// v1.8.0 — projeto: diálogo "Salvar como" (padrão: pasta da mídia +
+// nome do arquivo de mídia como nome do projeto).
+ipcMain.handle('select-project-save-path', async (e, opts) => {
+  const defaultDir = opts?.defaultDir && fs.existsSync(opts.defaultDir) ? opts.defaultDir : undefined;
+  const defaultName = String(opts?.defaultName || 'projeto').replace(/[\\/:*?"<>|]/g, '_');
+  const r = await dialog.showSaveDialog(mainWindow, {
+    title: 'Salvar projeto',
+    defaultPath: defaultDir ? path.join(defaultDir, `${defaultName}.corgi.json`) : `${defaultName}.corgi.json`,
+    filters: [{ name: 'Projeto CORGI', extensions: ['json'] }],
+  });
+  if (r.canceled || !r.filePath) return null;
+  let filePath = r.filePath;
+  if (!filePath.toLowerCase().endsWith('.json')) filePath += '.json';
+  return filePath;
+});
+
+// v1.8.0 — projeto: diálogo "Abrir" + leitura/parse do JSON e checagem da mídia
+// (se o arquivo foi movido/renomeado, o renderer avisa e reabre sem a mídia).
+ipcMain.handle('open-project', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    title: 'Abrir projeto',
+    filters: [{ name: 'Projeto CORGI (*.corgi.json)', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (r.canceled || !r.filePaths[0]) return { canceled: true };
+  const filePath = r.filePaths[0];
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (!data || typeof data !== 'object') throw new Error('invalid project file');
+    const mediaPath = typeof data.mediaPath === 'string' ? data.mediaPath : '';
+    return { ok: true, path: filePath, data, mediaExists: mediaPath ? fs.existsSync(mediaPath) : false };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 ipcMain.handle('join-path', (e, dir, filename) => {
   return path.join(dir, filename);
 });

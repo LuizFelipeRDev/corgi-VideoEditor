@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { IconHeadphones, IconDeviceFloppy, IconTrash, IconX, IconHourglass, IconCircleDashed, IconCircleCheckFilled } from '@tabler/icons-react'
+import { IconHeadphones, IconDeviceFloppy, IconTrash, IconX, IconCircleDashed, IconCircleCheckFilled } from '@tabler/icons-react'
 import { useLang } from '../lib/i18n'
 import {
   SYSTEM_PRESETS,
@@ -75,7 +75,7 @@ function HzRow({ label, value, min, max, onChange }) {
   )
 }
 
-function SoundConfigModal({ config, customPresets, rendering, treatedHash, hashOf, onPreview, onClose, onApply, onPresetsChange, onListen }) {
+function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, onPresetsChange, onListen }) {
   const { t } = useLang()
   const [cfg, setCfg] = useState(() => clone(config))
   const [tab, setTab] = useState('noise')
@@ -85,14 +85,11 @@ function SoundConfigModal({ config, customPresets, rendering, treatedHash, hashO
 
   const isCustom = customPresets.some((p) => p.id === cfg.presetId)
   const chain = describeSoundChain(cfg)
-  // Estado da prévia tratada (indicador entre os botões — wireframe linha 113):
-  // loading enquanto o render roda; ready quando o hash do RASCUNHO bate com o
-  // último render ok; idle = rascunho ainda não renderizado (ou falha).
-  const previewStatus = rendering
-    ? 'loading'
-    : treatedHash && treatedHash === hashOf(cfg)
-      ? 'ready'
-      : 'idle'
+  // Indicador entre os botões (wireframe linha 113) — v1.8.0: a prévia é em
+  // TEMPO REAL (Web Audio), então nunca há espera de render: 'ready' quando a
+  // cadeia tem o que tratar; 'idle' = tudo desligado (o OUÇA TRATADO toca o
+  // original).
+  const previewStatus = chain.length ? 'ready' : 'idle'
 
   const set = (group, key, value) =>
     setCfg((prev) => ({ ...prev, [group]: { ...prev[group], [key]: value } }))
@@ -103,7 +100,7 @@ function SoundConfigModal({ config, customPresets, rendering, treatedHash, hashO
     setDeleteArm(false)
     const next = { ...cfg, ...clone(preset.params), presetId: id }
     setCfg(next)
-    // Selecionar preset já dispara a prévia tratada do rascunho (wireframe 121)
+    // Selecionar preset sincroniza a prévia em tempo real do rascunho (121)
     onPreview?.(next)
   }
 
@@ -144,7 +141,7 @@ function SoundConfigModal({ config, customPresets, rendering, treatedHash, hashO
         }
     const next = { ...cfg, ...params }
     setCfg(next)
-    // RESTAURAR também re-renderiza a prévia do rascunho (mesmo fluxo do preset)
+    // RESTAURAR também sincroniza a prévia em tempo real (mesmo fluxo do preset)
     onPreview?.(next)
   }
 
@@ -356,31 +353,22 @@ function SoundConfigModal({ config, customPresets, rendering, treatedHash, hashO
           )}
         </div>
 
-        {/* Prévia A/B — toca no player principal, sem tratar o arquivo */}
+        {/* Prévia A/B em TEMPO REAL — troca na hora, na posição atual, sem
+            esperar render nem recarregar a fonte (crossfade no player) */}
         <div className="flex items-center gap-2 mt-2">
           <IconHeadphones size={14} stroke={2} className="text-retro-black shrink-0" />
           <button
             onClick={() => onListen('original')}
-            disabled={rendering}
             className={`${btn} flex-1`}
           >
             {t('sound.listenOriginal')}
           </button>
-          {/* Indicador da prévia tratada (mesmo estilo dos botões — wireframe 113):
-              [CircleDashed] → [ampulheta girando] → [check verde] */}
+          {/* Indicador da cadeia (mesmo estilo dos botões — wireframe 113):
+              [verde] = há tratamento em tempo real | [tracejado] = cadeia vazia */}
           <div
-            title={t(
-              previewStatus === 'loading'
-                ? 'sound.previewLoading'
-                : previewStatus === 'ready'
-                  ? 'sound.previewReady'
-                  : 'sound.previewIdle'
-            )}
+            title={t(previewStatus === 'ready' ? 'sound.previewReady' : 'sound.previewIdle')}
             className="w-7 h-7 shrink-0 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm flex items-center justify-center"
           >
-            {previewStatus === 'loading' && (
-              <IconHourglass size={14} stroke={2} className="text-retro-black hourglass-flip" />
-            )}
             {previewStatus === 'ready' && (
               <IconCircleCheckFilled size={14} className="text-green-600" />
             )}
@@ -390,7 +378,6 @@ function SoundConfigModal({ config, customPresets, rendering, treatedHash, hashO
           </div>
           <button
             onClick={() => onListen('treated', cfg)}
-            disabled={rendering}
             className={`${btn} flex-1`}
           >
             {t('sound.listenTreated')}
