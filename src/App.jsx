@@ -17,6 +17,7 @@ import RnnoiseModal from './components/RnnoiseModal'
 import ShortcutsModal from './components/ShortcutsModal'
 import RecentProjectsModal from './components/RecentProjectsModal'
 import SoundConfigModal from './components/SoundConfigModal'
+import CutConfigModal from './components/CutConfigModal'
 import Waveform from './components/Waveform'
 import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps, ensureExportFontLoaded } from './lib/subtitleRender'
 import { buildSoundChain, mergeSoundConfig, DEFAULT_SOUND_CONFIG, findPreset } from './lib/soundChain'
@@ -46,6 +47,25 @@ function App() {
   const [outputResolution, setOutputResolution] = useState('original')
   const [threshold, setThreshold] = useState('-30')
   const [marginVal, setMarginVal] = useState('0.5')
+  // Cut: asymmetric margin (before/after) + smoothness (auto-editor --smooth)
+  const [marginAfter, setMarginAfter] = useState('0.5')
+  const [smooth, setSmooth] = useState('0.2')
+  // --- AUTO CUT (v1.10.1): single toggle for silence cutting ---
+  // OFF = preview and export WITHOUT cutting (like it used to be — silences intact);
+  // ON = the cut was already generated (auto-editor, ON REQUEST — never by
+  // itself) and the preview plays/shows the final result. cutState = { path, segments, fps }
+  // of the preview's cut file (cutmap to remap subtitles and markers).
+  const [cutEnabled, setCutEnabled] = useState(false)
+  const [cutBusy, setCutBusy] = useState(false)
+  const [cutState, setCutState] = useState(null)
+  const [showCutConfig, setShowCutConfig] = useState(false)
+  // Ref to the CURRENT file: generateCutPreview discards the result if the
+  // user switches files mid-generation (the selectedFile closure would go
+  // stale after the await).
+  const selectedFileRef = useRef(null)
+  useEffect(() => {
+    selectedFileRef.current = selectedFile
+  }, [selectedFile])
   const [processing, setProcessing] = useState(false)
   const [progress, setProgress] = useState({ pct: 0, text: '0%' })
   const [showSettings, setShowSettings] = useState(false)
@@ -139,6 +159,8 @@ function App() {
     if (!c) return
     setThreshold(c.threshold)
     setMarginVal(c.margin)
+    setMarginAfter(c.margin_after ?? '0.5')
+    setSmooth(c.smooth ?? '0.2')
     setOutputFormat(c.output_format || 'mp3')
     setOutputResolution(c.output_resolution || 'original')
     if (c.output_folder) setOutputFolder(c.output_folder)
@@ -346,6 +368,139 @@ function App() {
     setInfoToast(next.enabled ? t('sound.toastOn') : t('sound.toastOff'))
   }
 
+  // --- AUTO CUT (v1.10.1) ---------------------------------------------------
+  // File the PREVIEW plays/shows: the cut one while the cut is on.
+  // selectedFile stays the ORIGINAL — export always starts from it (and trims
+  // the I/O range first, a contract the preview does not reproduce).
+  const previewFile = useMemo(
+    () =>
+      cutEnabled && cutState && cutState.srcPath === selectedFile?.path
+        ? { ...selectedFile, path: cutState.path }
+        : selectedFile,
+    [selectedFile, cutEnabled, cutState]
+  )
+
+  // Preview subtitles remapped to the cut timeline (same remap as export).
+  // The edit panel stays on the ORIGINAL timeline: edit the source and remap
+  // on the fly is exactly the export contract.
+  const previewSubtitles = useMemo(
+    () =>
+      cutEnabled && cutState?.segments?.length && cutState.srcPath === selectedFile?.path
+        ? remapSubtitleTimestamps(subtitles, cutState.segments, cutState.fps)
+        : subtitles,
+    [subtitles, selectedFile, cutEnabled, cutState]
+  )
+
+  // Generates the preview cut: auto-editor (cut audio) + Premiere cutmap
+  // (segments to remap preview subtitles). Runs ON REQUEST ONLY — toggling
+  // the switch on, saving config with the cut on, or applying the analyzer's
+  // suggestion. `over` injects fresh threshold/margin (avoids a stale
+  // closure right after setState).
+  const generateCutPreview = async (over = {}) => {
+    if (!selectedFile || cutBusy) return
+    const thr = over.threshold ?? threshold
+    const mar = over.margin ?? marginVal
+    const marAfter = over.marginAfter ?? marginAfter
+    const sm = over.smooth ?? smooth
+    const base = selectedFile.name.replace(/\.[^.]+$/, '')
+    const inputExt = selectedFile.name.split('.').pop().toLowerCase()
+    // Asymmetric margin: equal → simple form (exactly like always);
+    // different → "before,after" (auto-editor --margin A,B). Smoothness 0 →
+    // --smooth 0 (off; the auto-editor docs use the bare number).
+    const marginArg = mar === marAfter ? `${mar}s` : `${mar}s,${marAfter}s`
+    const smoothArg = sm === '0' ? '0' : `${sm}s`
+    const edit = [
+      '--edit', `audio:${Math.pow(10, parseFloat(thr) / 20)}`,
+      '--margin', marginArg,
+      '--smooth', smoothArg,
+    ]
+    const startedPath = selectedFile.path
+    // This file already has a cut WITH THESE PARAMETERS (e.g.: modal SAVE
+    // with nothing changed): don't spawn auto-editor for nothing.
+    if (
+      cutState &&
+      cutState.srcPath === startedPath &&
+      cutState.thr === thr &&
+      cutState.mar === mar &&
+      cutState.marAfter === marAfter &&
+      cutState.sm === sm
+    ) {
+      setCutEnabled(true)
+      return
+    }
+    setCutBusy(true)
+    try {
+      const cutPath = await window.api.joinPath(selectedFile.folder, `${base}_CUT.${inputExt}`)
+      const res = await window.api.runAutoEditor([selectedFile.path, ...edit, '--output', cutPath])
+      if (!res.success) {
+        console.warn('[cut] auto-editor falhou na prévia:', res.error)
+        setInfoToast(t('cut.failed'))
+        return
+      }
+      // cutmap: same segments as export, to remap preview subtitles
+      let segments = null
+      let fps = 24
+      try {
+        const xmlPath = await window.api.joinPath(selectedFile.folder, 'corgi_cutmap.xml')
+        const xr = await window.api.runAutoEditorExport([
+          selectedFile.path, '--export', 'premiere', ...edit, '--output', xmlPath
+        ])
+        if (xr.success) {
+          const xmlText = await window.api.readFile(xmlPath)
+          if (xmlText) {
+            const parsed = parsePremiereXml(xmlText)
+            if (parsed.segments.length > 0) {
+              segments = parsed.segments
+              fps = parsed.fps
+            }
+          }
+          await window.api.deleteFile(xmlPath)
+        } else {
+          console.warn('[cut] cutmap falhou:', xr.error)
+        }
+      } catch (e) {
+        console.warn('[cut] cutmap falhou (prévia segue sem remapear legendas):', e)
+      }
+      // File switched mid-generation: throw the CUT file away and do NOT
+      // turn the toggle on for the new file (its preview doesn't exist yet —
+      // the switch effect already reset the state).
+      if (selectedFileRef.current?.path !== startedPath) {
+        window.api.deleteFile(cutPath).catch(() => {})
+        return
+      }
+      setCutState({ path: cutPath, segments, fps, srcPath: startedPath, thr, mar, marAfter, sm })
+      setCutEnabled(true)
+    } catch (e) {
+      console.error('[cut] falha ao gerar corte da prévia:', e)
+      setInfoToast(t('cut.failed'))
+    } finally {
+      setCutBusy(false)
+    }
+  }
+
+  // Master toggle: OFF goes back to the original ("like it was before",
+  // deleting the generated .CUT); ON generates the cut (the button shows
+  // GENERATING CUT...) and the preview starts playing/showing the final result.
+  const handleToggleCut = async () => {
+    if (!selectedFile || processing || generatingSubtitles || cutBusy) return
+    if (cutEnabled) {
+      const old = cutState
+      setCutEnabled(false)
+      setCutState(null)
+      if (old?.path) window.api.deleteFile(old.path).catch(() => {})
+      return
+    }
+    await generateCutPreview()
+  }
+
+  // New file → start with no cut and the previous .CUT leaves the disk.
+  useEffect(() => {
+    if (cutState?.path) window.api.deleteFile(cutState.path).catch(() => {})
+    setCutEnabled(false)
+    setCutState(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFile?.path])
+
   // Prévia A/B do modal — em TEMPO REAL: 'original' só põe o bypass (crossfade),
   // 'treated' troca a cfg do RASCUNHO (preset/ajustes ainda não aplicados) na
   // cadeia. Troca na hora, na posição atual — sem render e sem recarga.
@@ -408,7 +563,7 @@ function App() {
       configs: subtitleConfigs,
     },
     generation: { model: subtitleModel, language: subtitleLanguage, persistence: subtitlePersistence, smart: smartSubtitle },
-    edit: { threshold, margin: marginVal },
+    edit: { threshold, margin: marginVal, marginAfter, smooth },
     export: { format: outputFormat, resolution: outputResolution },
   })
 
@@ -518,6 +673,8 @@ function App() {
     const e = d.edit || {}
     if (e.threshold !== undefined && e.threshold !== null && e.threshold !== '') setThreshold(String(e.threshold))
     if (e.margin !== undefined && e.margin !== null && e.margin !== '') setMarginVal(String(e.margin))
+    if (e.marginAfter !== undefined && e.marginAfter !== null && e.marginAfter !== '') setMarginAfter(String(e.marginAfter))
+    if (e.smooth !== undefined && e.smooth !== null && e.smooth !== '') setSmooth(String(e.smooth))
 
     const x = d.export || {}
     if (typeof x.format === 'string') setOutputFormat(x.format)
@@ -622,7 +779,7 @@ function App() {
   }
 
   const handleExport = async () => {
-    if (!selectedFile || processing || generatingSubtitles) return
+    if (!selectedFile || processing || generatingSubtitles || cutBusy) return
     // Faixa marcada (I/O): recorta SÓ quando início E fim estão marcados.
     // Falta um dos dois → avisa EXATAMENTE qual (antes de entrar em processing).
     const rangeState = validateExportRange(exportRange)
@@ -726,20 +883,35 @@ function App() {
       console.log(`[export] faixa I/O: ${exportRange.start.toFixed(2)}s → ${exportRange.end.toFixed(2)}s (${(exportRange.end - exportRange.start).toFixed(2)}s)`)
     }
 
-    const args = [
-      workPath, '--progress', 'machine',
-      '--edit', `audio:${Math.pow(10, parseFloat(threshold) / 20)}`,
-      '--margin', `${marginVal}s`,
-      '--output', tempOutPath
-    ]
+    // AUTO CUT ON → cuts as always (auto-editor). OFF → ffmpeg starts from
+    // the work file (original or I/O range already trimmed): the export comes
+    // out UNCUT, exactly like the preview with the toggle off.
+    const doCut = cutEnabled
+    let exportAudioPath = tempOutPath
+    if (doCut) {
+      const args = [
+        workPath, '--progress', 'machine',
+        '--edit', `audio:${Math.pow(10, parseFloat(threshold) / 20)}`,
+        // Same recipe as the preview: asymmetric margin (equal → simple form)
+        // + smoothness — preview and export cut EXACTLY the same.
+        '--margin', marginVal === marginAfter ? `${marginVal}s` : `${marginVal}s,${marginAfter}s`,
+        '--smooth', smooth === '0' ? '0' : `${smooth}s`,
+        '--output', tempOutPath
+      ]
 
-    const result = await window.api.runAutoEditor(args)
+      const result = await window.api.runAutoEditor(args)
 
-    if (!result.success) {
-      if (rangePath) await window.api.deleteFile(rangePath)
-      exportingRef.current = false
-      setProcessing(false)
-      return
+      if (!result.success) {
+        console.warn('[export] auto-editor falhou no corte:', result.error)
+        if (rangePath) await window.api.deleteFile(rangePath)
+        exportingRef.current = false
+        setProcessing(false)
+        setProgress({ pct: 0, text: t('common.error') })
+        return
+      }
+    } else {
+      exportAudioPath = workPath
+      console.log('[export] AUTO CORTE desligado: exportando sem corte de silêncio')
     }
 
     setProgress({ pct: 90, text: t('export.converting') })
@@ -747,9 +919,10 @@ function App() {
     const outputDir = outputFolder || selectedFile.folder
 
     let exportSubtitles = sourceSubtitles
-    // O corte do auto-editor muda a timeline: remapeia quando as legendas
-    // vao ser aplicadas ao video cortado (queima OU SRT lateral)
-    if (shouldBurn || writeSidecarSrt) {
+    // The auto-editor cut changes the timeline: remap when subtitles
+    // will be applied to the cut video (burn OR sidecar SRT). No cut
+    // (AUTO CUT off) means the timeline doesn't change — they follow the original.
+    if (doCut && (shouldBurn || writeSidecarSrt)) {
       try {
         setProgress({ pct: 91, text: t('export.analyzingCut') })
         const xmlPath = await window.api.joinPath(outputDir, 'corgi_cutmap.xml')
@@ -757,7 +930,8 @@ function App() {
           workPath,
           '--export', 'premiere',
           '--edit', `audio:${Math.pow(10, parseFloat(threshold) / 20)}`,
-          '--margin', `${marginVal}s`,
+          '--margin', marginVal === marginAfter ? `${marginVal}s` : `${marginVal}s,${marginAfter}s`,
+          '--smooth', smooth === '0' ? '0' : `${smooth}s`,
           '--output', xmlPath
         ]
         const xmlResult = await window.api.runAutoEditorExport(xmlArgs)
@@ -794,7 +968,7 @@ function App() {
         if (isVideoInput) {
           ffmpegArgs = [
             '-y',
-            '-i', tempOutPath,
+            '-i', exportAudioPath,
           ]
         } else {
           // #00A800 = mesmo verde do preview (DropZone); o 'green' nomeado do
@@ -806,7 +980,7 @@ function App() {
             '-y',
             '-f', 'lavfi',
             '-i', `color=c=${bgColor}:s=${bgRes}:d=${duration}`,
-            '-i', tempOutPath,
+            '-i', exportAudioPath,
           ]
         }
 
@@ -896,7 +1070,7 @@ function App() {
         // Saida de audio: descarta a trilha de video e usa o codec do formato
         // escolhido (o '-c:a aac' fixo antigo era rejeitado por mp3/wav/flac/ogg).
         const audioCodecs = { mp3: 'libmp3lame', wav: 'pcm_s16le', flac: 'flac', ogg: 'libvorbis', aac: 'aac', m4a: 'aac' }
-        const ffmpegArgs = ['-y', '-i', tempOutPath, '-vn']
+        const ffmpegArgs = ['-y', '-i', exportAudioPath, '-vn']
         if (soundChain) {
           // Som avançado ligado: -af exige re-encode (impossível com 'copy')
           ffmpegArgs.push('-af', soundChain)
@@ -942,7 +1116,8 @@ function App() {
       setExportedFolderPath(outputFolder || selectedFile.folder)
       setShowExportToast(true)
     } finally {
-      await window.api.deleteFile(tempOutPath)
+      // No cut means no TEMP on disk (doCut false) — deleting would error.
+      if (doCut) await window.api.deleteFile(tempOutPath)
       if (rangePath) await window.api.deleteFile(rangePath)
       exportingRef.current = false
       setProcessing(false)
@@ -1144,6 +1319,8 @@ function App() {
   const handleSaveSettings = async (newConfig) => {
     if (newConfig.threshold !== undefined) setThreshold(newConfig.threshold)
     if (newConfig.margin !== undefined) setMarginVal(newConfig.margin)
+    if (newConfig.margin_after !== undefined) setMarginAfter(newConfig.margin_after)
+    if (newConfig.smooth !== undefined) setSmooth(newConfig.smooth)
     if (newConfig.output_folder !== undefined) setOutputFolder(newConfig.output_folder)
     if (newConfig.output_format !== undefined) setOutputFormat(newConfig.output_format)
     if (newConfig.output_resolution !== undefined) setOutputResolution(newConfig.output_resolution)
@@ -1173,6 +1350,8 @@ function App() {
     await window.api.saveConfig({
       threshold: newConfig.threshold ?? threshold,
       margin: newConfig.margin ?? marginVal,
+      margin_after: newConfig.margin_after ?? marginAfter,
+      smooth: newConfig.smooth ?? smooth,
       output_folder: newConfig.output_folder ?? outputFolder,
       output_format: newConfig.output_format ?? outputFormat,
       output_resolution: newConfig.output_resolution ?? outputResolution,
@@ -1231,6 +1410,11 @@ function App() {
     const { threshold, margin, denoiseDb } = suggestions
     setThreshold(String(threshold))
     setMarginVal(String(margin))
+    // The suggestion is symmetric: BOTH margin sides take the measured value.
+    setMarginAfter(String(margin))
+    // AUTO CUT on: parameters changed → the preview went stale,
+    // regenerate on the spot with fresh values (no waiting for a toggle).
+    if (cutEnabled) generateCutPreview({ threshold: String(threshold), margin: String(margin), marginAfter: String(margin) })
     const nextSound = { ...soundConfig, enabled: true, noise: { ...soundConfig.noise, denoiseOn: true, denoiseDb } }
     setSoundConfig(nextSound)
     setShowAnalyze(false)
@@ -1242,6 +1426,8 @@ function App() {
           ...current,
           threshold: String(threshold),
           margin: String(margin),
+          // Symmetric suggestion: BOTH margin sides persist the measured value
+          margin_after: String(margin),
           sound_config: JSON.stringify(nextSound),
         })
       }
@@ -1411,13 +1597,13 @@ function App() {
       />
       <div className="flex flex-1 min-h-0">
         {advancedTools && (
-          <Sidebar onSelect={handleSidebarSelect} disabled={processing || generatingSubtitles} />
+          <Sidebar onSelect={handleSidebarSelect} disabled={processing || generatingSubtitles || cutBusy} />
         )}
         <div className={`flex flex-col min-w-0 ${subtitlesEnabled ? 'w-[75%]' : 'w-full'}`}>
           <div className="flex flex-1 min-h-0">
             <div className="flex flex-col w-[66.6%] min-w-0 border-r-2 border-retro-black">
               <DropZone
-                selectedFile={selectedFile}
+                selectedFile={previewFile}
                 setSelectedFile={setSelectedFile}
                 processing={processing}
                 onTimeUpdate={handleTimeUpdate}
@@ -1428,7 +1614,7 @@ function App() {
                 }}
                 videoRef={videoRef}
                 waveSurferRef={waveSurferRef}
-                subtitles={subtitles}
+                subtitles={previewSubtitles}
                 subtitleStyle={subtitleStyle}
                 subtitlePosition={subtitlePosition}
                 subtitleConfigs={subtitleConfigs}
@@ -1444,24 +1630,23 @@ function App() {
               />
             </div>
             <Controls
-              threshold={threshold}
-              setThreshold={setThreshold}
-              marginVal={marginVal}
-              setMarginVal={setMarginVal}
               processing={processing}
               generatingSubtitles={generatingSubtitles}
               onExport={handleExport}
               progress={progress}
-              onSaveConfig={handleSaveSettings}
               soundEnabled={soundConfig.enabled}
               onOpenSound={() => setShowSound(true)}
               onToggleSound={handleToggleSound}
               hasFile={!!selectedFile}
+              cutEnabled={cutEnabled}
+              cutBusy={cutBusy}
+              onOpenCut={() => setShowCutConfig(true)}
+              onToggleCut={handleToggleCut}
             />
           </div>
           <div className="px-4 pb-2 shrink-0">
             <Waveform
-              selectedFile={selectedFile}
+              selectedFile={previewFile}
               onTimeUpdate={handleTimeUpdate}
               seekTo={seekTo}
               videoRef={videoRef}
@@ -1471,7 +1656,10 @@ function App() {
               onPlayer={handlePlayerCreated}
               playRequest={playRequest}
               shapeCfg={shapeCfg}
-              exportRange={exportRange}
+              // I/O markers live on the ORIGINAL timeline (export trims
+              // before cutting) — with the cut on, the ruler is the CUT
+              // timeline and the markers would lie: hidden until turned off.
+              exportRange={cutEnabled ? null : exportRange}
               selectedMarker={selectedMarker}
               onSelectMarker={setSelectedMarker}
             />
@@ -1585,6 +1773,20 @@ function App() {
           onApply={handleApplySound}
           onPresetsChange={handleSoundPresets}
           onListen={handleListenSound}
+        />
+      )}
+      {showCutConfig && (
+        <CutConfigModal
+          threshold={threshold}
+          marginVal={marginVal}
+          marginAfter={marginAfter}
+          smooth={smooth}
+          onClose={() => setShowCutConfig(false)}
+          onSave={(v) => {
+            handleSaveSettings({ threshold: v.threshold, margin: v.margin, margin_after: v.marginAfter, smooth: v.smooth })
+            // Cut on + fresh parameters: regenerate the preview on the spot.
+            if (cutEnabled) generateCutPreview(v)
+          }}
         />
       )}
       <CudaDownloadModal

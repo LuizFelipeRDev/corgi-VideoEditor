@@ -4,6 +4,8 @@ const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const https = require('https');
 const windowConfig = require('../src/global_config/window.js');
+// First-install defaults centralized (see src/global_config/configDefaults.js)
+const { CONFIG_DEFAULTS } = require('../src/global_config/configDefaults.js');
 const { syncFontsDir } = require('./fontSync.cjs');
 
 const isDev = !app.isPackaged;
@@ -148,30 +150,10 @@ function getFontsDir() {
 }
 
 function readConfig() {
-  const defaults = {
-    threshold: '-30',
-    margin: '0.5',
-    output_folder: '',
-    output_format: 'mp3',
-    output_resolution: 'original',
-    subtitles: 'false',
-    subtitle_model: 'tiny',
-    subtitle_position: 'bottom',
-    subtitle_style: 'hormozi',
-    green_screen: 'false',
-    burn_subtitles: 'true',
-    words_per_line: '4',
-    lines_count: '2',
-    subtitle_configs: '{}',
-    subtitle_position_mode: 'fixed',
-    subtitle_position_percent: '80',
-    subtitle_persistence: '1',
-    smart_subtitle: 'false',
-    auto_line_wrap: 'false',
-    language: 'en',
-    subtitle_language: 'auto',
-    theme: 'modern',
-  };
+  // First-install defaults: single source in src/global_config/configDefaults.js
+  // (this object used to live inline here). The file, when present,
+  // overrides these values key by key.
+  const defaults = { ...CONFIG_DEFAULTS };
   if (!fs.existsSync(configPath)) return defaults;
   try {
     const content = fs.readFileSync(configPath, 'utf-8');

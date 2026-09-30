@@ -51,3 +51,8 @@
 - "SAVE" button remains semi-transparent (opacity-30) as long as there are no edits
 - When editing any subtitle (text, timing, adding, deleting), the "SAVE" button becomes active
 - Upon saving, serializes the subtitle array back to SRT format and writes it to the `_words.srt` file
+
+## Code Comments Rule
+- **All code comments must be written in English** — every new comment and every existing comment you edit.
+- Do NOT translate or rewrite pre-existing comments as a side effect of unrelated work: old comments are historical context and stay as they are. Translating old comments happens only on explicit maintainer request.
+- `src/global_config/` additionally follows its own `src/global_config/AGENTS.md` (frozen zone): its legacy Portuguese comments stay untouched until the maintainer says otherwise.

@@ -126,6 +126,21 @@ export default {
   'controls.exportBtn': 'EXPORT',
   'controls.processing': 'PROCESSING...',
 
+  // --- Auto cut (silence cut) v1.10.1 ---
+  'cut.configBtn': 'AUTO CUT',
+  'cut.generating': 'GENERATING CUT...',
+  'cut.modalTitle': 'AUTO CUT',
+  'cut.modalHint': 'MIN VOLUME defines what counts as silence; MARGIN (before/after) the padding around speech; SMOOTHNESS avoids micro-cuts. Cut ON: the preview plays/shows the final result and export cuts the same way. OFF: everything as-is (silences intact).',
+  'cut.marginBefore': 'MARGIN BEFORE',
+  'cut.marginAfter': 'MARGIN AFTER',
+  'cut.smooth': 'CUT SMOOTHNESS',
+  'cut.smoothHint': 'Avoids micro-cuts: silences shorter than this are kept. 0 = off. Default 0.2s.',
+  'cut.linkOn': 'Chain on — before and after keep their proportion',
+  'cut.linkOff': 'Chain off — each field with its own value',
+  'cut.tipOn': 'Cut ON — preview = final result. Click to see how it was before.',
+  'cut.tipOff': 'Cut OFF — no cut, silences intact. Click to generate and hear the final result.',
+  'cut.failed': 'Failed to generate the cut',
+
   // --- Barra inferior ---
   'bottombar.folder': 'FOLDER:',
   'bottombar.sameAsFile': 'SAME AS FILE',

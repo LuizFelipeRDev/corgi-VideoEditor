@@ -121,6 +121,21 @@ export default {
   'controls.exportBtn': 'EXPORTAR',
   'controls.processing': 'PROCESSANDO...',
 
+  // --- Auto cut (silence cut) v1.10.1 ---
+  'cut.configBtn': 'AUTO CORTE',
+  'cut.generating': 'GERANDO CORTE...',
+  'cut.modalTitle': 'AUTO CORTE',
+  'cut.modalHint': 'VOLUME MÍNIMO define o que é silêncio; MARGEM (antes/depois) o padding em volta da fala; SUAVIDADE evita microcortes. Corte LIGADO: a prévia toca/mostra o resultado final e o export corta igual. DESLIGADO: tudo sai como estava (silêncios intactos).',
+  'cut.marginBefore': 'MARGEM ANTES',
+  'cut.marginAfter': 'MARGEM DEPOIS',
+  'cut.smooth': 'SUAVIDADE DOS CORTES',
+  'cut.smoothHint': 'Evita microcortes: silêncios mais curtos que isso são mantidos. 0 = desligado. Padrão 0.2s.',
+  'cut.linkOn': 'Corrente fechada — antes e depois mantêm a proporção',
+  'cut.linkOff': 'Corrente aberta — cada campo com seu valor',
+  'cut.tipOn': 'Corte LIGADO — prévia = resultado final. Clique para ver como estava antes.',
+  'cut.tipOff': 'Corte DESLIGADO — sem corte, silêncios intactos. Clique para gerar e ouvir o resultado final.',
+  'cut.failed': 'Falha ao gerar o corte',
+
   // --- Barra inferior ---
   'bottombar.folder': 'PASTA:',
   'bottombar.sameAsFile': 'MESMA DO ARQUIVO',
