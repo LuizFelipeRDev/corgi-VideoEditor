@@ -67,6 +67,8 @@ export const DEFAULT_SOUND_CONFIG = {
   enabled: false,
   presetId: 'podcast',
   ...clone(SYSTEM_PRESETS[0].params),
+  // Motor de ruído: 'classic' (afftdn) ou 'rnnoise' (arnndn, exige modelo)
+  noise: { denoiseMode: 'classic', ...clone(SYSTEM_PRESETS[0].params).noise },
 }
 
 // Merge defensivo do JSON salvo no config.ini sobre o padrão.
@@ -80,6 +82,9 @@ export function mergeSoundConfig(saved) {
     const g = saved[group]
     out[group] = { ...base[group], ...(g && typeof g === 'object' ? g : {}) }
   }
+  // Sanitiza denoiseDb salvo por versões antigas (clamp -50..-10 deixava
+  // passar -19..-10, que o afftdn rejeita e quebrava o export).
+  out.noise.denoiseDb = clamp(Math.round(Number(out.noise.denoiseDb) || -25), -80, -20)
   return out
 }
 
@@ -93,10 +98,29 @@ export function findPreset(id, customPresets = []) {
 }
 
 // ---------------------------------------------------------------------------
+// Escapa um path de arquivo pra dentro de uma opção de filtro (-af).
+// O parser do ffmpeg tem níveis: o nível 1 (grafos) consome o backslash
+// simples, então o ':' do drive Windows precisa de BACKSLASH DUPLO (\\:) pra
+// chegar inteiro no nível 2 (opções). Aspas simples NÃO funcionam (somem no
+// nível 1) — validado contra o ffmpeg real do projeto nos dois sentidos
+// (path simples e path com espaço/parênteses, via exec igual ao run-ffmpeg).
+// Apóstrofo no path é removido (janela rara: o export falha alto, não mudo).
+// ---------------------------------------------------------------------------
+export function escFilterPath(p) {
+  return String(p)
+    .replace(/\\/g, '/')
+    .replace(/'/g, '')
+    .replace(/:/g, '\\\\:')
+}
+
+// ---------------------------------------------------------------------------
 // Montagem da cadeia -af (ordem: gating de ruído → EQ → dinâmica → FX).
 // Retorna '' quando não há nada ligado — o export aí segue sem -af.
+// opts.rnnoiseModel = path do modelo neural quando o motor está em modo
+// 'rnnoise'; sem o path o ramo neural cai no afftdn clássico (as chamadas
+// de truthiness — forma d'onda, escuta A/B — só precisam de uma cadeia).
 // ---------------------------------------------------------------------------
-export function buildSoundChain(cfg) {
+export function buildSoundChain(cfg, opts = {}) {
   if (!cfg || typeof cfg !== 'object') return ''
   const n = cfg.noise || {}
   const d = cfg.dynamics || {}
@@ -105,7 +129,18 @@ export function buildSoundChain(cfg) {
   const parts = []
 
   if (n.highpassOn) parts.push(`highpass=f=${clamp(Math.round(Number(n.highpassHz) || 80), 20, 500)}`)
-  if (n.denoiseOn) parts.push(`afftdn=nf=${clamp(Math.round(Number(n.denoiseDb) || -25), -50, -10)}`)
+  if (n.denoiseOn) {
+    if (n.denoiseMode === 'rnnoise' && opts.rnnoiseModel) {
+      // arnndn (RNNoise): modelo neural treinado pra voz. O graph do ffmpeg
+      // auto-ressampla (44.1k/48k) — não precisa de aresample explícito.
+      parts.push(`arnndn=m=${escFilterPath(opts.rnnoiseModel)}`)
+    } else {
+      // nf do afftdn aceita só [-80, -20] NESTE ffmpeg — valor fora derruba o
+      // export inteiro ("Error applying option 'nf'"), então o clamp é a
+      // última linha de defesa (sliders e merge já entregam na faixa).
+      parts.push(`afftdn=nf=${clamp(Math.round(Number(n.denoiseDb) || -25), -80, -20)}`)
+    }
+  }
   if (n.lowpassOn) parts.push(`lowpass=f=${clamp(Math.round(Number(n.lowpassHz) || 8000), 1000, 20000)}`)
   if (n.deEssOn) parts.push('deesser')
 
@@ -168,7 +203,7 @@ export function describeSoundChain(cfg) {
   const f = cfg.fx || {}
   const names = []
   if (n.highpassOn) names.push('highpass')
-  if (n.denoiseOn) names.push('afftdn')
+  if (n.denoiseOn) names.push(n.denoiseMode === 'rnnoise' ? 'arnndn' : 'afftdn')
   if (n.lowpassOn) names.push('lowpass')
   if (n.deEssOn) names.push('deesser')
   if (eqActive(e)) names.push(e.tone === 'radio' ? 'bandpass+eq' : 'eq')

@@ -30,7 +30,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', descKey: 'settings.modelDesc.large-v3' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, cudaInstalled }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, subtitleHMargin, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, cudaInstalled, advancedTools }) {
   const { lang, setLang, t } = useLang()
   const { theme, setTheme } = useTheme()
   const [tab, setTab] = useState('sistema')
@@ -49,8 +49,10 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   const [localPersistence, setLocalPersistence] = useState(subtitlePersistence ?? 1)
   const [localSmartSubtitle, setLocalSmartSubtitle] = useState(smartSubtitle)
   const [localAutoLineWrap, setLocalAutoLineWrap] = useState(autoLineWrap)
+  const [localHMargin, setLocalHMargin] = useState(Number.isFinite(Number(subtitleHMargin)) ? Math.min(20, Math.max(0, Number(subtitleHMargin))) : 0.5)
   const [localPositionMode, setLocalPositionMode] = useState(positionMode || 'fixed')
   const [localPositionPercent, setLocalPositionPercent] = useState(positionPercent ?? 80)
+  const [localAdvancedTools, setLocalAdvancedTools] = useState(advancedTools ?? true)
 
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [modelInstalled, setModelInstalled] = useState({})
@@ -144,6 +146,8 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
       subtitle_persistence: localPersistence,
       smart_subtitle: localSmartSubtitle,
       auto_line_wrap: localAutoLineWrap,
+      subtitle_h_margin: localHMargin,
+      advanced_tools: localAdvancedTools,
       subtitle_position_mode: localPositionMode,
       subtitle_position_percent: localPositionPercent,
     })
@@ -482,6 +486,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                 <span>
                   {localResolution === 'original' && t('settings.resOriginal')}
                   {localResolution === 'landscape' && t('settings.resLandscape')}
+                  {localResolution === 'landscape720' && t('settings.res720p')}
                   {localResolution === 'portrait' && t('settings.resPortrait')}
                 </span>
                 <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -490,11 +495,15 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
               </button>
 
               {showResPopup && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-retro-bg border-2 border-retro-black rounded shadow-retro z-50">
+                // flex-col obriga os spans do Tooltip a virarem blocos: sem
+                // isso os itens eram inline-block e ficavam 2x1 (original ao
+                // lado de paisagem, retrato embaixo).
+                <div className="absolute top-full left-0 right-0 mt-1 bg-retro-bg border-2 border-retro-black rounded shadow-retro z-50 flex flex-col">
                   {[
-                    { id: 'original', icon: IconZoomScan, labelKey: 'settings.resOriginal', descKey: 'settings.resOriginalDesc' },
-                    { id: 'landscape', icon: IconRectangle, labelKey: 'settings.resLandscape', descKey: 'settings.resLandscapeDesc' },
-                    { id: 'portrait', icon: IconRectangleVertical, labelKey: 'settings.resPortrait', descKey: 'settings.resPortraitDesc' },
+                    { id: 'original', icon: IconZoomScan, labelKey: 'settings.resOriginal', descKey: 'settings.resOriginalDesc', dims: t('settings.auto') },
+                    { id: 'landscape', icon: IconRectangle, labelKey: 'settings.resLandscape', descKey: 'settings.resLandscapeDesc', dims: '1920x1080' },
+                    { id: 'landscape720', icon: IconRectangle, labelKey: 'settings.res720p', descKey: 'settings.res720pDesc', dims: '1280x720' },
+                    { id: 'portrait', icon: IconRectangleVertical, labelKey: 'settings.resPortrait', descKey: 'settings.resPortraitDesc', dims: '1080x1920' },
                   ].map((r) => (
                     <Tooltip key={r.id} text={t(r.descKey)}>
                       <button
@@ -510,9 +519,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                       >
                         <r.icon size={14} stroke={2} />
                         <span>{t(r.labelKey)}</span>
-                        <span className="ml-auto text-[6px] opacity-60">
-                          {r.id === 'original' ? t('settings.auto') : r.id === 'landscape' ? '1920x1080' : '1080x1920'}
-                        </span>
+                        <span className="ml-auto text-[6px] opacity-60">{r.dims}</span>
                       </button>
                     </Tooltip>
                   ))}
@@ -717,6 +724,34 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
             </label>
           </div>
 
+          {/* Espacamento horizontal: so faz sentido com a quebra automatica
+              ligada (sem ela a largura util nao muda nada no export). */}
+          <div className={`mb-4 ${!localSubtitles || !localAutoLineWrap ? 'opacity-40 pointer-events-none' : ''}`}>
+            <label className="flex items-center gap-2">
+              <span className="font-pixel text-[7px] text-retro-black uppercase">
+                {t('settings.hMargin', { value: localHMargin.toFixed(1) })}
+              </span>
+              <Tooltip text={t('settings.hMarginTooltip')}>
+                <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+              </Tooltip>
+            </label>
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="range"
+                min="0"
+                max="20"
+                step="0.5"
+                value={localHMargin}
+                onChange={(e) => setLocalHMargin(Number(e.target.value))}
+                disabled={!localSubtitles || !localAutoLineWrap}
+                className="flex-1 h-2 accent-retro-black disabled:opacity-50"
+              />
+              <span className="font-pixel text-[7px] text-retro-black w-8 text-right">
+                {localHMargin.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+
           {isInputAudio && (
             <p className="font-pixel text-[6px] text-retro-black/40 mb-4">
               {t('settings.inputDetected', { bg: localGreenScreen ? t('settings.bgGreen') : t('settings.bgBlack') })}
@@ -759,6 +794,26 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
             </select>
             <p className="font-pixel text-[6px] text-retro-black/50 mt-1">
               {t('system.themeHint')}
+            </p>
+          </div>
+
+          <div className="mt-5">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localAdvancedTools}
+                onChange={(e) => setLocalAdvancedTools(e.target.checked)}
+                className="w-4 h-4 accent-retro-black"
+              />
+              <span className="font-pixel text-[7px] text-retro-black uppercase">
+                {t('settings.advancedTools')}
+              </span>
+              <Tooltip text={t('settings.advancedToolsTooltip')}>
+                <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+              </Tooltip>
+            </label>
+            <p className="font-pixel text-[6px] text-retro-black/50 mt-1">
+              {t('settings.advancedToolsHint')}
             </p>
           </div>
         </div>

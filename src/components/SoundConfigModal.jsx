@@ -75,7 +75,7 @@ function HzRow({ label, value, min, max, onChange }) {
   )
 }
 
-function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, onPresetsChange, onListen }) {
+function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, onPresetsChange, onListen, rnnoiseInstalled }) {
   const { t } = useLang()
   const [cfg, setCfg] = useState(() => clone(config))
   const [tab, setTab] = useState('noise')
@@ -93,6 +93,12 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
 
   const set = (group, key, value) =>
     setCfg((prev) => ({ ...prev, [group]: { ...prev[group], [key]: value } }))
+
+  // Pill retrô do seletor de motor de ruído (clássico afftdn x neural arnndn)
+  const pillCls = (active) =>
+    `h-6 px-2 border-2 border-retro-black rounded font-pixel text-[6px] uppercase ${
+      active ? 'bg-retro-black text-retro-bg' : 'bg-retro-bg text-retro-black hover:bg-gray-200'
+    } disabled:opacity-40 disabled:cursor-not-allowed`
 
   const applyPreset = (id) => {
     const preset = findPreset(id, customPresets)
@@ -262,15 +268,36 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
         {/* Conteúdo (rolável) */}
         <div className="border-2 border-t-0 border-retro-black rounded-b bg-retro-box p-3 overflow-y-auto min-h-0 flex-1">
           {tab === 'noise' && (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 min-h-[147.5px]">
               <Check checked={cfg.noise.denoiseOn} onChange={(v) => set('noise', 'denoiseOn', v)} label={t('sound.denoise')}>
-                <RangeRow
-                  label={t('sound.strength')}
-                  value={cfg.noise.denoiseDb}
-                  display={`${cfg.noise.denoiseDb} dB`}
-                  min={-40} max={-15} step={1}
-                  onChange={(v) => set('noise', 'denoiseDb', v)}
-                />
+                {cfg.noise.denoiseMode !== 'rnnoise' && (
+                  <RangeRow
+                    label={t('sound.strength')}
+                    value={cfg.noise.denoiseDb}
+                    display={`${cfg.noise.denoiseDb} dB`}
+                    min={-80} max={-20} step={1}
+                    onChange={(v) => set('noise', 'denoiseDb', v)}
+                  />
+                )}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-pixel text-[6px] text-retro-black/70 uppercase mr-1">{t('rnnoise.mode')}</span>
+                  <button
+                    className={pillCls(cfg.noise.denoiseMode !== 'rnnoise')}
+                    onClick={() => set('noise', 'denoiseMode', 'classic')}
+                  >
+                    {t('rnnoise.modeClassic')}
+                  </button>
+                  <button
+                    className={pillCls(cfg.noise.denoiseMode === 'rnnoise')}
+                    disabled={!rnnoiseInstalled}
+                    onClick={() => set('noise', 'denoiseMode', 'rnnoise')}
+                  >
+                    {t('rnnoise.modeNeural')}
+                  </button>
+                </div>
+                {!rnnoiseInstalled && (
+                  <p className="font-pixel text-[6px] text-retro-black/50">{t('rnnoise.needModel')}</p>
+                )}
               </Check>
               <Check checked={cfg.noise.highpassOn} onChange={(v) => set('noise', 'highpassOn', v)} label={t('sound.highpass')}>
                 <HzRow label={t('sound.freq')} value={cfg.noise.highpassHz} min={20} max={500} onChange={(v) => set('noise', 'highpassHz', v)} />
@@ -283,7 +310,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           )}
 
           {tab === 'dynamics' && (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 min-h-[147.5px]">
               <Check checked={cfg.dynamics.normalizeOn} onChange={(v) => set('dynamics', 'normalizeOn', v)} label={t('sound.normalize')}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-pixel text-[6px] text-retro-black/70 uppercase">{t('sound.lufsTarget')}</span>
@@ -313,7 +340,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           )}
 
           {tab === 'eq' && (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 min-h-[147.5px]">
               <Check checked={cfg.eq.on} onChange={(v) => set('eq', 'on', v)} label={t('sound.eqOn')}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-pixel text-[6px] text-retro-black/70 uppercase">{t('sound.tone')}</span>
@@ -340,7 +367,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           )}
 
           {tab === 'fx' && (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 min-h-[147.5px]">
               <Check checked={cfg.fx.speedOn} onChange={(v) => set('fx', 'speedOn', v)} label={t('sound.speed')}>
                 <RangeRow label={t('sound.speed')} value={cfg.fx.speed} display={`${Number(cfg.fx.speed).toFixed(2)}×`} min={0.5} max={2} step={0.05} onChange={(v) => set('fx', 'speed', v)} />
                 <p className="font-pixel text-[6px] text-orange-700 leading-relaxed">{t('sound.speedWarn')}</p>

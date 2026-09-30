@@ -132,6 +132,10 @@ export const SUBTITLE_STYLES = {
     popSize: 10,
     bestFor: 'Professional & clean',
   },
+  /* WORD POP COMENTADO (v1.9.0): escondido da selecao de estilos enquanto o
+     problema do preview nao for resolvido. Fora do SUBTITLE_STYLES ele some
+     do SUBTITLE_STYLE_LIST e projetos salvos com ele caem no estilo padrao
+     (hormozi na preview / corgi-bold no export).
   wordpop: {
     id: 'wordpop',
     name: 'Word Pop',
@@ -148,13 +152,16 @@ export const SUBTITLE_STYLES = {
     bold: true,
     italic: false,
     letterSpacing: 0,
-    wordSpacing: 100,
+    wordSpacing: 70,
     animationType: 'wordpop',
     popIntensity: 1,
-    popDuration: 0.05,
-    popSize: 10,
+    // crescimento curto (~0.08s) - igual ao pop do velhinho.mp4
+    popDuration: 0.08,
+    // 1.2x na palavra ativa (velhinho: ~1.2x, SEGURADO enquanto ativa)
+    popSize: 20,
     bestFor: 'TikTok & viral content',
   },
+  */
   simple: {
     id: 'simple',
     name: 'Simple',

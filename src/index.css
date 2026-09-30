@@ -147,11 +147,6 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
   55%  { transform: scale(1.05); }
   100% { transform: scale(1.00); }
 }
-@keyframes subtitle-wordpop {
-  0%   { transform: scale(0.95); }
-  40%  { transform: scale(1.05); }
-  100% { transform: scale(1.00); }
-}
 /* POPLINE: pop so pra cima (sem "encolher" antes), pico em 40% da
    duracao - mesma forma do \\t do export (subtitleRender.js). O
    transform escala a caixa E a palavra juntos (ambos sao o mesmo span). */
@@ -159,6 +154,22 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
   0%   { transform: scale(1.00); }
   40%  { transform: scale(1.15); }
   100% { transform: scale(1.00); }
+}
+/* WORDPOP: pop rapido e pequeno nas palavras SEM destaque, disparado
+   a cada troca de destaque (espelho do \t 90->95->90 em 100ms do
+   export). A base 0.90 e o MESMO scale inline das sem destaque, entao
+   nao ha salto na entrada/saida da animacao. Dois nomes alternam por
+   fronteira para o browser reiniciar a animacao mesmo com render
+   raro (~4Hz). */
+@keyframes subtitle-wordpop-small {
+  0%   { transform: scale(0.90); }
+  30%  { transform: scale(0.95); }
+  100% { transform: scale(0.90); }
+}
+@keyframes subtitle-wordpop-small-b {
+  0%   { transform: scale(0.90); }
+  30%  { transform: scale(0.95); }
+  100% { transform: scale(0.90); }
 }
 
 @keyframes toast-progress {

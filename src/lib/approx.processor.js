@@ -9,6 +9,10 @@
 // O EXPORT continua usando o ffmpeg exato; isto aqui é só pra decidir rápido.
 
 const dbToLin = (db) => Math.pow(10, db / 20)
+// Abaixo de -60 dBFS nao existe "conteudo pra normalizar" — e silencio (ou o
+// ruido ja cortado pelo gate). Com env no silencio o alvo (targetRms/env)
+// explodiria e inflaria o ganho; melhor congelar.
+const AGC_FLOOR = dbToLin(-60)
 
 class CorgiApproxProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -19,6 +23,7 @@ class CorgiApproxProcessor extends AudioWorkletProcessor {
     this.targetRms = 0.2           // agc: alvo de RMS (~ lufs + 2 dBFS)
     this.env = 0                   // envelope do sinal (gate) / loudness (agc)
     this.gain = 1                  // ganho suavizado aplicado
+    this.warmed = false            // agc: primeiro bloco ainda nao mediu nada
     this.port.onmessage = (e) => {
       const d = e.data || {}
       if (d.mode) this.mode = d.mode
@@ -70,10 +75,24 @@ class CorgiApproxProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < n; i++) sum += input[0][i] * input[0][i]
     const rms = Math.sqrt(sum / n)
     const block = n / sampleRate
-    this.env += (rms - this.env) * (rms > this.env ? 1 - Math.exp(-block / 0.4) : 1 - Math.exp(-block / 1.5))
+    if (this.warmed) {
+      this.env += (rms - this.env) * (rms > this.env ? 1 - Math.exp(-block / 0.4) : 1 - Math.exp(-block / 1.5))
+    } else {
+      // 1º bloco mede de verdade. Partir de env=0 faria targetRms/1e-4 =
+      // teto de ×16 e o ganho corria pra lá (τ≈1 s) => o "primeiro segundo
+      // muito alto" na primeira ativação de um ajuste de áudio (o env só
+      // existe enquanto áudio flui pelo worklet; antes do primeiro play ele
+      // ainda está congelado no zero).
+      this.env = rms
+      this.warmed = true
+    }
     const target = !this.on
       ? 1
-      : Math.min(16, Math.max(0.05, this.targetRms / Math.max(this.env, 1e-4)))
+      : // Silêncio: alvo calculado de um env≈0 estouraria no teto e inflaria
+        // o ganho — a voz entraria multiplicada. Congela no valor atual.
+        this.env < AGC_FLOOR
+        ? this.gain
+        : Math.min(16, Math.max(0.05, this.targetRms / this.env))
     const from = this.gain
     this.gain += (target - this.gain) * (target > this.gain ? 1 - Math.exp(-block / 1.0) : 1 - Math.exp(-block / 0.15))
     const step = (this.gain - from) / n

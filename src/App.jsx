@@ -11,16 +11,30 @@ import AboutModal from './components/AboutModal'
 import CudaDownloadModal from './components/CudaDownloadModal'
 import Toast from './components/Toast'
 import SubtitlesPanel from './components/SubtitlesPanel'
+import Sidebar from './components/Sidebar'
+import AnalyzeModal from './components/AnalyzeModal'
+import RnnoiseModal from './components/RnnoiseModal'
+import RecentProjectsModal from './components/RecentProjectsModal'
 import SoundConfigModal from './components/SoundConfigModal'
 import Waveform from './components/Waveform'
 import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps, ensureExportFontLoaded } from './lib/subtitleRender'
 import { buildSoundChain, mergeSoundConfig, DEFAULT_SOUND_CONFIG, findPreset } from './lib/soundChain'
+import { parseRecents, touchRecent, evictRecent } from './lib/recentProjects'
 import realtimeChain from './lib/realtimeChain'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 import { SUBTITLE_DISPLAY_DEFAULTS } from './global_config/subtitleConfig'
 import { useLang } from './lib/i18n'
 import { LANGS } from './global_config/languages'
 import { SUBTITLE_LANG_AUTO } from './global_config/subtitleLanguages'
+
+// Alvos da "Resolução de saída" (chaves = valores de output_resolution no
+// config.ini e no .corgi.json). 'original' fica de fora: mantém a entrada.
+const RESOLUTION_TARGETS = {
+  landscape: { w: 1920, h: 1080 },
+  landscape720: { w: 1280, h: 720 },
+  portrait: { w: 1080, h: 1920 },
+}
+const resTarget = (r) => RESOLUTION_TARGETS[r] || null
 
 function App() {
   const { t, lang } = useLang()
@@ -40,6 +54,14 @@ function App() {
   const [showAbout, setShowAbout] = useState(false)
   const [showExportToast, setShowExportToast] = useState(false)
   const [infoToast, setInfoToast] = useState(null)
+  const [showAnalyze, setShowAnalyze] = useState(false)
+  const [showRnnoise, setShowRnnoise] = useState(false)
+  // Modal "ABRIR" (projetos recentes): lista vem do config no momento de abrir
+  const [showRecent, setShowRecent] = useState(false)
+  const [recentProjects, setRecentProjects] = useState([])
+  // Status do modelo neural (get-rnnoise-status no boot): installed + path.
+  const [rnnoiseStatus, setRnnoiseStatus] = useState(null)
+  const [advancedTools, setAdvancedTools] = useState(true)
   const [exportedFolderPath, setExportedFolderPath] = useState('')
   const [showCudaModal, setShowCudaModal] = useState(false)
   const [cudaInstalled, setCudaInstalled] = useState(false)
@@ -47,6 +69,9 @@ function App() {
   const [confirmNewOpen, setConfirmNewOpen] = useState(false) // modal "salvar antes de limpar?"
   const [errorMessage, setErrorMessage] = useState('')
   const errorBuffer = useRef('')
+  // Erro específico do ffmpeg (com stderr): chega antes do onFfmpegDone e
+  // NÃO pode ser sobrescrito pela mensagem genérica de legenda.
+  const ffmpegErrRef = useRef('')
   const lastPct = useRef(0)
   const videoDurationRef = useRef(0)
   const videoRef = useRef(null)
@@ -72,6 +97,10 @@ function App() {
   const [subtitlePersistence, setSubtitlePersistence] = useState(1)
   const [smartSubtitle, setSmartSubtitle] = useState(false)
   const [autoLineWrap, setAutoLineWrap] = useState(false)
+  // Espacamento horizontal da legenda ate a borda/parede do video, em % da
+  // largura. So produz efeito com autoLineWrap ligado (o valor efetivo é
+  // calculado nos pontos de consumo: export e preview).
+  const [subtitleHMargin, setSubtitleHMargin] = useState(0.5)
   const [subtitleConfigs, setSubtitleConfigs] = useState({})
   const [subtitlesEdited, setSubtitlesEdited] = useState(false)
 
@@ -84,6 +113,10 @@ function App() {
   const [abMode, setAbMode] = useState(null) // null = segue o 🎤 | 'original' | 'treated'
   const [realtimeDraft, setRealtimeDraft] = useState(null) // rascunho do modal em audição
   const [playRequest, setPlayRequest] = useState(0) // incrementa para tocar (A/B)
+
+  // Margem horizontal EFETIVA (%): 0 quando a quebra automatica esta
+  // desligada => export cai nos 10px legados e a preview no maxWidth 85/90%.
+  const hMarginPct = autoLineWrap ? subtitleHMargin : 0
 
   // Aplica o config.ini (configuracoes GLOBAIS) nos estados — usado no boot e
   // pelo NOVO PROJETO, que precisa desfazer o que um projeto aberto sobrescreveu.
@@ -108,6 +141,9 @@ function App() {
     setSubtitlePersistence(Number(c.subtitle_persistence) || 1)
     setSmartSubtitle(c.smart_subtitle === 'true')
     setAutoLineWrap(c.auto_line_wrap === 'true')
+    const hMargin = Number(c.subtitle_h_margin)
+    setSubtitleHMargin(Number.isFinite(hMargin) ? Math.min(20, Math.max(0, hMargin)) : 0.5)
+    setAdvancedTools(c.advanced_tools !== 'false')
     try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
     try { setSoundConfig(mergeSoundConfig(JSON.parse(c.sound_config || 'null'))) } catch { setSoundConfig(mergeSoundConfig(null)) }
     try { setCustomPresets(JSON.parse(c.sound_presets || '[]') || []) } catch { setCustomPresets([]) }
@@ -120,6 +156,9 @@ function App() {
     })
 
     window.api.checkCudaInstalled().then(setCudaInstalled)
+
+    // Modelo neural (rnnoise): status inicial — installed + path pro -af.
+    window.api.rnnoiseStatus?.().then((s) => s && setRnnoiseStatus(s)).catch(() => {})
 
     window.api.onOutput((raw) => {
       const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\[\?[0-9]*[a-zA-Z]/g, '')
@@ -226,12 +265,17 @@ function App() {
 
     window.api.onFfmpegDone((ok) => {
       if (!ok) {
-        setErrorMessage(t('app.errRender'))
+        // O main manda ffmpeg-error (específico, com stderr) ANTES do done;
+        // sem este ref a mensagem real era engolida pela genérica.
+        setErrorMessage(ffmpegErrRef.current || t('app.errRender'))
         setShowError(true)
       }
+      ffmpegErrRef.current = ''
     })
 
     window.api.onFfmpegError((msg) => {
+      ffmpegErrRef.current = msg
+      console.error('[ffmpeg]', msg)
       setErrorMessage(msg)
       setShowError(true)
     })
@@ -343,6 +387,7 @@ function App() {
       wordsPerLine,
       linesCount,
       autoLineWrap,
+      hMargin: subtitleHMargin,
       greenScreen,
       burnSubtitles,
       configs: subtitleConfigs,
@@ -366,6 +411,7 @@ function App() {
     if (res && res.success) {
       setProjectFilePath(target)
       setInfoToast(t('project.saved'))
+      markProjectRecent(target) // salvo agora → topo dos recentes (fire-and-forget)
       return true
     }
     setErrorMessage(res?.error || t('project.saveFailed'))
@@ -373,15 +419,35 @@ function App() {
     return false
   }
 
-  const handleOpenProject = async () => {
-    if (processing || generatingSubtitles) return
-    const r = await window.api.openProject()
-    if (!r || r.canceled) return
-    if (!r.ok) {
-      setErrorMessage(r.error || t('project.openFailed'))
-      setShowError(true)
-      return
+  // Registra o projeto nos recentes (config.ini → recent_projects; o
+  // save-config do main faz merge de chaves, então nada mais é tocado).
+  // Chamado em abrir e em salvar — fonte da verdade é o config, sem lista
+  // duplicada no renderer (o modal relê no momento de abrir).
+  const markProjectRecent = async (path) => {
+    if (!path) return
+    try {
+      const cur = await window.api.getConfig()
+      const next = touchRecent(parseRecents(cur?.recent_projects), path)
+      await window.api.saveConfig({ recent_projects: JSON.stringify(next) })
+    } catch (err) {
+      console.warn('[project] falha ao atualizar recentes:', err)
     }
+  }
+
+  // Recent ilegível (arquivo sumiu/corrompido) → tira da lista (auto-limpeza)
+  const dropProjectRecent = async (path) => {
+    try {
+      const cur = await window.api.getConfig()
+      const next = evictRecent(parseRecents(cur?.recent_projects), path)
+      await window.api.saveConfig({ recent_projects: JSON.stringify(next) })
+    } catch (err) {
+      console.warn('[project] falha ao limpar recente:', err)
+    }
+  }
+
+  // Carrega um projeto com o resultado já em mão — diálogo nativo OU path
+  // direto do modal de recentes passam por aqui (mesmo corpo de aplicação).
+  const applyLoadedProject = async (r) => {
     const d = r.data || {}
     const mediaPath = typeof d.mediaPath === 'string' ? d.mediaPath : ''
 
@@ -421,6 +487,7 @@ function App() {
     if (s.wordsPerLine) setWordsPerLine(Number(s.wordsPerLine) || 4)
     if (s.linesCount) setLinesCount(Number(s.linesCount) || 2)
     if (typeof s.autoLineWrap === 'boolean') setAutoLineWrap(s.autoLineWrap)
+    if (typeof s.hMargin === 'number') setSubtitleHMargin(Math.min(20, Math.max(0, s.hMargin)))
     if (typeof s.greenScreen === 'boolean') setGreenScreen(s.greenScreen)
     if (typeof s.burnSubtitles === 'boolean') setBurnSubtitles(s.burnSubtitles)
     if (s.configs && typeof s.configs === 'object') setSubtitleConfigs(s.configs)
@@ -451,6 +518,63 @@ function App() {
     } else {
       setInfoToast(t('project.loaded'))
     }
+  }
+
+  // ABRIR manual: diálogo nativo (fluxo original) → aplica + registra nos recentes
+  const handleOpenProject = async () => {
+    if (processing || generatingSubtitles) return
+    const r = await window.api.openProject()
+    if (!r || r.canceled) return
+    if (!r.ok) {
+      setErrorMessage(r.error || t('project.openFailed'))
+      setShowError(true)
+      return
+    }
+    await applyLoadedProject(r)
+    await markProjectRecent(r.path)
+  }
+
+  // Clique numa linha do modal de recentes: lê o arquivo direto (sem diálogo),
+  // aplica igual e reordena pro topo. Falhou → some da lista e avisa.
+  const handleOpenRecent = async (path) => {
+    if (processing || generatingSubtitles) return
+    setShowRecent(false)
+    let r
+    try {
+      const text = await window.api.readFile(path)
+      if (text == null) throw new Error(`${t('project.recentMissing')} (${path})`)
+      const data = JSON.parse(text)
+      if (!data || typeof data !== 'object') throw new Error('invalid project file')
+      const mediaPath = typeof data.mediaPath === 'string' ? data.mediaPath : ''
+      const mediaExists = mediaPath ? await window.api.pathExists(mediaPath) : false
+      r = { ok: true, path, data, mediaExists }
+    } catch (err) {
+      await dropProjectRecent(path)
+      setErrorMessage(`${t('project.openFailed')}: ${err.message}`)
+      setShowError(true)
+      return
+    }
+    await applyLoadedProject(r)
+    await markProjectRecent(path)
+  }
+
+  // ABRIR (TitleBar) → modal de recentes; a lista é relida do config aqui
+  // pra sempre refletir o estado atual (abrir/salvar já persistiram antes).
+  const handleOpenClick = async () => {
+    if (processing || generatingSubtitles) return
+    try {
+      const cur = await window.api.getConfig()
+      setRecentProjects(parseRecents(cur?.recent_projects))
+    } catch {
+      setRecentProjects([])
+    }
+    setShowRecent(true)
+  }
+
+  // "ABRIR MANUALMENTE" do modal → fecha e cai no diálogo nativo original
+  const handleOpenManual = async () => {
+    setShowRecent(false)
+    await handleOpenProject()
   }
 
   const doNewProject = () => {
@@ -495,7 +619,9 @@ function App() {
 
     // 🎤 gate: o Som Avançado só vai para o export com o interruptor mestre
     // LIGADO — mesmo com preset escolhido, desligado não monta cadeia nenhuma.
-    const soundChain = soundConfig.enabled ? buildSoundChain(soundConfig) : ''
+    const soundChain = soundConfig.enabled
+      ? buildSoundChain(soundConfig, { rnnoiseModel: rnnoiseStatus?.installed ? rnnoiseStatus.path : null })
+      : ''
     if (soundChain) console.log('[export] som avançado (🎤 ligado):', soundChain)
 
     const base = selectedFile.name.replace(/\.[^.]+$/, '')
@@ -596,7 +722,8 @@ function App() {
           // #00A800 = mesmo verde do preview (DropZone); o 'green' nomeado do
           // ffmpeg (#008000) saia escuro demais no video exportado.
           const bgColor = greenScreen ? '0x00A800' : 'black'
-          const bgRes = outputResolution === 'portrait' ? '1080x1920' : outputResolution === 'landscape' ? '1920x1080' : '1920x1080'
+          const bgTgt = resTarget(outputResolution)
+          const bgRes = bgTgt ? `${bgTgt.w}x${bgTgt.h}` : '1920x1080'
           ffmpegArgs = [
             '-y',
             '-f', 'lavfi',
@@ -607,8 +734,9 @@ function App() {
 
         const videoFilters = []
         if (isVideoInput && outputResolution !== 'original') {
-          const outRes = outputResolution === 'portrait' ? '1080:1920' : '1920:1080'
-          videoFilters.push(`scale=${outRes}`)
+          // Id desconhecido (config antiga) mantém o comportamento antigo: paisagem.
+          const tgt = resTarget(outputResolution) || RESOLUTION_TARGETS.landscape
+          videoFilters.push(`scale=${tgt.w}:${tgt.h}`)
         }
 
         if (shouldBurn) {
@@ -616,9 +744,10 @@ function App() {
           const styleCfg = subtitleConfigs[subtitleStyle] || {}
           const inputW = videoRef.current?.videoWidth || 1920
           const inputH = videoRef.current?.videoHeight || 1080
-          const videoW = outputResolution === 'portrait' ? 1080 : outputResolution === 'landscape' ? 1920 : inputW
-          const videoH = outputResolution === 'portrait' ? 1920 : outputResolution === 'landscape' ? 1080 : inputH
-          console.log(`[export] ASS: style=${subtitleStyle} ${styleCfg.wordsPerLine || wordsPerLine}palavras/${styleCfg.linesCount || linesCount}linha(s) wrap=${autoLineWrap} res=${videoW}x${videoH}`)
+          const tgt = resTarget(outputResolution)
+          const videoW = tgt ? tgt.w : inputW
+          const videoH = tgt ? tgt.h : inputH
+          console.log(`[export] ASS: style=${subtitleStyle} ${styleCfg.wordsPerLine || wordsPerLine}palavras/${styleCfg.linesCount || linesCount}linha(s) wrap=${autoLineWrap} margemH=${hMarginPct}% res=${videoW}x${videoH}`)
           // O canvas so mede com a webfont depois que ela carrega; sem isto o
           // highlightbox sai com as palavras coladas no video final.
           const fontLoaded = await ensureExportFontLoaded(styleCfg.fontId || undefined, subtitleStyle, styleCfg.fontSize || undefined)
@@ -639,7 +768,8 @@ function App() {
             styleCfg.fontSize || undefined,
             positionMode,
             positionPercent,
-            autoLineWrap
+            autoLineWrap,
+            hMarginPct
           )
           if (assContent) {
             await window.api.writeFile(assPath, assContent)
@@ -947,6 +1077,11 @@ function App() {
     if (newConfig.subtitle_persistence !== undefined) setSubtitlePersistence(newConfig.subtitle_persistence)
     if (newConfig.smart_subtitle !== undefined) setSmartSubtitle(newConfig.smart_subtitle)
     if (newConfig.auto_line_wrap !== undefined) setAutoLineWrap(newConfig.auto_line_wrap)
+    if (newConfig.subtitle_h_margin !== undefined) {
+      const hm = Number(newConfig.subtitle_h_margin)
+      if (Number.isFinite(hm)) setSubtitleHMargin(Math.min(20, Math.max(0, hm)))
+    }
+    if (newConfig.advanced_tools !== undefined) setAdvancedTools(newConfig.advanced_tools === true || newConfig.advanced_tools === 'true')
     if (newConfig.subtitle_configs !== undefined) setSubtitleConfigs(newConfig.subtitle_configs)
     if (newConfig.sound_config !== undefined) setSoundConfig(newConfig.sound_config)
     if (newConfig.sound_presets !== undefined) setCustomPresets(newConfig.sound_presets)
@@ -956,6 +1091,7 @@ function App() {
       margin: newConfig.margin ?? marginVal,
       output_folder: newConfig.output_folder ?? outputFolder,
       output_format: newConfig.output_format ?? outputFormat,
+      output_resolution: newConfig.output_resolution ?? outputResolution,
       subtitles: String(newConfig.subtitles ?? subtitlesEnabled),
       subtitle_model: newConfig.subtitle_model ?? subtitleModel,
       subtitle_language: newConfig.subtitle_language ?? subtitleLanguage,
@@ -970,11 +1106,78 @@ function App() {
       subtitle_persistence: String(newConfig.subtitle_persistence ?? subtitlePersistence),
       smart_subtitle: String(newConfig.smart_subtitle ?? smartSubtitle),
       auto_line_wrap: String(newConfig.auto_line_wrap ?? autoLineWrap),
+      subtitle_h_margin: String(newConfig.subtitle_h_margin ?? subtitleHMargin),
+      advanced_tools: String(newConfig.advanced_tools ?? advancedTools),
       subtitle_configs: JSON.stringify(newConfig.subtitle_configs ?? subtitleConfigs),
       sound_config: JSON.stringify(newConfig.sound_config ?? soundConfig),
       sound_presets: JSON.stringify(newConfig.sound_presets ?? customPresets),
       language: newConfig.language ?? lang,
     })
+    // Globais do NOVO/LOAD acompanham o recém-salvo: antes o ref ficava com o
+    // snapshot do boot e NOVO revertia (ex.: trocou a resolução, NOVO voltava
+    // pra resolução antiga em vez da última salva).
+    try {
+      globalConfigRef.current = await window.api.getConfig()
+    } catch { /* mantém o snapshot do boot */ }
+  }
+
+  // Clique nos botoes da barra lateral. ANALISAR precisa de arquivo carregado;
+  // RNNOISE e ajuste de config, abre sempre.
+  const handleSidebarSelect = (id) => {
+    if (id === 'rnnoise') {
+      setShowRnnoise(true)
+      return
+    }
+    if (id !== 'analyze') return
+    if (!selectedFile) {
+      setInfoToast(t('analyze.noFile'))
+      return
+    }
+    setShowAnalyze(true)
+  }
+
+  // APLICAR da sugestao: threshold + margin nos controles e denoise medido
+  // ligado na cadeia de som (com o som ligado, senao o denoise nao faz efeito).
+  // Persiste no config.ini na hora (merge, mesmo fluxo do idioma/tema).
+  const handleApplySuggestions = async (suggestions) => {
+    const { threshold, margin, denoiseDb } = suggestions
+    setThreshold(String(threshold))
+    setMarginVal(String(margin))
+    const nextSound = { ...soundConfig, enabled: true, noise: { ...soundConfig.noise, denoiseOn: true, denoiseDb } }
+    setSoundConfig(nextSound)
+    setShowAnalyze(false)
+    setInfoToast(t('analyze.applied'))
+    try {
+      const current = await window.api.getConfig()
+      if (current && window.api.saveConfig) {
+        await window.api.saveConfig({
+          ...current,
+          threshold: String(threshold),
+          margin: String(margin),
+          sound_config: JSON.stringify(nextSound),
+        })
+      }
+    } catch (err) {
+      console.warn('[analyze] falha ao persistir sugestoes:', err)
+    }
+  }
+
+  // APLICAR do modulo RNNoise: motor de ruído escolhido persiste no config
+  // (mesmo merge do ANALISAR). Com motor ativo o som mestre liga junto —
+  // cadeia desligada não faz efeito nenhum.
+  const handleApplyRnnoise = async (noiseDraft) => {
+    const nextSound = { ...soundConfig, ...(noiseDraft.denoiseOn ? { enabled: true } : {}), noise: noiseDraft }
+    setSoundConfig(nextSound)
+    setShowRnnoise(false)
+    setInfoToast(t('rnnoise.applied'))
+    try {
+      const current = await window.api.getConfig()
+      if (current && window.api.saveConfig) {
+        await window.api.saveConfig({ ...current, sound_config: JSON.stringify(nextSound) })
+      }
+    } catch (err) {
+      console.warn('[rnnoise] falha ao persistir motor de ruido:', err)
+    }
   }
 
   const handleTimeUpdate = (time) => {
@@ -990,10 +1193,13 @@ function App() {
       <TitleBar
         onNew={requestNewProject}
         onSave={handleSaveProject}
-        onOpen={handleOpenProject}
+        onOpen={handleOpenClick}
         disabled={processing || generatingSubtitles}
       />
       <div className="flex flex-1 min-h-0">
+        {advancedTools && (
+          <Sidebar onSelect={handleSidebarSelect} disabled={processing || generatingSubtitles} />
+        )}
         <div className={`flex flex-col min-w-0 ${subtitlesEnabled ? 'w-[75%]' : 'w-full'}`}>
           <div className="flex flex-1 min-h-0">
             <div className="flex flex-col w-[66.6%] min-w-0 border-r-2 border-retro-black">
@@ -1018,6 +1224,7 @@ function App() {
                 currentTime={currentTime}
                 wordsPerLine={wordsPerLine}
                 linesCount={linesCount}
+                hMarginPct={hMarginPct}
               />
             </div>
             <Controls
@@ -1108,17 +1315,45 @@ function App() {
           subtitlePersistence={subtitlePersistence}
           smartSubtitle={smartSubtitle}
           autoLineWrap={autoLineWrap}
+          subtitleHMargin={subtitleHMargin}
           positionMode={positionMode}
           positionPercent={positionPercent}
           cudaInstalled={cudaInstalled}
+          advancedTools={advancedTools}
+          rnnoiseInstalled={!!rnnoiseStatus?.installed}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
           onRequestCudaDownload={() => setShowCudaModal(true)}
         />
       )}
+      {showAnalyze && selectedFile && (
+        <AnalyzeModal
+          filePath={selectedFile.path}
+          onApply={handleApplySuggestions}
+          onClose={() => setShowAnalyze(false)}
+        />
+      )}
+      {showRnnoise && (
+        <RnnoiseModal
+          config={soundConfig}
+          rnnoiseInstalled={!!rnnoiseStatus?.installed}
+          onStatusChange={() => window.api.rnnoiseStatus?.().then((s) => s && setRnnoiseStatus(s)).catch(() => {})}
+          onApply={handleApplyRnnoise}
+          onClose={() => setShowRnnoise(false)}
+        />
+      )}
+      {showRecent && (
+        <RecentProjectsModal
+          projects={recentProjects}
+          onOpenPath={handleOpenRecent}
+          onOpenManual={handleOpenManual}
+          onClose={() => setShowRecent(false)}
+        />
+      )}
       {showSound && (
         <SoundConfigModal
           config={soundConfig}
+          rnnoiseInstalled={!!rnnoiseStatus?.installed}
           customPresets={customPresets}
           onPreview={(c) => setRealtimeDraft(c)}
           onClose={() => {

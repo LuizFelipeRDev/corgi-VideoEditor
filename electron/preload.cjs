@@ -19,6 +19,7 @@ let _whisperCliErrorCb = null;
 
 let _modelDownloadProgressCb = null;
 let _cudaDownloadProgressCb = null;
+let _rnnoiseProgressCb = null;
 
 let _ffmpegOutputCb = null;
 let _ffmpegDoneCb = null;
@@ -66,6 +67,10 @@ ipcRenderer.on('model-download-progress', (event, data) => {
 
 ipcRenderer.on('cuda-download-progress', (event, data) => {
   if (_cudaDownloadProgressCb) _cudaDownloadProgressCb(data);
+});
+
+ipcRenderer.on('rnnoise-download-progress', (event, data) => {
+  if (_rnnoiseProgressCb) _rnnoiseProgressCb(data);
 });
 
 ipcRenderer.on('ffmpeg-output', (event, data) => {
@@ -127,5 +132,8 @@ contextBridge.exposeInMainWorld('api', {
   checkCudaInstalled: () => ipcRenderer.invoke('check-cuda-installed'),
   downloadCuda: () => ipcRenderer.invoke('download-cuda'),
   onCudaDownloadProgress: (cb) => { _cudaDownloadProgressCb = cb; },
+  rnnoiseStatus: () => ipcRenderer.invoke('get-rnnoise-status'),
+  downloadRnnoise: () => ipcRenderer.invoke('download-rnnoise-model'),
+  onRnnoiseDownloadProgress: (cb) => { _rnnoiseProgressCb = cb; },
   getPathForFile: (file) => webUtils.getPathForFile(file),
 });

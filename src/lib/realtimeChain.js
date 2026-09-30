@@ -213,8 +213,8 @@ const applyParams = (n, cfg) => {
   if (n.gate) {
     n.gate.port.postMessage({
       mode: 'gate',
-      on: noise.denoiseOn === true,
-      threshold: dbToLin(clamp(Number(noise.denoiseDb ?? -25), -50, -10) - 10),
+      on: noise.denoiseOn === true, // neural (arnndn) também aproxima pelo gate
+      threshold: dbToLin(clamp(Number(noise.denoiseDb ?? -25), -80, -20) - 10),
     })
   }
   if (n.agc) {

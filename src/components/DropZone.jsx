@@ -17,7 +17,7 @@ const formatFileSize = (bytes) => {
   return `${rounded} ${units[unit]}`
 }
 
-function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp, wordsPerLine, linesCount }) {
+function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp, wordsPerLine, linesCount, hMarginPct = 0 }) {
   const { t } = useLang()
   const [isDragOver, setIsDragOver] = useState(false)
   const [videoFullscreen, setVideoFullscreen] = useState(false)
@@ -135,6 +135,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 outputResolution={outputResolution}
                 wordsPerLine={wordsPerLine}
                 linesCount={linesCount}
+                hMarginPct={hMarginPct}
               />
             )}
             <button
@@ -185,6 +186,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 outputResolution={outputResolution}
                 wordsPerLine={wordsPerLine}
                 linesCount={linesCount}
+                hMarginPct={hMarginPct}
               />
             )}
             <button
@@ -270,7 +272,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                   positionPercent={positionPercent}
                 outputResolution={outputResolution}
                 wordsPerLine={wordsPerLine}
-                linesCount={linesCount}              />
+                linesCount={linesCount}
+                hMarginPct={hMarginPct}              />
               )}
             </div>
           ) : (
@@ -296,7 +299,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                 positionPercent={positionPercent}
                 outputResolution={outputResolution}
                 wordsPerLine={wordsPerLine}
-                linesCount={linesCount}              />
+                linesCount={linesCount}
+                hMarginPct={hMarginPct}              />
                 )}
               </div>
             </div>

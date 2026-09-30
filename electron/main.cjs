@@ -88,6 +88,58 @@ function getWhisperDir() {
   return path.join(devRoot, 'bin', 'whisper');
 }
 
+// Modelo neural do arnndn (RNNoise) — baixado sob demanda pelo app, NUNCA
+// empacotado (AGENTS.md: só o ggml-tiny vem no build). ~300 KB de texto.
+// somnolent-hogwash = treino Speech x Recording (ruído de gravação) do
+// repositório GregorR/rnnoise-models — declarado "sem copyright" pelo autor.
+// Primário = raw.githubusercontent; espelho = jsDelivr (mesmo arquivo de outro
+// CDN) — cobre falha de DNS pontual do GitHub (ENOTFOUND já observado na rede).
+const RNNOISE_MODEL_URLS = [
+  'https://raw.githubusercontent.com/GregorR/rnnoise-models/master/somnolent-hogwash-2018-09-01/sh.rnnn',
+  'https://cdn.jsdelivr.net/gh/GregorR/rnnoise-models@master/somnolent-hogwash-2018-09-01/sh.rnnn',
+];
+const RNNOISE_MODEL_URL = RNNOISE_MODEL_URLS[0];
+const RNNOISE_MODEL_FILE = 'sh.rnnn';
+
+// Falha de rede → código curto que o renderer traduz via i18n.
+function rnnoiseNetCode(err) {
+  const code = (err && (err.code || (err.cause && err.cause.code))) || '';
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'dns';
+  if (String(code).includes('TIMEOUT') || code === 'ETIMEDOUT') return 'timeout';
+  if (['ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH'].includes(code)) return 'conn';
+  if (code === 'http') return 'http';
+  return 'unknown';
+}
+
+// 2 tentativas por URL com pausa (DNS/conexão costuma falhar de forma
+// passageira), depois tenta o espelho. HTTP 4xx não repete na mesma URL.
+async function fetchRnnoiseModel() {
+  let lastErr = null;
+  for (const url of RNNOISE_MODEL_URLS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+        if (res.ok) return res;
+        const e = new Error(`HTTP ${res.status}`);
+        e.code = 'http';
+        throw e;
+      } catch (e) {
+        lastErr = e;
+        if (e && e.code === 'http') break;
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+function getRnnoiseDir() {
+  if (!isDev) {
+    return path.join(userDataPath, 'bin', 'rnnoise');
+  }
+  return path.join(devRoot, 'bin', 'rnnoise');
+}
+
 function getFontsDir() {
   if (!isDev) {
     return path.join(userDataPath, 'fonts');
@@ -134,9 +186,17 @@ function readConfig() {
   } catch { return defaults; }
 }
 
+// Grava o config de forma GENÉRICA: o leitor (readConfig) aceita qualquer
+// chave `key = value`, então o escritor também precisa. O template fixo antigo
+// ENGOLIA tudo que não estava na lista — sound_config, sound_presets,
+// advanced_tools e recent_projects nunca chegavam ao disco. O merge do
+// save-config ({...readConfig(), ...novo}) já preserva o que está no arquivo;
+// só falta serializar. Header [settings] mantido (readConfig pula linhas '[').
 function writeConfig(config) {
-  fs.writeFileSync(configPath,
-    `[settings]\nthreshold = ${config.threshold}\nmargin = ${config.margin}\noutput_folder = ${config.output_folder}\noutput_format = ${config.output_format}\noutput_resolution = ${config.output_resolution || 'original'}\nsubtitles = ${config.subtitles}\nsubtitle_model = ${config.subtitle_model}\nsubtitle_position = ${config.subtitle_position}\nsubtitle_style = ${config.subtitle_style}\ngreen_screen = ${config.green_screen}\nburn_subtitles = ${config.burn_subtitles}\nwords_per_line = ${config.words_per_line}\nlines_count = ${config.lines_count}\nsubtitle_configs = ${config.subtitle_configs || '{}'}\nsubtitle_position_mode = ${config.subtitle_position_mode || 'fixed'}\nsubtitle_position_percent = ${config.subtitle_position_percent || '80'}\nsubtitle_persistence = ${config.subtitle_persistence || '1'}\nsmart_subtitle = ${config.smart_subtitle || 'false'}\nauto_line_wrap = ${config.auto_line_wrap || 'false'}\nlanguage = ${config.language || 'en'}\nsubtitle_language = ${config.subtitle_language || 'auto'}\ntheme = ${config.theme || 'modern'}\n`, 'utf-8');
+  const lines = Object.entries(config)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k} = ${typeof v === 'object' ? JSON.stringify(v) : String(v).replace(/\r?\n/g, ' ')}`);
+  fs.writeFileSync(configPath, `[settings]\n${lines.join('\n')}\n`, 'utf-8');
 }
 
 let mainWindow;
@@ -656,7 +716,7 @@ ipcMain.handle('run-ffmpeg-analysis', async (event, args) => {
   console.log('[ffmpeg-analysis] cmd:', cmd);
 
   return new Promise((resolve) => {
-    const proc = exec(cmd, { env: { ...process.env }, maxBuffer: 10 * 1024 * 1024 });
+    const proc = exec(cmd, { env: { ...process.env }, maxBuffer: 64 * 1024 * 1024 });
     let stderrData = '';
 
     proc.stderr?.on('data', (d) => {
@@ -706,12 +766,18 @@ ipcMain.handle('run-ffmpeg', async (event, args, cwd) => {
 
     const proc = exec(cmd, execOpts);
 
+    // Guarda o rabo do stderr: sem ele o usuário só via "código X" e o
+    // console não mostrava POR QUE o ffmpeg morreu (era o famoso caso do
+    // afftdn nf fora de faixa, invisível aqui).
+    let stderrTail = '';
+
     proc.stdout?.on('data', (d) => {
       mainWindow?.webContents.send('ffmpeg-output', d.toString('utf-8'));
     });
 
     proc.stderr?.on('data', (d) => {
       const text = d.toString('utf-8');
+      stderrTail = (stderrTail + text).slice(-1500);
       mainWindow?.webContents.send('ffmpeg-output', text);
     });
 
@@ -720,7 +786,10 @@ ipcMain.handle('run-ffmpeg', async (event, args, cwd) => {
         mainWindow?.webContents.send('ffmpeg-done', true);
         resolve({ success: true, code });
       } else {
-        const errorMsg = `FFmpeg finalizou com código ${code}`;
+        const tail = stderrTail.trim();
+        const errorMsg = `FFmpeg finalizou com código ${code}` +
+          (tail ? ` — ${tail.split('\n').slice(-4).join(' | ')}` : '');
+        console.error('[ffmpeg] exit', code, '\n' + tail);
         mainWindow?.webContents.send('ffmpeg-error', errorMsg);
         mainWindow?.webContents.send('ffmpeg-done', false);
         resolve({ success: false, code, error: errorMsg });
@@ -729,6 +798,7 @@ ipcMain.handle('run-ffmpeg', async (event, args, cwd) => {
 
     proc.on('error', (err) => {
       const errorMsg = `Falha ao executar FFmpeg: ${err.message}`;
+      console.error('[ffmpeg] spawn error:', err.message);
       mainWindow?.webContents.send('ffmpeg-error', errorMsg);
       mainWindow?.webContents.send('ffmpeg-done', false);
       resolve({ success: false, error: errorMsg });
@@ -918,5 +988,52 @@ ipcMain.handle('download-cuda', async () => {
       try { fs.unlinkSync(zipPath); } catch { /* ignore cleanup error */ }
     }
     return { success: false, error: (err && err.message) || String(err) };
+  }
+});
+
+// Status do modelo neural: instalado + path absoluto pro -af (o escaping do
+// path acontece no renderer, em escFilterPath, antes de montar a cadeia).
+ipcMain.handle('get-rnnoise-status', () => {
+  const modelPath = path.join(getRnnoiseDir(), RNNOISE_MODEL_FILE);
+  return { installed: fs.existsSync(modelPath), path: modelPath, url: RNNOISE_MODEL_URL };
+});
+
+// Download do modelo (.rnnn, ~300 KB) — mesmo fluxo do download-cuda: fetch
+// segue os redirects sozinho, progresso por evento, arquivo .downloading
+// renomeado só no fim (nunca deixa modelo pela metade no lugar).
+ipcMain.handle('download-rnnoise-model', async () => {
+  const dir = getRnnoiseDir();
+  const modelPath = path.join(dir, RNNOISE_MODEL_FILE);
+  const tempPath = modelPath + '.downloading';
+  if (fs.existsSync(modelPath)) return { success: true };
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const response = await fetchRnnoiseModel();
+    if (!response.body) throw new Error('sem corpo na resposta');
+    const totalBytes = parseInt(response.headers.get('content-length') || '', 10) || 0;
+    const nodeStream = require('stream').Readable.fromWeb(response.body);
+    let downloadedBytes = 0;
+    let lastProgress = -1;
+    nodeStream.on('data', (chunk) => {
+      downloadedBytes += chunk.length;
+      const progress = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
+      if (progress !== lastProgress) {
+        lastProgress = progress;
+        mainWindow?.webContents.send('rnnoise-download-progress', { progress });
+      }
+    });
+    await require('stream/promises').pipeline(nodeStream, fs.createWriteStream(tempPath));
+    fs.renameSync(tempPath, modelPath);
+    mainWindow?.webContents.send('rnnoise-download-progress', { progress: 100 });
+    console.log('[rnnoise] model downloaded:', modelPath);
+    return { success: true };
+  } catch (err) {
+    console.error('[rnnoise] download error:', err);
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* limpeza */ }
+    return {
+      success: false,
+      code: rnnoiseNetCode(err),
+      error: (err && err.message) || String(err),
+    };
   }
 });

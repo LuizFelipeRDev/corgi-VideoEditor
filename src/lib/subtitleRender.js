@@ -3,6 +3,12 @@ import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize, SUBTITLE_HIGHLIGHT_BOX, S
 import { FONTS } from '../global_config/fonts'
 import { getFontRenderScale, getFontWinAscent } from '../global_config/fontMetrics'
 
+// WORDPOP: forca do empurrao x. Quando uma palavra fica com o destaque,
+// as palavras da MESMA linha cedem esse percentual da meia-extensao que a
+// ativa cresce (0.4 = "levemente": a ativa abre espaco e as vizinhas dao
+// uma pequena recua, sem colisao). Compartilhado com a preview (SubtitleOverlay).
+export const WORDPOP_PUSH_FACTOR = 0.4
+
 const resolveAssFontName = (fontId, styleFontFamily) => {
   const picked = FONTS.find(f => f.id === fontId)
   if (picked) return picked.assName
@@ -95,11 +101,19 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, positionMode, positionPercent, autoLineWrap = false) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, positionMode, positionPercent, autoLineWrap = false, hMarginPct = 0) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
   const playResX = videoWidth || 1920
   const playResY = videoHeight || 1080
+
+  // Margem horizontal (% da largura) ate a borda/parede do video: reduz a
+  // largura util e FORCA a quebra de linha. So vale com autoLineWrap ligado
+  // (gate aqui tambem, para o render ser autocontido). 0 = legado (10px de
+  // cada lado) - o teto em 10px mantem o comportamento atual para percentuais
+  // pequenos em resolucoes menores (0.5% de 1280 = 6px < 10px).
+  const effHMarginPct = autoLineWrap ? hMarginPct : 0
+  const hMarginPx = Math.max(10, Math.round((effHMarginPct / 100) * playResX))
 
   const assFontName = resolveAssFontName(fontId, styleConfig.fontFamily)
   const cssFontFamily = (FONTS.find(f => f.id === fontId)?.family || styleConfig.fontFamily || 'Montserrat, sans-serif')
@@ -144,7 +158,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${assFontName},${scaledFontSize},${primaryAss},${highlightAss},${outlineAss},${shadowAss},${styleConfig.bold ? -1 : 0},${styleConfig.italic ? -1 : 0},0,0,100,100,${styleConfig.letterSpacing},0,1,${styleConfig.outlineSize},${styleConfig.shadowDepth},${alignment},10,10,${marginV},1
+Style: Default,${assFontName},${scaledFontSize},${primaryAss},${highlightAss},${outlineAss},${shadowAss},${styleConfig.bold ? -1 : 0},${styleConfig.italic ? -1 : 0},0,0,100,100,${styleConfig.letterSpacing},0,1,${styleConfig.outlineSize},${styleConfig.shadowDepth},${alignment},${hMarginPx},${hMarginPx},${marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -198,7 +212,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   const blocks = []
   for (let i = 0; i < segments.length; i++) {
     const { sub, words } = segments[i]
-    const segmentBlocks = groupWordsIntoBlocks(words, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, styleId, autoLineWrap, cssFontFamily, assFontName)
+    const segmentBlocks = groupWordsIntoBlocks(words, playResX, scaledFontSize, styleConfig, wordsPerLine, linesCount, styleId, autoLineWrap, cssFontFamily, assFontName, hMarginPx)
     if (segmentBlocks.length === 0) continue
 
     // O ultimo bloco do segmento vale ate sub.end (persistencia aplicada na
@@ -253,6 +267,130 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       continue
     }
 
+    // WORDPOP (padrao do velhinho.mp4): a cada fatia de tempo (uma
+    // troca de destaque) cada PALAVRA vira um Dialogue proprio com
+    // \an2\pos/\move ABSOLUTO no centro do proprio avanco:
+    //  - palavra ativa: nasce na base 90%, cresce para popPeak e
+    //    SEGURA ate a proxima fatia;
+    //  - demais (sem destaque): base MENOR (90%) com leve pop
+    //    90->95->90 em 100ms a cada troca de destaque;
+    //  - a que acabou de perder o destaque encolhe 120->90 suave
+    //    (sem pop - o encolher ja e a transicao);
+    //  - empurrao x: as palavras da MESMA linha da ativa recuam
+    //    levemente (WORDPOP_PUSH_FACTOR da meia-extensao que ela abre)
+    //    e voltam quando o destaque sai da linha.
+    // Por que POR PALAVRA (sondas com o ffmpeg embutido - probe*.ass,
+    // probe-an2, probe-org):
+    //  - posicao absoluta por palavra => nenhuma vizinha se mexe:
+    //    acabou o recentramento de linha inteira (o "kick"/"frase
+    //    pulsando" dos relatos) e o \fscy de uma linha nunca mais
+    //    re-empilha a outra;
+    //  - no Dialogue multi-palavra o libass ancora a escala na CANETA
+    //    do run: a palavra crescia so pra direita e pra cima (canto
+    //    inferior esquerdo - x1 da ativa ficava colado no natural).
+    //   Uma palavra so com \an2 recentra pela largura ESCALADA => o
+    //    centro fica fixo (sonda probe-an2: x1 anda -0.1*avanco e o
+    //    centro medido 959.5 = pos.x). O \org nao ajuda: sonda
+    //    probe-org mostrou que ele so muda a ancora de ROTACAO;
+    //  - verticalmente a escala ancora na baseline (a ativa "subia"
+    //    ~4px junto do crescimento): para o CENTRO da tinta ficar
+    //    fixo, o \move desce a linha de
+    //      delta = (S-100)/100 * (desc + cap/2)
+    //    em sincronia com o \t (ambos lineares => centro exato o
+    //    tempo todo) e com delta=0 em t=0 => troca de fatia sem salto.
+    // posY base = lineTop + lineHeight porque o libass normaliza
+    // asc+desc = 1.0 x nominal (fontMetrics.js), entao e exatamente a
+    // ancora de baixo natural do \an2. Sem \fsp (palavra unica = a
+    // largura que cresce recentra sozinha) e sem \r/\N.
+    if (styleConfig.animationType === 'wordpop') {
+      const layout = computeHighlightBoxLayout(
+        blockWords, playResX, playResY, scaledFontSize, alignment, marginV,
+        cssFontFamily, styleConfig.bold, styleConfig.wordSpacing, assFontName, SUBTITLE_HIGHLIGHT_BOX, hMarginPx
+      )
+      const popPeak = 100 + (styleConfig.popSize || 0)
+      // Base MENOR das palavras sem destaque (ajuste manual): elas
+      // ficam em 90% o tempo todo e dao um pop 90->95->90 mais rapido
+      // (30ms sobe / 100ms total). A que perde o destaque encolhe
+      // 120->90 suave (mesmo caminho inverso com centro fixo); nao
+      // popa - o encolher ja e a transicao (igual ao transition da
+      // preview).
+      const BASE_SCALE = 90
+      const SMALL_PEAK = 95
+      const SMALL_UP_MS = 30
+      const SMALL_TOTAL_MS = 100
+      const renderScale = getFontRenderScale(assFontName)
+      // desc nominal (asc+desc = 1.0 x tamanho nominal, fontMetrics)
+      // e cap em px de tela (glifos renderizam em nominal*renderScale)
+      const descNominal = scaledFontSize * (1 - getFontWinAscent(assFontName))
+      const capScreen = measureTextMetrics('H', scaledFontSize, cssFontFamily, styleConfig.bold).ascent * renderScale
+      // centro da tinta fixo em QUALQUER escala: y(S) = cy - (100-S)/100*K.
+      // Linear em S => o \move linear acompanha o \t linear exato (e a
+      // troca de fatia tambem: toda fatia nasce em yBase/BASE_SCALE).
+      const centerK = descNominal + capScreen / 2
+      const yAt = (cy, S) => cy - Math.round((100 - S) / 100 * centerK)
+      // EMPURRAO X (pedido manual): junto com o crescimento da ativa, as
+      // palavras da MESMA linha recuam sign(j-ativo)*P - P = PUSH_FACTOR
+      // da meia-extensao que a ativa abre (levemente; sempre sobra
+      // espaco porque os lados ficam em 90%). x1 de cada evento = x2 do
+      // anterior (continuidade sem salto) e a ativa sempre TERMINA no cx
+      // natural (o destaque ancora no lugar proprio); quando o destaque
+      // sai da linha, as deslocadas voltam pelo mesmo \move.
+      const pushOf = (activeIdx) => activeIdx < 0
+        ? 0
+        : Math.round(WORDPOP_PUSH_FACTOR * ((popPeak - 100) / 100) * layout.wordWidths[activeIdx] / 2)
+      const xAt = (j, activeIdx, P) => {
+        const cxj = layout.wordXs[j] + layout.wordWidths[j] / 2
+        if (activeIdx < 0 || P === 0) return cxj
+        if (blockWords[j].lineIdx !== blockWords[activeIdx].lineIdx) return cxj
+        return cxj + Math.sign(j - activeIdx) * P
+      }
+
+      for (let i = 0; i < blockWords.length; i++) {
+        const eventStart = blockWords[i].start
+        const eventEnd = i < blockWords.length - 1 ? blockWords[i + 1].start : block.end
+        // duracao da crescida da ativa desta fatia: vale para o \t dela
+        // E para o \move de todas as palavras (tudo em sincronia)
+        const durationMs = Math.round((blockWords[i].end - blockWords[i].start) * 1000)
+        const growMs = Math.max(30, Math.min(Math.round((styleConfig.popDuration || 0.08) * 1000), Math.floor(durationMs / 2)))
+        const P = pushOf(i)
+        const Pprev = i > 0 ? pushOf(i - 1) : 0
+        for (let j = 0; j < blockWords.length; j++) {
+          const w = blockWords[j]
+          const wUpper = (w.text || '').toUpperCase()
+          const cy = Math.round(layout.lineTops[w.lineIdx] + layout.lineHeight)
+          const yBase = yAt(cy, BASE_SCALE)
+          const yPeak = yAt(cy, popPeak)
+          // fim da fatia anterior -> estado desta fatia (continuidade)
+          const x1 = Math.round(xAt(j, i - 1, Pprev))
+          const y1 = j === i - 1 ? yPeak : yBase
+          const x2 = Math.round(xAt(j, i, P))
+          const y2 = j === i ? yPeak : yBase
+          const posTag = x1 === x2 && y1 === y2
+            ? `\\pos(${x2},${y2})`
+            : `\\move(${x1},${y1},${x2},${y2},0,${growMs})`
+          let tags
+          if (j === i) {
+            // ativa: nasce na base 90% (continua direto da fatia
+            // anterior, sem pulso), cresce para popPeak e termina no
+            // cx natural. \move no mesmo instante do \t => centro da
+            // tinta fixo durante a escala.
+            tags = `\\an2${posTag}\\fscx${BASE_SCALE}\\fscy${BASE_SCALE}\\c${highlightAss}\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak})`
+          } else if (i > 0 && j === i - 1) {
+            tags = `\\an2${posTag}\\fscx${popPeak}\\fscy${popPeak}\\c${primaryAss}\\t(0,${growMs},\\fscx${BASE_SCALE}\\fscy${BASE_SCALE})`
+          } else {
+            tags = `\\an2${posTag}\\fscx${BASE_SCALE}\\fscy${BASE_SCALE}\\c${primaryAss}\\t(0,${SMALL_UP_MS},\\fscx${SMALL_PEAK}\\fscy${SMALL_PEAK})\\t(${SMALL_UP_MS},${SMALL_TOTAL_MS},\\fscx${BASE_SCALE}\\fscy${BASE_SCALE})`
+          }
+          // 1 Dialogue POR PALAVRA: varios \pos/\move no mesmo Dialogue
+          // seriam ignorados pelo libass (so o primeiro vale - o bug do
+          // "DEDRAGONBALLZ numa linha" da versao antiga). Sem espaco
+          // entre o bloco de tags e a palavra: com \an2 centralizado o
+          // espaco renderizaria a palavra ~13px a esquerda.
+          assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,{${tags}}${wUpper}\n`
+        }
+      }
+      continue
+    }
+
     // HIGHLIGHT BOX / POPLINE: destaque de fundo na palavra ativa. O
     // layout e calculado UMA vez por bloco e usado pelo texto e pelo
     // destaque, entao o desenho sempre bate com a palavra visivel. O
@@ -272,7 +410,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       const boxCfg = isPopline ? SUBTITLE_POPLINE_BOX : SUBTITLE_HIGHLIGHT_BOX
       const layout = computeHighlightBoxLayout(
         blockWords, playResX, playResY, scaledFontSize, alignment, marginV,
-        cssFontFamily, styleConfig.bold, styleConfig.wordSpacing, assFontName, boxCfg
+        cssFontFamily, styleConfig.bold, styleConfig.wordSpacing, assFontName, boxCfg, hMarginPx
       )
 
       // Janela do pop: os tempos de \t sao MILISEGUNDOS no libass/VSFilter
@@ -399,7 +537,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   return assContent
 }
 
-function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, styleId = null, autoLineWrap = false, cssFontFamily = '', assFontName = '') {
+function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPerLine = 4, linesCount = 2, styleId = null, autoLineWrap = false, cssFontFamily = '', assFontName = '', marginPx = 10) {
   const maxWordsPerLine = wordsPerLine
   const maxLines = linesCount
   const maxWordsPerBlock = maxWordsPerLine * maxLines
@@ -407,8 +545,8 @@ function groupWordsIntoBlocks(allWords, playResX, fontSize, styleConfig, wordsPe
   const hasPop = styleId ? hasPopEffect(styleId) : false
   const popScale = hasPop ? (100 + (styleConfig.popSize || 0)) / 100 : 1
 
-  const marginL = 10
-  const marginR = 10
+  const marginL = marginPx
+  const marginR = marginPx
   const availableWidth = playResX - marginL - marginR
 
   // Largura REAL (canvas + renderScale), a MESMA do layout do highlightbox e
@@ -527,7 +665,7 @@ function getCanvasFontStyle(fontSize, fontFamily, bold) {
   return `${bold ? 'bold' : 'normal'} ${fontSize}px "${cssFamily}"`
 }
 
-function measureTextMetrics(text, fontSize, fontFamily, bold) {
+export function measureTextMetrics(text, fontSize, fontFamily, bold) {
   const key = `${fontFamily}|${bold}|${Math.round(fontSize)}|${text}`
   if (textMeasureCache[key] !== undefined) return textMeasureCache[key]
 
@@ -577,9 +715,9 @@ function measureTextMetrics(text, fontSize, fontFamily, bold) {
 // as palavras saem espacadas demais e a caixa nao envolve a palavra.
 // Os ratios de padding/raio vem de boxCfg (SUBTITLE_HIGHLIGHT_BOX ou
 // SUBTITLE_POPLINE_BOX), mantendo preview e export com a MESMA folga.
-function computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold, wordSpacing = 100, assFontName = '', boxCfg = SUBTITLE_HIGHLIGHT_BOX) {
-  const marginL = 10
-  const marginR = 10
+function computeHighlightBoxLayout(blockWords, playResX, playResY, fontSize, alignment, marginV, fontFamily, bold, wordSpacing = 100, assFontName = '', boxCfg = SUBTITLE_HIGHLIGHT_BOX, marginPx = 10) {
+  const marginL = marginPx
+  const marginR = marginPx
   const availableWidth = playResX - marginL - marginR
 
   const renderScale = getFontRenderScale(assFontName)
@@ -674,7 +812,6 @@ function getAnimationTag(styleConfig, highlightAss, word, eventDuration, measure
   const { animationType } = styleConfig
   const popSz = styleConfig.popSize || 5
   const popDur = styleConfig.popDuration || 0.18
-  const popStart = 100 - popSz
   const popPeak = 100 + popSz
 
   // COMPENSACAO DE LAYOUT (empurrar a frase):
@@ -706,10 +843,14 @@ function getAnimationTag(styleConfig, highlightAss, word, eventDuration, measure
       return `{\\fscx${popPeak}\\fscy${popPeak}${fspTag(fspAt(popPeak))}\\c${highlightAss}}`
     }
     case 'wordpop': {
+      // Velhinho.mp4: a palavra ativa so CRESCE (100 -> popPeak) e
+      // SEGURA ate o fim do evento - nunca comeca encolhida (o antigo
+      // 90 -> 110 -> 100 "piscava" pequena) e sem voltar ao normal no
+      // meio da fala. SEM \\fsp: o avanco escalado empurra os vizinhos
+      // e o libass recentra a linha - igual ao font-size do preview.
       const durationMs = Math.round((word.end - word.start) * 1000)
-      const growMs = Math.min(100, Math.floor(durationMs / 3))
-      const shrinkMs = Math.min(150, Math.floor(durationMs / 2))
-      return `{\\fscx${popStart}\\fscy${popStart}${fspTag(fspAt(popStart))}\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak}${fspTag(fspAt(popPeak))})\\t(${growMs},${growMs + shrinkMs},\\fscx100\\fscy100\\fsp0)\\c${highlightAss}}`
+      const growMs = Math.max(30, Math.min(Math.round(popDur * 1000), Math.floor(durationMs / 2)))
+      return `{\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak})\\c${highlightAss}}`
     }
     case 'highlight':
     default:
