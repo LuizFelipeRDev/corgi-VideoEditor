@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
 import WaveSurfer from 'wavesurfer.js'
+import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js'
 import { useTheme } from '../lib/theme'
 import { useLang } from '../lib/i18n'
 import realtimeChain from '../lib/realtimeChain'
@@ -34,6 +35,10 @@ const WS_SCROLLBAR_CSS = `
 const TRANSPORT_BTN_CLASS =
   'w-10 h-10 flex items-center justify-center bg-retro-box border border-retro-black rounded hover:bg-green-100 disabled:opacity-30 disabled:cursor-not-allowed'
 
+// Largura (em px) das marcas de início/fim do export na onda — convertidas
+// para segundos a cada redesenho conforme a escala atual (px/s).
+const EXPORT_MARK_PX = 6
+
 // Regua de tempo (estilo Premiere — wireframe v1.6.0): rotulo + tick grande a
 // cada 10s, tick pequeno a cada 5s. As posicoes sao % da duracao, entao nao
 // dependem da escala px/s (que muda com o preenchimento/scroll da faixa).
@@ -52,9 +57,15 @@ const fmtHMS = (s) => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles, playRequest, onPlayer, shapeCfg }) {
+function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles, playRequest, onPlayer, shapeCfg, exportRange, selectedMarker, onSelectMarker }) {
   const containerRef = useRef(null)
   const wsRef = useRef(null)
+  // Plugin Regions (marcas I/O do export) — criado junto com o wavesurfer
+  const regionsRef = useRef(null)
+  // Callback das marcas sempre "fresca" no handler (o efeito do wavesurfer
+  // só roda na troca de arquivo/tema)
+  const onSelectMarkerRef = useRef(onSelectMarker)
+  onSelectMarkerRef.current = onSelectMarker
   const { theme } = useTheme()
   const { t } = useLang()
   const [ready, setReady] = useState(false)
@@ -163,6 +174,26 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     // fonte é sempre o arquivo original.
     ws.load(`file:///${selectedFile.path.replace(/\\/g, '/')}`)
 
+    // --- Marcas I/O do export (Regions) ---------------------------------
+    // Marcador fino em cada ponta + faixa sombreada entre as duas (quando
+    // existem início E fim). A faixa só PINTA — clique nela continua fazendo
+    // seek; quem seleciona é a marca (Delete apaga a selecionada).
+    const regions = ws.registerPlugin(RegionsPlugin.create())
+    regionsRef.current = regions
+    regions.on('region-clicked', (region, e) => {
+      if (region.id === 'expIn' || region.id === 'expOut') {
+        e.stopPropagation()
+        onSelectMarkerRef.current?.(region.id === 'expIn' ? 'start' : 'end')
+      }
+    })
+    // A faixa é só visual: sem pointer-events o clique nela cai na onda e
+    // faz seek (o marcador dela fica por cima, selecionável).
+    regions.on('region-created', (region) => {
+      if (region.id === 'expBand' && region.element) {
+        region.element.style.pointerEvents = 'none'
+      }
+    })
+
     ws.on('ready', () => {
       setReady(true)
       setShowReady(true)
@@ -236,10 +267,65 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       ws.pause()
       ws.destroy()
       wsRef.current = null
+      regionsRef.current = null
       if (waveSurferRef) waveSurferRef.current = null
       if (onPlayer) onPlayer(null)
     }
   }, [selectedFile, theme])
+
+  // --- Regiões do export: refaz as marcas a cada mudança -------------------
+  // Redesenha do zero: marcas finas de início/fim + faixa sombreada quando
+  // existem as DUAS. Deps: marcas/seleção (estado), ready (onda decodificada)
+  // e rulerW (wrapper mudou de largura → a largura em SEGUNDOS da marca muda).
+  useEffect(() => {
+    const regions = regionsRef.current
+    const ws = wsRef.current
+    if (!regions || !ws || !ready || !exportRange) return
+    const d = durationRef.current
+    if (!d) return
+
+    for (const r of [...regions.getRegions()]) {
+      if (r.id === 'expIn' || r.id === 'expOut' || r.id === 'expBand') r.remove()
+    }
+
+    const wrapper = ws.getWrapper()
+    const wrapperW = wrapper ? wrapper.offsetWidth : 0
+    // px → segundos pela escala atual (6px de marca na onda)
+    const lineSec = wrapperW > 0 ? (EXPORT_MARK_PX * d) / wrapperW : d * 0.01
+    const { start, end } = exportRange
+
+    if (start != null && end != null && end > start) {
+      const band = regions.addRegion({
+        id: 'expBand',
+        start,
+        end,
+        drag: false,
+        resize: false,
+        color: 'rgba(250, 204, 21, 0.22)',
+      })
+      if (band.element) band.element.style.pointerEvents = 'none'
+    }
+    if (start != null) {
+      regions.addRegion({
+        id: 'expIn',
+        start,
+        end: Math.min(d, start + lineSec),
+        drag: false,
+        resize: false,
+        color: selectedMarker === 'start' ? '#166534' : 'rgba(22, 163, 74, 0.9)',
+      })
+    }
+    if (end != null) {
+      regions.addRegion({
+        id: 'expOut',
+        start: Math.max(0, end - lineSec),
+        end,
+        drag: false,
+        resize: false,
+        color: selectedMarker === 'end' ? '#991b1b' : 'rgba(220, 38, 38, 0.9)',
+      })
+    }
+  }, [exportRange, selectedMarker, ready, rulerW])
 
   // v1.8.0: a FORMA da onda acompanha o que está sendo OUVIDO — quando a
   // prévia está tratada, a MESMA cadeia roda offline (realtimeChain.
@@ -455,6 +541,28 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
                   <span className="absolute bottom-0 left-0 w-[1px] h-[5px] bg-retro-black/50" />
                 </div>
               ))}
+              {/* Marcas I/O do export: chip I = início, O = fim (o fundo
+                  escuro marca qual está selecionada p/ Delete) */}
+              {exportRange?.start != null && (
+                <div
+                  className="absolute top-0"
+                  style={{ left: `${(exportRange.start / duration) * 100}%` }}
+                >
+                  <span className={`font-pixel text-[6px] leading-none px-[2px] rounded-[2px] ${selectedMarker === 'start' ? 'bg-retro-black text-white' : 'bg-green-600 text-white'}`}>
+                    I
+                  </span>
+                </div>
+              )}
+              {exportRange?.end != null && (
+                <div
+                  className="absolute top-0"
+                  style={{ left: `${(exportRange.end / duration) * 100}%`, transform: 'translateX(-100%)' }}
+                >
+                  <span className={`font-pixel text-[6px] leading-none px-[2px] rounded-[2px] ${selectedMarker === 'end' ? 'bg-retro-black text-white' : 'bg-red-600 text-white'}`}>
+                    O
+                  </span>
+                </div>
+              )}
               <div
                 ref={playheadRef}
                 className="absolute top-0 bottom-0 w-[2px] bg-retro-black/80"

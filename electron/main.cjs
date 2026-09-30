@@ -204,15 +204,28 @@ let whisperCliProc = null;
 let whisperCliStopped = false;
 let whisperCliHandled = false;
 
+// Tamanho do estado atual (painel de legendas ligado/desligado). É o
+// TAMANHO MINIMO da janela: ela pode crescer (arrastar a borda / tela
+// cheia), mas nunca encolher abaixo do tamanho de hoje.
+let windowStateSize = { width: 0, height: 0 };
+
+function toggleFullScreen() {
+  if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+}
+
 function createWindow() {
   const config = readConfig();
   const initialWidth = config.subtitles === 'true'
     ? windowConfig.WINDOW_SUBTITLES_WIDTH
     : windowConfig.WINDOW_NO_SUBTITLES_WIDTH;
+  windowStateSize = { width: initialWidth, height: windowConfig.WINDOW_DEFAULT_HEIGHT };
 
   mainWindow = new BrowserWindow({
     width: initialWidth,
     height: windowConfig.WINDOW_DEFAULT_HEIGHT,
+    // Mínimo = tamanho atual do estado (não pode ficar menor do que é hoje).
+    minWidth: initialWidth,
+    minHeight: windowConfig.WINDOW_DEFAULT_HEIGHT,
     resizable: windowConfig.WINDOW_OPTIONS.resizable,
     frame: windowConfig.WINDOW_OPTIONS.frame,
     transparent: windowConfig.WINDOW_OPTIONS.transparent,
@@ -227,6 +240,35 @@ function createWindow() {
       webSecurity: false,
       additionalArguments: [`--corgi-theme=${config.theme === 'modern' ? 'modern' : 'retro'}`],
     },
+  });
+
+  // Sincroniza o estado do fullscreen com o renderer (botao da TitleBar).
+  const sendFullScreenState = () => {
+    if (mainWindow) mainWindow.webContents.send('fullscreen-changed', mainWindow.isFullScreen());
+  };
+  mainWindow.on('enter-full-screen', sendFullScreenState);
+  mainWindow.on('leave-full-screen', () => {
+    sendFullScreenState();
+    // Ao sair da tela cheia o Electron restaura o tamanho de antes; se por
+    // alguma motivo ficou ABAIXO do minimo do estado (troca de painel feita
+    // dentro do fullscreen), garante o minimo de volta.
+    if (mainWindow) {
+      const [w, h] = mainWindow.getSize();
+      if (w < windowStateSize.width || h < windowStateSize.height) {
+        mainWindow.setSize(
+          Math.max(w, windowStateSize.width),
+          Math.max(h, windowStateSize.height)
+        );
+      }
+    }
+  });
+
+  // F11 entra/sai da tela cheia — mesmo caminho do botao da TitleBar.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11') {
+      event.preventDefault();
+      toggleFullScreen();
+    }
   });
 
   if (isDev) {
@@ -260,10 +302,21 @@ ipcMain.handle('get-file-size', (e, targetPath) => {
 });
 ipcMain.handle('get-whisper-dir', () => getWhisperDir());
 
+// Entra/sai da tela cheia (botao da TitleBar + atalho F11).
+ipcMain.handle('toggle-fullscreen', () => {
+  toggleFullScreen();
+  return mainWindow ? mainWindow.isFullScreen() : false;
+});
+
 ipcMain.handle('resize-window', (e, width, height) => {
   if (mainWindow) {
+    // O minimo SEMPRE acompanha o estado (640/900 x 566) — a janela não
+    // pode ficar menor do que é hoje, mesmo que o usuário estique.
+    windowStateSize = { width, height };
     mainWindow.setMinimumSize(width, height)
-    mainWindow.setSize(width, height)
+    // Dentro do fullscreen não mexe no tamanho; o minimo vale e o tamanho
+    // do estado é resolvido ao sair (listener de leave-full-screen).
+    if (!mainWindow.isFullScreen()) mainWindow.setSize(width, height)
   }
 });
 

@@ -14,12 +14,14 @@ import SubtitlesPanel from './components/SubtitlesPanel'
 import Sidebar from './components/Sidebar'
 import AnalyzeModal from './components/AnalyzeModal'
 import RnnoiseModal from './components/RnnoiseModal'
+import ShortcutsModal from './components/ShortcutsModal'
 import RecentProjectsModal from './components/RecentProjectsModal'
 import SoundConfigModal from './components/SoundConfigModal'
 import Waveform from './components/Waveform'
 import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps, ensureExportFontLoaded } from './lib/subtitleRender'
 import { buildSoundChain, mergeSoundConfig, DEFAULT_SOUND_CONFIG, findPreset } from './lib/soundChain'
 import { parseRecents, touchRecent, evictRecent } from './lib/recentProjects'
+import { validateExportRange, shiftSubtitlesForRange } from './lib/exportRange'
 import realtimeChain from './lib/realtimeChain'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 import { SUBTITLE_DISPLAY_DEFAULTS } from './global_config/subtitleConfig'
@@ -56,6 +58,7 @@ function App() {
   const [infoToast, setInfoToast] = useState(null)
   const [showAnalyze, setShowAnalyze] = useState(false)
   const [showRnnoise, setShowRnnoise] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false) // modal de atalhos (barra lateral)
   // Modal "ABRIR" (projetos recentes): lista vem do config no momento de abrir
   const [showRecent, setShowRecent] = useState(false)
   const [recentProjects, setRecentProjects] = useState([])
@@ -103,6 +106,18 @@ function App() {
   const [subtitleHMargin, setSubtitleHMargin] = useState(0.5)
   const [subtitleConfigs, setSubtitleConfigs] = useState({})
   const [subtitlesEdited, setSubtitlesEdited] = useState(false)
+
+  // --- Faixa de exportação (marcas I/O da onda) ---------------------------
+  // start/end em SEGUNDOS; null = sem marca. selectedMarker = marca clicada
+  // na onda, que o Delete apaga. exportRange é limpo ao trocar de arquivo.
+  const [exportRange, setExportRange] = useState({ start: null, end: null })
+  const [selectedMarker, setSelectedMarker] = useState(null)
+
+  // --- Ctrl+Z (desfazer) --------------------------------------------------
+  // Pilha de snapshots do array de legendas, guardados ANTES de cada edição
+  // manual (texto/tempo, apagar, adicionar, limpar).
+  const subtitlesHistoryRef = useRef([])
+  const subtitlesRef = useRef(subtitles)
 
   // --- v1.7.0: tratamento de som -----------------------------------------
   // soundConfig.enabled é o interruptor MESTRE (botão 🎤): com ele desligado
@@ -476,6 +491,8 @@ function App() {
     setSelectedFile(file)
     setSubtitles(Array.isArray(d.subtitles) ? d.subtitles : [])
     setSubtitlesEdited(d.subtitlesEdited === true)
+    // Projeto novo na memória: o undo não pode desfazer edições do projeto anterior
+    subtitlesHistoryRef.current = []
     setSoundConfig(cfg)
 
     const s = d.subtitle || {}
@@ -586,6 +603,7 @@ function App() {
     setSelectedFile(null)
     setSubtitles([])
     setSubtitlesEdited(false)
+    subtitlesHistoryRef.current = []
     setProjectFilePath(null)
     setAbMode(null)
     setRealtimeDraft(null)
@@ -605,6 +623,25 @@ function App() {
 
   const handleExport = async () => {
     if (!selectedFile || processing || generatingSubtitles) return
+    // Faixa marcada (I/O): recorta SÓ quando início E fim estão marcados.
+    // Falta um dos dois → avisa EXATAMENTE qual (antes de entrar em processing).
+    const rangeState = validateExportRange(exportRange)
+    if (rangeState === 'missing-start') {
+      setErrorMessage(t('export.needStart'))
+      setShowError(true)
+      return
+    }
+    if (rangeState === 'missing-end') {
+      setErrorMessage(t('export.needEnd'))
+      setShowError(true)
+      return
+    }
+    if (rangeState === 'bad-order') {
+      setErrorMessage(t('export.badRange'))
+      setShowError(true)
+      return
+    }
+    const hasRange = rangeState === 'ok'
     // Player para imediatamente ao iniciar a exportacao — video e wavesurfer
     // pausados INDEPENDENTES (em arquivo de audio nao existe videoRef, e o
     // wavesurfer precisa parar tambem)
@@ -626,7 +663,15 @@ function App() {
 
     const base = selectedFile.name.replace(/\.[^.]+$/, '')
     const inputExt = selectedFile.name.split('.').pop().toLowerCase()
-    const hasSubtitles = subtitles.length > 0
+    // Com faixa marcada, só sobrevive o que está DENTRO do trecho — deslocado
+    // para a timeline do recorte (o arquivo cortado começa em 0). Se nenhuma
+    // legenda cair dentro, não queima nem grava SRT lateral.
+    const rangeStartMs = hasRange ? Math.round(exportRange.start * 1000) : 0
+    const rangeEndMs = hasRange ? Math.round(exportRange.end * 1000) : 0
+    const sourceSubtitles = hasRange
+      ? shiftSubtitlesForRange(subtitles, rangeStartMs, rangeEndMs)
+      : subtitles
+    const hasSubtitles = sourceSubtitles.length > 0
     const shouldBurn = burnSubtitles && hasSubtitles
     // Burn DESLIGADO + legendas geradas: grava um .srt lateral com o MESMO
     // nome do arquivo exportado (a promessa do hint settings.burnSrtOnly)
@@ -650,8 +695,39 @@ function App() {
       ? await window.api.joinPath(outputFolder, `${base}_TEMP.${inputExt}`)
       : await window.api.joinPath(selectedFile.folder, `${base}_TEMP.${inputExt}`)
 
+    // Faixa marcada (I/O): recorta o trecho ANTES do auto-editor — o corte
+    // por silêncio, o remapeamento de legendas e a queima rodam todos já
+    // dentro do trecho. '-ss' na ENTRADA + '-t' na saída dá corte frame-
+    // accurate (re-encode com o encoder padrão do container).
+    let workPath = selectedFile.path
+    let rangePath = null
+    if (hasRange) {
+      setProgress({ pct: 3, text: t('export.trimming') })
+      rangePath = await window.api.joinPath(
+        outputFolder || selectedFile.folder,
+        `${base}_RANGE.${inputExt}`
+      )
+      const trimArgs = [
+        '-y',
+        '-ss', String(exportRange.start),
+        '-i', selectedFile.path,
+        '-t', String(exportRange.end - exportRange.start),
+        rangePath,
+      ]
+      const trimResult = await window.api.runFfmpeg(trimArgs, outputFolder || selectedFile.folder)
+      if (!trimResult.success) {
+        await window.api.deleteFile(rangePath)
+        exportingRef.current = false
+        setProcessing(false)
+        setProgress({ pct: 0, text: t('common.error') })
+        return
+      }
+      workPath = rangePath
+      console.log(`[export] faixa I/O: ${exportRange.start.toFixed(2)}s → ${exportRange.end.toFixed(2)}s (${(exportRange.end - exportRange.start).toFixed(2)}s)`)
+    }
+
     const args = [
-      selectedFile.path, '--progress', 'machine',
+      workPath, '--progress', 'machine',
       '--edit', `audio:${Math.pow(10, parseFloat(threshold) / 20)}`,
       '--margin', `${marginVal}s`,
       '--output', tempOutPath
@@ -660,6 +736,7 @@ function App() {
     const result = await window.api.runAutoEditor(args)
 
     if (!result.success) {
+      if (rangePath) await window.api.deleteFile(rangePath)
       exportingRef.current = false
       setProcessing(false)
       return
@@ -669,7 +746,7 @@ function App() {
 
     const outputDir = outputFolder || selectedFile.folder
 
-    let exportSubtitles = subtitles
+    let exportSubtitles = sourceSubtitles
     // O corte do auto-editor muda a timeline: remapeia quando as legendas
     // vao ser aplicadas ao video cortado (queima OU SRT lateral)
     if (shouldBurn || writeSidecarSrt) {
@@ -677,7 +754,7 @@ function App() {
         setProgress({ pct: 91, text: t('export.analyzingCut') })
         const xmlPath = await window.api.joinPath(outputDir, 'corgi_cutmap.xml')
         const xmlArgs = [
-          selectedFile.path,
+          workPath,
           '--export', 'premiere',
           '--edit', `audio:${Math.pow(10, parseFloat(threshold) / 20)}`,
           '--margin', `${marginVal}s`,
@@ -689,7 +766,7 @@ function App() {
           if (xmlText) {
             const { fps, segments } = parsePremiereXml(xmlText)
             if (segments.length > 0) {
-              exportSubtitles = remapSubtitleTimestamps(subtitles, segments, fps)
+              exportSubtitles = remapSubtitleTimestamps(exportSubtitles, segments, fps)
               console.log(`[export] Remapped ${subtitles.length} subtitles via Premiere XML (${segments.length} segments, ${fps}fps)`)
             }
           }
@@ -705,9 +782,10 @@ function App() {
     try {
       let assPath = null
 
-      // Duracao usada só para animar a barra de progresso do ffmpeg
-      const duration = hasSubtitles
-        ? parseSrtTime(subtitles[subtitles.length - 1].end) / 1000
+      // Duracao usada só para animar a barra de progresso do ffmpeg — na
+      // timeline EXPORTADA (com faixa I/O, já deslocada e aparada)
+      const duration = exportSubtitles.length > 0
+        ? parseSrtTime(exportSubtitles[exportSubtitles.length - 1].end) / 1000
         : 3600
       videoDurationRef.current = duration
 
@@ -865,6 +943,7 @@ function App() {
       setShowExportToast(true)
     } finally {
       await window.api.deleteFile(tempOutPath)
+      if (rangePath) await window.api.deleteFile(rangePath)
       exportingRef.current = false
       setProcessing(false)
     }
@@ -881,6 +960,8 @@ function App() {
     setGeneratingSubtitles(true)
     setSubtitles([])
     setSubtitlesEdited(false)
+    // Geração nova substitui tudo: o undo anterior não faz mais sentido
+    subtitlesHistoryRef.current = []
 
     try {
       const modelExists = await window.api.checkModel(subtitleModel)
@@ -986,6 +1067,7 @@ function App() {
   }
 
   const handleUpdateSubtitle = (index, updates) => {
+    pushUndoSnapshot()
     setSubtitlesEdited(true)
     setSubtitles((prev) => {
       const next = [...prev]
@@ -998,11 +1080,13 @@ function App() {
   }
 
   const handleDeleteSubtitle = (index) => {
+    pushUndoSnapshot()
     setSubtitlesEdited(true)
     setSubtitles((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleAddSubtitle = () => {
+    pushUndoSnapshot()
     setSubtitlesEdited(true)
     setSubtitles((prev) => {
       let lastEnd = '00:00:00,000'
@@ -1128,6 +1212,10 @@ function App() {
       setShowRnnoise(true)
       return
     }
+    if (id === 'shortcuts') {
+      setShowShortcuts(true)
+      return
+    }
     if (id !== 'analyze') return
     if (!selectedFile) {
       setInfoToast(t('analyze.noFile'))
@@ -1188,6 +1276,131 @@ function App() {
     setSeekTo(time)
   }
 
+  // --- Undo (Ctrl+Z) ------------------------------------------------------
+  // Snapshot guardado ANTES da edição (ver pushUndoSnapshot nos handlers).
+  const pushUndoSnapshot = () => {
+    const hist = subtitlesHistoryRef.current
+    hist.push(subtitlesRef.current)
+    if (hist.length > 100) hist.shift()
+  }
+
+  const undoSubtitles = () => {
+    const hist = subtitlesHistoryRef.current
+    if (hist.length === 0) return
+    const prev = hist.pop()
+    setSubtitles(prev)
+    setSubtitlesEdited(prev.length > 0)
+  }
+
+  // Espelho do array de legendas: o snapshot lê o valor ATUAL em render
+  // (o setSubtitles funcional dos handlers não entrega o valor pra fora).
+  useEffect(() => {
+    subtitlesRef.current = subtitles
+  }, [subtitles])
+
+  // Troca de arquivo zera as marcas I/O do export (a faixa é do arquivo).
+  useEffect(() => {
+    setExportRange({ start: null, end: null })
+    setSelectedMarker(null)
+  }, [selectedFile?.path])
+
+  // --- Transporte por teclado ---------------------------------------------
+  const togglePlayPause = () => {
+    const ws = waveSurferRef.current
+    const vid = videoRef.current
+    if (ws) {
+      if (ws.isPlaying()) {
+        ws.pause()
+        if (vid) vid.pause()
+      } else {
+        ws.play()
+        if (vid) vid.play()
+      }
+    } else if (vid) {
+      if (vid.paused) vid.play()
+      else vid.pause()
+    }
+  }
+
+  // ←/→ pula 5s na timeline (o seek do wavesurfer espelha no vídeo)
+  const nudgeSeek = (delta) => {
+    const ws = waveSurferRef.current
+    const vid = videoRef.current
+    if (ws) {
+      const d = ws.getDuration() || 0
+      const t = Math.max(0, d ? Math.min(d, ws.getCurrentTime() + delta) : ws.getCurrentTime() + delta)
+      ws.setTime(t)
+    } else if (vid) {
+      const d = vid.duration || 0
+      vid.currentTime = Math.max(0, d ? Math.min(d, vid.currentTime + delta) : vid.currentTime + delta)
+    }
+  }
+
+  // I = INÍCIO do export no playhead atual · O = FIM
+  const setExportMarker = (which) => {
+    const ws = waveSurferRef.current
+    if (!selectedFile || !ws) return
+    const t = ws.getCurrentTime()
+    setExportRange((prev) => ({ ...prev, [which]: t }))
+    setSelectedMarker(which)
+  }
+
+  const deleteSelectedMarker = () => {
+    if (!selectedMarker) return
+    setExportRange((prev) => ({ ...prev, [selectedMarker]: null }))
+    setSelectedMarker(null)
+  }
+
+  // --- Atalhos de teclado globais -----------------------------------------
+  // Ctrl+S salvar · Ctrl+O abrir · Ctrl+N novo · Ctrl+Z desfazer ·
+  // Espaço play/pause · ←/→ pular · I/O marcar faixa do export ·
+  // Delete apaga a marca selecionada.
+  // Nada disso dispara enquanto o foco está num campo de texto (INPUT,
+  // TEXTAREA, SELECT ou contenteditable) — Ctrl+* segue valendo para salvar
+  // o projeto mesmo editando uma legenda.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (processing || generatingSubtitles) return
+      const tgt = e.target
+      const typing = !!tgt && (
+        tgt.tagName === 'INPUT' ||
+        tgt.tagName === 'TEXTAREA' ||
+        tgt.tagName === 'SELECT' ||
+        tgt.isContentEditable
+      )
+
+      if (e.ctrlKey || e.metaKey) {
+        const k = (e.key || '').toLowerCase()
+        if (k === 's') { e.preventDefault(); handleSaveProject() }
+        else if (k === 'o') { e.preventDefault(); handleOpenClick() }
+        else if (k === 'n') { e.preventDefault(); requestNewProject() }
+        else if (k === 'z') { e.preventDefault(); undoSubtitles() }
+        return
+      }
+
+      if (typing || e.altKey) return
+
+      if (e.key === ' ') {
+        e.preventDefault() // não deixa a tecla "clicar" o botão em foco
+        togglePlayPause()
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        nudgeSeek(-5)
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        nudgeSeek(5)
+      } else if (e.key === 'i' || e.key === 'I') {
+        setExportMarker('start')
+      } else if (e.key === 'o' || e.key === 'O') {
+        setExportMarker('end')
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        deleteSelectedMarker()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   return (
     <div className="w-full h-full flex flex-col border-[4px] border-retro-black bg-retro-box">
       <TitleBar
@@ -1209,7 +1422,10 @@ function App() {
                 processing={processing}
                 onTimeUpdate={handleTimeUpdate}
                 seekTo={seekTo}
-                onClear={() => setSubtitles([])}
+                onClear={() => {
+                  pushUndoSnapshot()
+                  setSubtitles([])
+                }}
                 videoRef={videoRef}
                 waveSurferRef={waveSurferRef}
                 subtitles={subtitles}
@@ -1255,6 +1471,9 @@ function App() {
               onPlayer={handlePlayerCreated}
               playRequest={playRequest}
               shapeCfg={shapeCfg}
+              exportRange={exportRange}
+              selectedMarker={selectedMarker}
+              onSelectMarker={setSelectedMarker}
             />
           </div>
         </div>
@@ -1342,6 +1561,7 @@ function App() {
           onClose={() => setShowRnnoise(false)}
         />
       )}
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
       {showRecent && (
         <RecentProjectsModal
           projects={recentProjects}

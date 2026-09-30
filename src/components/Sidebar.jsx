@@ -1,4 +1,4 @@
-import { IconStethoscope, IconBrain } from '@tabler/icons-react'
+import { IconStethoscope, IconBrain, IconKeyboard } from '@tabler/icons-react'
 import { useLang } from '../lib/i18n'
 
 // Barra lateral vertical (lado esquerdo, sob o TitleBar). Hospeda os módulos
@@ -10,6 +10,8 @@ function Sidebar({ onSelect, disabled }) {
   const modules = [
     { id: 'analyze', Icon: IconStethoscope, label: t('sidebar.analyze') },
     { id: 'rnnoise', Icon: IconBrain, label: t('sidebar.rnnoise') },
+    // ATALHOS entra sempre no FIM (push) — não é módulo do backlog.
+    { id: 'shortcuts', Icon: IconKeyboard, label: t('sidebar.shortcuts') },
   ]
   const btn =
     'btn-retro w-7 h-7 bg-retro-bg border-2 border-retro-black rounded-full shadow-retro-sm flex items-center justify-center hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed'

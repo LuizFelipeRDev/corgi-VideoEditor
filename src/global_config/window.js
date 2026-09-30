@@ -15,8 +15,11 @@ export const WINDOW_SUBTITLES_WIDTH = 900
 export const WINDOW_NO_SUBTITLES_WIDTH = 640
 
 // Opções da janela Electron (resizable, frame, transparent)
+// resizable: true — a janela pode CRESCER (arrastar a borda / tela cheia),
+// mas nunca abaixo do tamanho atual de cada estado: minWidth/minHeight são
+// fixados no electron/main.cjs (640x566 sem legendas, 900x566 com legendas).
 export const WINDOW_OPTIONS = {
-  resizable: false,
+  resizable: true,
   frame: false,
   transparent: false,
 }

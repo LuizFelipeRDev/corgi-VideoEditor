@@ -13,6 +13,18 @@ const dbToLin = (db) => Math.pow(10, db / 20)
 // ruido ja cortado pelo gate). Com env no silencio o alvo (targetRms/env)
 // explodiria e inflaria o ganho; melhor congelar.
 const AGC_FLOOR = dbToLin(-60)
+// Teto de SEGURANÇA: a prévia nunca entrega acima de AGC_HEADROOM× o alvo.
+// O alvo sai de um env que pode estar DEFASADO do que toca agora (silêncio→
+// voz, ou env/gain congelados de uma parada/grafo recriado = o "primeiro
+// segundo estourado" da prévia: o ganho corria pra lá com τ≈1 s). No
+// estacionário level≈env e o teto fica 1.5× acima do alvo — nunca limita o
+// que é normal.
+const AGC_HEADROOM = 1.5
+// Trava DURA por bloco (RMS instantâneo): cobre a janela em que o `level`
+// ainda não pegou o salto do sinal (1º bloco de um salto) ou o ganho veio
+// enorme de uma sessão anterior. Só engata acima de ~4× o alvo — picos
+// normais de fala passam livres.
+const AGC_HARD = 4
 
 class CorgiApproxProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -22,6 +34,7 @@ class CorgiApproxProcessor extends AudioWorkletProcessor {
     this.threshold = dbToLin(-35) // gate: abre quando o sinal passa disto
     this.targetRms = 0.2           // agc: alvo de RMS (~ lufs + 2 dBFS)
     this.env = 0                   // envelope do sinal (gate) / loudness (agc)
+    this.level = 0                 // agc: nível RÁPIDO do sinal (só o teto)
     this.gain = 1                  // ganho suavizado aplicado
     this.warmed = false            // agc: primeiro bloco ainda nao mediu nada
     this.port.onmessage = (e) => {
@@ -75,6 +88,9 @@ class CorgiApproxProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < n; i++) sum += input[0][i] * input[0][i]
     const rms = Math.sqrt(sum / n)
     const block = n / sampleRate
+    // Nível do sinal AGORA (ataque 5 ms / release 100 ms) — só alimenta o
+    // teto de segurança abaixo; não entra no cálculo do alvo normal.
+    this.level += (rms - this.level) * (rms > this.level ? 1 - Math.exp(-block / 0.005) : 1 - Math.exp(-block / 0.1))
     if (this.warmed) {
       this.env += (rms - this.env) * (rms > this.env ? 1 - Math.exp(-block / 0.4) : 1 - Math.exp(-block / 1.5))
     } else {
@@ -86,15 +102,39 @@ class CorgiApproxProcessor extends AudioWorkletProcessor {
       this.env = rms
       this.warmed = true
     }
-    const target = !this.on
+    let target = !this.on
       ? 1
       : // Silêncio: alvo calculado de um env≈0 estouraria no teto e inflaria
         // o ganho — a voz entraria multiplicada. Congela no valor atual.
         this.env < AGC_FLOOR
         ? this.gain
         : Math.min(16, Math.max(0.05, this.targetRms / this.env))
-    const from = this.gain
-    this.gain += (target - this.gain) * (target > this.gain ? 1 - Math.exp(-block / 1.0) : 1 - Math.exp(-block / 0.15))
+    // Teto de segurança (só com o AGC ligado): o alvo sai de um env que pode
+    // estar DEFASADO do que toca agora — silêncio→voz, ou env/gain congelados
+    // de uma parada (depois de "algum tempo" parado) => o ganho corria pra lá
+    // com τ≈1 s e o primeiro segundo saía estourado. No estacionário
+    // level≈env e o teto fica ~1.5× acima do alvo — nunca limita o normal.
+    let cap = Infinity
+    if (this.on) {
+      cap = (this.targetRms * AGC_HEADROOM) / Math.max(this.level, AGC_FLOOR)
+      if (target > cap) target = cap
+    }
+    let from = this.gain
+    // sobe τ=1 s (normal); desce τ=150 ms — e τ=30 ms enquanto estiver ACIMA
+    // do teto: lá o env ainda não pegou o nível real e deixar correr a
+    // τ=1 s é exatamente o "primeiro segundo estourado".
+    const overCap = this.gain > cap
+    const tau = target > this.gain ? 1.0 : overCap ? 0.03 : 0.15
+    this.gain += (target - this.gain) * (1 - Math.exp(-block / tau))
+    // Trava DURA no ganho do bloco: RMS instantâneo, vale mesmo no primeiro
+    // bloco do salto (o level ainda não alcançou) e com ganho herdado de uma
+    // sessão anterior (ex.: ×16 de um trecho calmo). `from` também: a
+    // interpolação do bloco inteiro tem que nascer já travada.
+    if (this.on) {
+      const hard = (this.targetRms * AGC_HARD) / Math.max(rms, AGC_FLOOR)
+      if (this.gain > hard) this.gain = hard
+      if (from > hard) from = hard
+    }
     const step = (this.gain - from) / n
     for (let i = 0; i < n; i++) {
       const g = from + step * i

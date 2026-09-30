@@ -113,6 +113,7 @@ export default {
   // --- Waveform (barra de transporte) ---
   'waveform.loading': 'Carregando...',
   'waveform.ready': 'Pronto',
+  'waveform.markHint': 'I/O: marca início/fim do export · Delete: apaga',
 
   // --- Controls (export) ---
   'controls.minVolume': 'VOLUME MÍNIMO',
@@ -157,6 +158,8 @@ export default {
   'project.recentEmpty': 'Nenhum projeto recente ainda',
   'project.openManual': 'ABRIR MANUALMENTE',
   'project.recentMissing': 'arquivo não encontrado',
+  'project.fullscreen': 'Tela cheia (F11)',
+  'project.exitFullscreen': 'Sair da tela cheia (F11)',
 
   // --- DropZone (zona de arraste + info do arquivo) ---
   'dropzone.clear': 'Limpar',
@@ -193,6 +196,10 @@ export default {
   'export.converting': 'Convertendo...',
   'export.analyzingCut': 'Analisando corte...',
   'export.burning': 'Imbutindo legenda...',
+  'export.trimming': 'Recortando trecho selecionado...',
+  'export.needStart': 'Falta o INÍCIO do export — posicione o playhead e marque com a tecla I.',
+  'export.needEnd': 'Falta o FIM do export — posicione o playhead e marque com a tecla O.',
+  'export.badRange': 'O INÍCIO do export está DEPOIS do fim — reposicione as marcas (I/O).',
 
   // --- Painel (legendas) ---
   'panel.newSubtitle': 'Nova legenda',
@@ -319,4 +326,19 @@ export default {
   'rnnoise.errorDns': 'Sem conexão com o GitHub (falha de DNS). Verifique a internet/proxy e tente de novo.',
   'rnnoise.errorTimeout': 'Tempo esgotado baixando o modelo. Verifique a conexão e tente novamente.',
   'rnnoise.errorConn': 'Conexão recusada ao baixar o modelo. Verifique a internet e tente novamente.',
+
+  'sidebar.shortcuts': 'Atalhos de teclado do programa',
+  'shortcuts.title': 'ATALHOS DO TECLADO',
+  'shortcuts.save': 'Salvar projeto',
+  'shortcuts.open': 'Abrir projeto',
+  'shortcuts.new': 'Novo projeto',
+  'shortcuts.undo': 'Desfazer última edição de legenda',
+  'shortcuts.playPause': 'Reproduzir / pausar',
+  'shortcuts.back5': 'Voltar 5 segundos',
+  'shortcuts.fwd5': 'Avançar 5 segundos',
+  'shortcuts.markStart': 'Marcar início do export na onda',
+  'shortcuts.markEnd': 'Marcar fim do export na onda',
+  'shortcuts.delMarker': 'Apagar a marca selecionada',
+  'shortcuts.fullscreen': 'Tela cheia / sair da tela cheia',
+  'shortcuts.keySpace': 'ESPAÇO',
 }

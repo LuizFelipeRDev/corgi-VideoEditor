@@ -25,6 +25,12 @@ let _ffmpegOutputCb = null;
 let _ffmpegDoneCb = null;
 let _ffmpegErrorCb = null;
 
+let _fullscreenCb = null;
+
+ipcRenderer.on('fullscreen-changed', (event, isFullScreen) => {
+  if (_fullscreenCb) _fullscreenCb(isFullScreen);
+});
+
 ipcRenderer.on('auto-editor-output', (event, data) => {
   if (_outputCb) _outputCb(data);
 });
@@ -110,6 +116,8 @@ contextBridge.exposeInMainWorld('api', {
   renameFile: (oldPath, newPath) => ipcRenderer.invoke('rename-file', oldPath, newPath),
   minimize: () => ipcRenderer.invoke('minimize'),
   close: () => ipcRenderer.invoke('close'),
+  toggleFullscreen: () => ipcRenderer.invoke('toggle-fullscreen'),
+  onFullscreenChange: (cb) => { _fullscreenCb = cb; },
   selectFile: () => ipcRenderer.invoke('select-file'),
   selectOutputDir: () => ipcRenderer.invoke('select-output-dir'),
   joinPath: (dir, filename) => ipcRenderer.invoke('join-path', dir, filename),

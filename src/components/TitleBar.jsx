@@ -1,9 +1,15 @@
-import { IconFile, IconDeviceFloppy, IconFolder } from '@tabler/icons-react'
+import { useEffect, useState } from 'react'
+import { IconFile, IconDeviceFloppy, IconFolder, IconArrowsMaximize, IconArrowsMinimize } from '@tabler/icons-react'
 import { useLang } from '../lib/i18n'
 import logo from '../../assets/logo02.png'
 
 function TitleBar({ onNew, onSave, onOpen, disabled }) {
   const { t } = useLang()
+  const [isFullScreen, setIsFullScreen] = useState(false)
+  // Estado do fullscreen vem do main (botão aqui + atalho F11 saem do mesmo IPC).
+  useEffect(() => {
+    if (window.api.onFullscreenChange) window.api.onFullscreenChange(setIsFullScreen)
+  }, [])
   const btn = 'btn-retro w-6 h-6 bg-retro-bg border-2 border-retro-black rounded-full shadow-retro-sm flex items-center justify-center hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed'
   return (
     <div
@@ -25,6 +31,13 @@ function TitleBar({ onNew, onSave, onOpen, disabled }) {
           <IconFolder size={13} />
         </button>
         <div className="w-px bg-retro-black/30 mx-1 self-center h-4" />
+        <button
+          onClick={() => window.api.toggleFullscreen()}
+          title={isFullScreen ? t('project.exitFullscreen') : t('project.fullscreen')}
+          className="btn-retro w-6 h-6 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm flex items-center justify-center hover:bg-gray-200"
+        >
+          {isFullScreen ? <IconArrowsMinimize size={13} /> : <IconArrowsMaximize size={13} />}
+        </button>
         <button
           onClick={() => window.api.minimize()}
           className="btn-retro w-6 h-6 bg-retro-bg border-2 border-retro-black rounded shadow-retro-sm flex items-center justify-center text-[10px] font-bold hover:bg-gray-200"

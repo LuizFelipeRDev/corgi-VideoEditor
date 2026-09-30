@@ -118,6 +118,7 @@ export default {
   // --- Waveform (barra de transporte) ---
   'waveform.loading': 'Loading...',
   'waveform.ready': 'Ready',
+  'waveform.markHint': 'I/O: mark export start/end · Delete: removes',
 
   // --- Controls (export) ---
   'controls.minVolume': 'MIN VOLUME',
@@ -162,6 +163,8 @@ export default {
   'project.recentEmpty': 'No recent projects yet',
   'project.openManual': 'OPEN MANUALLY',
   'project.recentMissing': 'file not found',
+  'project.fullscreen': 'Fullscreen (F11)',
+  'project.exitFullscreen': 'Exit fullscreen (F11)',
 
   // --- DropZone (zona de arraste + info do arquivo) ---
   'dropzone.clear': 'Clear',
@@ -198,6 +201,10 @@ export default {
   'export.converting': 'Converting...',
   'export.analyzingCut': 'Analyzing cut...',
   'export.burning': 'Burning subtitles...',
+  'export.trimming': 'Trimming selected range...',
+  'export.needStart': 'Export START is missing — move the playhead and press I to mark it.',
+  'export.needEnd': 'Export END is missing — move the playhead and press O to mark it.',
+  'export.badRange': 'Export START is AFTER the end — move the markers (I/O).',
 
   // --- Painel (legendas) ---
   'panel.newSubtitle': 'New subtitle',
@@ -324,4 +331,19 @@ export default {
   'rnnoise.errorDns': 'No connection to GitHub (DNS failed). Check your internet/proxy and try again.',
   'rnnoise.errorTimeout': 'Timed out downloading the model. Check your connection and try again.',
   'rnnoise.errorConn': 'Connection refused while downloading the model. Check your internet and try again.',
+
+  'sidebar.shortcuts': 'Keyboard shortcuts',
+  'shortcuts.title': 'KEYBOARD SHORTCUTS',
+  'shortcuts.save': 'Save project',
+  'shortcuts.open': 'Open project',
+  'shortcuts.new': 'New project',
+  'shortcuts.undo': 'Undo last subtitle edit',
+  'shortcuts.playPause': 'Play / pause',
+  'shortcuts.back5': 'Back 5 seconds',
+  'shortcuts.fwd5': 'Forward 5 seconds',
+  'shortcuts.markStart': 'Mark export start on the waveform',
+  'shortcuts.markEnd': 'Mark export end on the waveform',
+  'shortcuts.delMarker': 'Remove the selected marker',
+  'shortcuts.fullscreen': 'Fullscreen / exit fullscreen',
+  'shortcuts.keySpace': 'SPACE',
 }
