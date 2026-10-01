@@ -1,25 +1,25 @@
-// Prévia em TEMPO REAL — "A/B instantâneo" (v1.8.0)
+// REAL-TIME preview — "instant A/B" (v1.8.0)
 // ---------------------------------------------------------------------------
-// A cadeia de tratamento montada com Web Audio DENTRO do AudioContext do
-// próprio wavesurfer (backend WebAudio → WebAudioPlayer.getGainNode()).
-// A troca original × tratado é um crossfade de ganho: sem render ffmpeg, sem
-// recarregar a fonte — clique e ouve na hora, de onde a playhead estiver.
+// The treatment chain built with Web Audio INSIDE wavesurfer's own
+// AudioContext (WebAudio backend → WebAudioPlayer.getGainNode()).
+// The original × treated switch is a gain crossfade: no ffmpeg render, no
+// reloading the source — click and hear it instantly, wherever the playhead is.
 //
-// Fidelidade: highpass/lowpass/EQ/compressor/limiter/eco/velocidade batem
-// muito perto do ffmpeg; denoise (afftdn) e loudnorm (loudnorm) são
-// APROXIMADOS pelo AudioWorklet 'corgi-approx'. O EXPORT continua sendo o
-// ffmpeg exato — a prévia é pra decidir rápido, o arquivo final não muda.
+// Fidelity: highpass/lowpass/EQ/compressor/limiter/echo/speed come
+// very close to ffmpeg; denoise (afftdn) and loudnorm (loudnorm) are
+// APPROXIMATED by the AudioWorklet 'corgi-approx'. The EXPORT is still the
+// exact ffmpeg — the preview is for deciding fast, the final file doesn't change.
 //
-// Ponto de inserção: o wavesurfer constrói o áudio como
+// Insertion point: wavesurfer builds the audio as
 //   bufferNode → gainNode → destination (WebAudioPlayer)
-// então damos disconnect() no gainNode e o religamos NA MINHA cadeia:
+// so we disconnect() the gainNode and reconnect it INTO MY chain:
 //   tap → dry ──────────────────────────→ destination   (ORIGINAL)
-//   tap → [gate] → hp → lp → eq → comp → [agc] → lim → eco → wet → destination
-// O ganho/volume/mute do próprio player segue fluindo pelo tap ✓
+//   tap → [gate] → hp → lp → eq → comp → [agc] → lim → echo → wet → destination
+// The player's own gain/volume/mute keeps flowing through the tap ✓
 //
-// A FORMA da onda também acompanha o tratamento: renderEnvelope() repassa a
-// MESMA cadeia num OfflineAudioContext e devolve o envelope (máximo por
-// janela) por canal — o wavesurfer redesenha os picos sem tocar no player.
+// The SHAPE of the waveform also follows the treatment: renderEnvelope() runs the
+// SAME chain in an OfflineAudioContext and returns the envelope (max per
+// window) per channel — wavesurfer redraws the peaks without touching the player.
 
 import approxWorkletSrc from './approx.processor.js?raw'
 
@@ -27,22 +27,22 @@ const WORKLET = 'corgi-approx'
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
 const dbToLin = (db) => Math.pow(10, db / 20)
 
-// AudioParam suavizado (evita clique quando a cfg ou o lado do A/B muda).
-// Em contexto OFFLINE (redesenho da forma da onda) o valor é direto, sem
-// rampa: tem que estar certo já no primeiro sample do render.
+// Smoothed AudioParam (avoids clicks when the cfg or the A/B side changes).
+// In OFFLINE context (waveform shape redraw) the value is set directly, no
+// ramp: it must be right on the render's first sample already.
 const setParam = (param, value, ctx, tc = 0.02) => {
   if (ctx && typeof OfflineAudioContext !== 'undefined' && ctx instanceof OfflineAudioContext) {
     try {
       param.value = value
     } catch {
-      // param inacessível — ignorar
+      // inaccessible param — ignore
     }
     return
   }
   try {
     param.setTargetAtTime(value, ctx.currentTime, tc)
   } catch {
-    // contexto fechado/encerrado — ignorar
+    // closed/terminated context — ignore
   }
 }
 
@@ -61,10 +61,10 @@ const chain = {
   workletOk: false,
 }
 
-// addModule via Blob: funciona em dev e no build file://. Uma única vez por
-// AudioContext; falha ⇒ segue sem os dois approx (gate/agc).
-// loadWorklet: SEM cache — cada ctx (inclusive os offline da forma da onda)
-// precisa do próprio addModule.
+// addModule via Blob: works in dev and in the file:// build. Once per
+// AudioContext; failure ⇒ continues without the two approx (gate/agc).
+// loadWorklet: NO cache — each ctx (including the waveform shape's offline ones)
+// needs its own addModule.
 const loadWorklet = (ctx) => {
   if (!ctx.audioWorklet) return Promise.resolve(false)
   const url = URL.createObjectURL(new Blob([approxWorkletSrc], { type: 'application/javascript' }))
@@ -80,10 +80,10 @@ const loadWorklet = (ctx) => {
     })
 }
 
-// Cache pro AudioContext do player (só o attach usa)
+// Cache for the player's AudioContext (only attach uses it)
 const ensureWorklet = (ctx) => {
   if (!ctx.audioWorklet) return Promise.resolve(false)
-  // Mesmo ctx: devolve a promise pendente (ou o resultado já resolvido)
+  // Same ctx: returns the pending promise (or the already resolved result)
   if (chain.workletForCtx === ctx) return chain.workletPromise || Promise.resolve(chain.workletOk)
   chain.workletForCtx = ctx
   chain.workletOk = false
@@ -94,9 +94,9 @@ const ensureWorklet = (ctx) => {
   return chain.workletPromise
 }
 
-// Monta o grafo de tratamento num ctx (prévia realtime OU render offline) —
-// NÃO toca em tap/destination/estado global: quem conecta é o chamador.
-// dry/wet nascem neutros (original); apply()/o chamador definem os ganhos.
+// Builds the treatment graph on a ctx (realtime preview OR offline render) —
+// does NOT touch tap/destination/global state: the caller is the one connecting.
+// dry/wet start neutral (original); apply()/the caller set the gains.
 const build = (ctx, workletOk) => {
   const dry = ctx.createGain()
   const wet = ctx.createGain()
@@ -111,7 +111,7 @@ const build = (ctx, workletOk) => {
     const b = ctx.createBiquadFilter()
     b.type = 'peaking'
     b.frequency.value = freq
-    b.Q.value = 1 // mesmo Q do equalizer do ffmpeg (w=1)
+    b.Q.value = 1 // same Q as ffmpeg's equalizer (w=1)
     return b
   }
   const eqLow = mkBand(110)
@@ -120,14 +120,14 @@ const build = (ctx, workletOk) => {
   const comp = ctx.createDynamicsCompressor()
   const lim = ctx.createDynamicsCompressor()
 
-  // eco paralelo: dry + delay com realimentação (≈ aecho)
+  // parallel echo: dry + delay with feedback (≈ aecho)
   const echoDry = ctx.createGain()
   echoDry.gain.value = 1
   const delay = ctx.createDelay(2)
   const fb = ctx.createGain()
   const echoWet = ctx.createGain()
 
-  // approximations (só com o worklet carregado)
+  // approximations (only with the worklet loaded)
   let gate = null
   let agc = null
   if (workletOk) {
@@ -142,8 +142,8 @@ const build = (ctx, workletOk) => {
     }
   }
 
-  // montagem interna da cadeia (entrada → ... → wet). dry/destination são
-  // ligados pelo CHAMADOR: prévia realtime (tap) ou render offline (source).
+  // internal assembly of the chain (input → ... → wet). dry/destination are
+  // connected by the CALLER: realtime preview (tap) or offline render (source).
   const entry = gate || hp
   if (gate) gate.connect(hp)
   hp.connect(lp)
@@ -168,8 +168,8 @@ const build = (ctx, workletOk) => {
   return { ctx, dry, wet, hp, lp, eqLow, eqMid, eqHigh, comp, lim, echoDry, delay, fb, echoWet, gate, agc, entry }
 }
 
-// Cfg → parâmetros. Mesma semântica do buildSoundChain (só o que o Web Audio
-// consegue representar; denoise/loudnorm vão pelos approximations do worklet).
+// Cfg → parameters. Same semantics as buildSoundChain (only what Web Audio
+// can represent; denoise/loudnorm go through the worklet's approximations).
 const applyParams = (n, cfg) => {
   const { ctx } = n
   const noise = cfg.noise || {}
@@ -177,7 +177,7 @@ const applyParams = (n, cfg) => {
   const eq = cfg.eq || {}
   const fx = cfg.fx || {}
 
-  // highpass/lowpass — o tom "rádio" estreita a banda ainda mais
+  // highpass/lowpass — the "radio" tone narrows the band even further
   const radio = eq.on === true && eq.tone === 'radio'
   let hpHz = noise.highpassOn ? clamp(Math.round(Number(noise.highpassHz) || 80), 20, 500) : 10
   let lpHz = noise.lowpassOn ? clamp(Math.round(Number(noise.lowpassHz) || 8000), 1000, 20000) : ctx.sampleRate / 2 - 100
@@ -188,12 +188,12 @@ const applyParams = (n, cfg) => {
   setParam(n.hp.frequency, hpHz, ctx)
   setParam(n.lp.frequency, lpHz, ctx)
 
-  // EQ por banda (0 = fora, igual a não empurrar o equalizer no ffmpeg)
+  // per-band EQ (0 = off, same as not pushing the equalizer in ffmpeg)
   setParam(n.eqLow.gain, eq.on ? clamp(Number(eq.low) || 0, -12, 12) : 0, ctx)
   setParam(n.eqMid.gain, eq.on ? clamp(Number(eq.mid) || 0, -12, 12) : 0, ctx)
   setParam(n.eqHigh.gain, eq.on ? clamp(Number(eq.high) || 0, -12, 12) : 0, ctx)
 
-  // compressor (acompressor do ffmpeg: release fixo 250 ms)
+  // compressor (ffmpeg's acompressor: fixed 250 ms release)
   const compOn = dyn.compOn === true
   setParam(n.comp.threshold, compOn ? clamp(Number(dyn.threshold ?? -18), -50, 0) : 0, ctx)
   setParam(n.comp.ratio, compOn ? clamp(Number(dyn.ratio ?? 3), 1, 20) : 1, ctx)
@@ -201,7 +201,7 @@ const applyParams = (n, cfg) => {
   setParam(n.comp.release, 0.25, ctx)
   setParam(n.comp.knee, compOn ? 6 : 0, ctx)
 
-  // limiter (alimiter): segura no pico máximo; ratio 1 = transparente
+  // limiter (alimiter): holds at the maximum peak; ratio 1 = transparent
   const limOn = dyn.limiterOn === true
   setParam(n.lim.threshold, limOn ? clamp(Number(dyn.ceiling ?? -1), -6, -0.1) : 0, ctx)
   setParam(n.lim.ratio, limOn ? 20 : 1, ctx)
@@ -213,7 +213,7 @@ const applyParams = (n, cfg) => {
   if (n.gate) {
     n.gate.port.postMessage({
       mode: 'gate',
-      on: noise.denoiseOn === true, // neural (arnndn) também aproxima pelo gate
+      on: noise.denoiseOn === true, // neural (arnndn) is also approximated by the gate
       threshold: dbToLin(clamp(Number(noise.denoiseDb ?? -25), -80, -20) - 10),
     })
   }
@@ -225,14 +225,14 @@ const applyParams = (n, cfg) => {
     })
   }
 
-  // eco (aecho: in 0.7 / out 0.9 → aproximação 0.85)
+  // echo (aecho: in 0.7 / out 0.9 → approximation 0.85)
   const echoOn = fx.echoOn === true
   setParam(n.echoWet.gain, echoOn ? 0.85 : 0, ctx)
   setParam(n.delay.delayTime, echoOn ? clamp(Math.round(Number(fx.echoDelay ?? 300)), 10, 1000) / 1000 : 0.3, ctx)
   setParam(n.fb.gain, echoOn ? clamp(Number(fx.echoDecay ?? 0.4), 0.05, 0.9) : 0, ctx)
 }
 
-// Aplica o estado GUARDADO (cfg + lado do A/B) no grafo montado.
+// Applies the SAVED state (cfg + A/B side) to the built graph.
 const apply = () => {
   const n = chain.nodes
   if (!n) return
@@ -242,7 +242,7 @@ const apply = () => {
   try {
     n.player.playbackRate = active ? speedOf(chain.cfg) : 1
   } catch {
-    // player destruído
+    // player destroyed
   }
   if (chain.cfg) {
     try {
@@ -253,29 +253,30 @@ const apply = () => {
   }
 }
 
-// --- FORMA DA ONDA: render OFFLINE -------------------------------------------
-// Redesenha os picos da onda conforme o tratamento, sem arquivo novo e sem
-// tocar no player: a MESMA cadeia da prévia roda num OfflineAudioContext e o
-// envelope (máximo por janela) de cada canal vai pro wavesurfer. Processa em
-// blocos de CHUNK_SEC com pré-roll (ROLL_SEC/rollFor) — memória limitada em
-// arquivo longo e o estado das cadeias com memória (compressor/AGC/eco)
-// continua de um bloco pro próximo graças ao trecho de arrancada.
+// --- WAVEFORM SHAPE: OFFLINE render -------------------------------------------
+// Redraws the waveform peaks according to the treatment, with no new file and
+// without touching the player: the SAME preview chain runs in an
+// OfflineAudioContext and the envelope (max per window) of each channel goes
+// to wavesurfer. Processes in CHUNK_SEC blocks with pre-roll (ROLL_SEC/rollFor)
+// — bounded memory on long files, and the state of the stateful chains
+// (compressor/AGC/echo) carries from one block to the next thanks to the
+// run-up segment.
 const CHUNK_SEC = 15
-const ROLL_SEC = 5 // cobre AGC (τ≈1 s) e a rampa do compressor a cada bloco
+const ROLL_SEC = 5 // covers AGC (τ≈1 s) and the compressor ramp on every block
 
-// O eco tem memória LONGA (cauda fb^k · delay^k): o pré-roll de cada bloco
-// precisa conter a cauda, senão o começo do bloco "fura" (<3% de erro).
-// Caso extremo (delay 1 s / fb 0.9) ≈ 33 s — só quem liga eco paga isso.
+// The echo has LONG memory (tail fb^k · delay^k): each block's pre-roll
+// must contain the tail, otherwise the start of the block "breaks" (<3% error).
+// Extreme case (delay 1 s / fb 0.9) ≈ 33 s — only whoever enables echo pays for that.
 const rollFor = (cfg) => {
   const fx = cfg?.fx || {}
   if (fx.echoOn !== true) return ROLL_SEC
   const d = clamp(Math.round(Number(fx.echoDelay ?? 300)), 10, 1000) / 1000
   const fbv = clamp(Number(fx.echoDecay ?? 0.4), 0.05, 0.9)
-  const need = (d * Math.log(0.03)) / Math.log(fbv) // logs negativos → positivo
+  const need = (d * Math.log(0.03)) / Math.log(fbv) // negative logs → positive
   return Math.max(ROLL_SEC, Math.min(34, Math.ceil(need)))
 }
 
-// ~120 pontos/s (a onda desenha ~0,5 s/barra = 2 barras por ponto)
+// ~120 points/s (the waveform draws ~0.5 s/bar = 2 bars per point)
 const envelopePoints = (duration) => clamp(Math.ceil(duration * 120), 4096, 131072)
 
 const renderChunk = async (buffer, start, len, cfg) => {
@@ -284,7 +285,7 @@ const renderChunk = async (buffer, start, len, cfg) => {
   const nodes = build(off, ok)
   applyParams(nodes, cfg)
   nodes.dry.gain.value = 0
-  nodes.wet.gain.value = 1 // prévia tratada por inteiro
+  nodes.wet.gain.value = 1 // fully treated preview
   const sub = off.createBuffer(buffer.numberOfChannels, len, buffer.sampleRate)
   for (let c = 0; c < buffer.numberOfChannels; c++) {
     sub.getChannelData(c).set(buffer.getChannelData(c).subarray(start, start + len))
@@ -296,19 +297,19 @@ const renderChunk = async (buffer, start, len, cfg) => {
   src.start(0)
   const out = await off.startRendering()
   try {
-    // OfflineAudioContext não expõe close() em toda versão — guardado
+    // OfflineAudioContext doesn't expose close() in every version — guarded
     if (typeof off.close === 'function') {
       const closed = off.close()
       if (closed && closed.catch) closed.catch(() => {})
     }
   } catch {
-    // sem close disponível / contexto já encerrado — ok
+    // no close available / context already terminated — ok
   }
   return out
 }
 
-// Devolve Array<Float32Array> (máx. por janela, ≤2 canais) ou null em
-// falha/cancelamento — o chamador mantém a forma anterior nesse caso.
+// Returns Array<Float32Array> (max per window, ≤2 channels) or null on
+// failure/cancellation — the caller keeps the previous shape in that case.
 const renderEnvelope = async (buffer, cfg, isCancelled) => {
   if (!buffer || !buffer.length || !cfg) return null
   try {
@@ -319,13 +320,13 @@ const renderEnvelope = async (buffer, cfg, isCancelled) => {
     const env = Array.from({ length: ch }, () => new Float32Array(points))
     const chunk = Math.max(1, Math.floor(CHUNK_SEC * sr))
     const roll = Math.floor(rollFor(cfg) * sr)
-    let done = 0 // amostras do arquivo já envelopadas
+    let done = 0 // file samples already enveloped
     let donePts = 0
     while (done < total) {
       if (isCancelled && isCancelled()) return null
       const len = Math.min(chunk, total - done)
       const pre = Math.min(roll, done)
-      // pré-roll puro: tudo é causal, não precisa de pós-roll
+      // pure pre-roll: everything is causal, no post-roll needed
       const out = await renderChunk(buffer, done - pre, pre + len, cfg)
       const take =
         done + len >= total ? points - donePts : Math.min(points - donePts, Math.round((len / total) * points))
@@ -357,8 +358,8 @@ const renderEnvelope = async (buffer, cfg, isCancelled) => {
 }
 
 const realtimeChain = {
-  // Liga a cadeia ao player atual (WebAudioPlayer do wavesurfer). Chamar a
-  // cada criação de player (onPlayer) — build assíncrono só pro worklet.
+  // Connects the chain to the current player (wavesurfer's WebAudioPlayer).
+  // Call it on every player creation (onPlayer) — async build only for the worklet.
   attach(player) {
     if (!player) {
       chain.player = null
@@ -366,13 +367,13 @@ const realtimeChain = {
       return
     }
     if (player === chain.player) return
-    if (typeof player.getGainNode !== 'function') return // backend sem WebAudioPlayer (futuro)
-    // Player novo: solta o grafo antigo (o player anterior morre junto)
+    if (typeof player.getGainNode !== 'function') return // backend without WebAudioPlayer (future)
+    // New player: releases the old graph (the previous player dies with it)
     if (chain.nodes && chain.nodes.player !== player) {
       try {
         chain.nodes.tap.disconnect()
       } catch {
-        // já solto
+        // already released
       }
     }
     const tap = player.getGainNode()
@@ -380,13 +381,13 @@ const realtimeChain = {
     chain.player = player
     chain.nodes = null
     ensureWorklet(ctx).then((ok) => {
-      if (chain.player !== player) return // player trocou durante a espera
+      if (chain.player !== player) return // player changed while waiting
       const nodes = build(ctx, ok)
-      // religa o gainNode do player NA cadeia (dry = original, wet = tratado)
+      // reconnects the player's gainNode INTO the chain (dry = original, wet = treated)
       try {
         tap.disconnect()
       } catch {
-        // sem conexões antigas — ok
+        // no old connections — ok
       }
       tap.connect(nodes.dry)
       nodes.dry.connect(ctx.destination)
@@ -407,8 +408,8 @@ const realtimeChain = {
     apply()
   },
 
-  // Envelope (máx./janela por canal) do áudio TRATADO — pra redesenhar a
-  // FORMA da onda. Array<Float32Array> ou null (falha/cancelado).
+  // Envelope (max/window per channel) of the TREATED audio — to redraw the
+  // waveform SHAPE. Array<Float32Array> or null (failure/cancelled).
   renderEnvelope,
 }
 

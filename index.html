@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CORGI-EDITOR</title>
     <script>
-      // Preview da UI no navegador (sem Electron): se o preload NAO injetou
-      // window.api, faz um mock minimo para a tela carregar. Em producao o
-      // preload define window.api antes da pagina, entao este bloco nunca roda.
+      // UI preview in the browser (no Electron): if the preload did NOT inject
+      // window.api, it builds a minimal mock so the screen loads. In production the
+      // preload defines window.api before the page, so this block never runs.
       if (!window.api) {
         const defaults = {
           threshold: '-30', margin: '0.5', output_folder: '', output_format: 'mp4',

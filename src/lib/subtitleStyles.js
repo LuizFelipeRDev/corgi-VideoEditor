@@ -1,42 +1,42 @@
 /**
- * ESTILOS DE LEGENDA
+ * SUBTITLE STYLES
  *
- * PROPRIEDADES DE POP (animacao de escala):
+ * POP PROPERTIES (scale animation):
  *
- * popIntensity: Controle se o estilo tem efeito pop
- *   0 = sem efeito pop (legenda estatica)
- *   1 = com efeito pop (animacao de escala)
+ * popIntensity: Controls whether the style has a pop effect
+ *   0 = no pop effect (static subtitle)
+ *   1 = with pop effect (scale animation)
  *
- * popDuration: Duracao da animacao pop em segundos
- *   Exemplo: 0.18 = 180ms (rapido), 0.3 = 300ms (medio)
- *   Usado em conjunto com popSize para controlar a animacao.
+ * popDuration: Duration of the pop animation in seconds
+ *   Example: 0.18 = 180ms (fast), 0.3 = 300ms (medium)
+ *   Used together with popSize to control the animation.
  *
- * popSize: Tamanho do efeito de escala (em pontos percentuais)
- *   Representa a variacao de escala a partir de 100%.
- *   Exemplo:  5 = escala de 95% -> 105% -> 100% (sutil)
- *            10 = escala de 90% -> 110% -> 100% (medio)
- *            15 = escala de 85% -> 115% -> 100% (forte)
+ * popSize: Size of the scale effect (in percentage points)
+ *   Represents the scale variation from 100%.
+ *   Example:  5 = scale of 95% -> 105% -> 100% (subtle)
+ *            10 = scale of 90% -> 110% -> 100% (medium)
+ *            15 = scale of 85% -> 115% -> 100% (strong)
  *
- * animationType: Determina O TIPO de animacao (ainda necessario):
- *   'highlight'    = muda cor da palavra ativa
- *   'simple'       = cor estatica, sem animacao
- *   'bounce'       = animacao no BLOCO inteiro (pop no bloco)
- *   'karaoke'      = palavras ficam destacadas apos faladas
- *   'scale'        = escala na PALAVRA ativa (pop por palavra)
- *   'wordpop'      = animacao de pop na PALAVRA ativa
- *   'highlightbox' = caixa de fundo na PALAVRA ativa (sem pop)
- *   'popline'      = faixa fina na BASE da PALAVRA ativa + pop (faixa e
- *                    palavra escalam juntos ao redor do centro da palavra)
+ * animationType: Determines THE TYPE of animation (still needed):
+ *   'highlight'    = changes the active word's color
+ *   'simple'       = static color, no animation
+ *   'bounce'       = animation on the whole BLOCK (pop on the block)
+ *   'karaoke'      = words become highlighted after spoken
+ *   'scale'        = scale on the active WORD (pop per word)
+ *   'wordpop'      = pop animation on the active WORD
+ *   'highlightbox' = background box on the active WORD (no pop)
+ *   'popline'      = thin band on the BASE of the active WORD + pop (band and
+ *                    word scale together around the word's center)
  *
- * O raio dos cantos e o padding da caixa do 'highlightbox' sao
- * controlados centralmente em global_config/subtitleConfig.js
- * (SUBTITLE_HIGHLIGHT_BOX) e os da faixa do 'popline' em
- * SUBTITLE_POPLINE_BOX (altura/topo relativos a baseline da linha),
- * valendo para preview, fullscreen e export.
+ * The corner radius and padding of the 'highlightbox' box are
+ * controlled centrally in global_config/subtitleConfig.js
+ * (SUBTITLE_HIGHLIGHT_BOX) and those of the 'popline' band in
+ * SUBTITLE_POPLINE_BOX (height/top relative to the line's baseline),
+ * applying to preview, fullscreen and export.
  *
- * Para adicionar um novo estilo com pop, basta definir:
+ * To add a new style with pop, just define:
  *   animationType + popIntensity + popDuration + popSize
- * Nao e necessario alterar SubtitleOverlay.jsx ou subtitleRender.js.
+ * No need to change SubtitleOverlay.jsx or subtitleRender.js.
  */
 
 export const SUBTITLE_STYLES = {
@@ -111,7 +111,7 @@ export const SUBTITLE_STYLES = {
   },
   minimal: {
     id: 'minimal',
-    name: 'Minimal',
+    name: 'Headline',
     fontFamily: 'Bebas Neue, sans-serif',
     fontNameFallback: 'IBM Plex Sans, sans-serif',
     fontSize: 120,
@@ -123,7 +123,7 @@ export const SUBTITLE_STYLES = {
     outlineSize: 4.0,
     shadowDepth: 3.0,
     bold: true,
-    italic: true,
+    italic: false,
     letterSpacing: 3.0,
     wordSpacing: 110,
     animationType: 'scale',
@@ -132,10 +132,10 @@ export const SUBTITLE_STYLES = {
     popSize: 10,
     bestFor: 'Professional & clean',
   },
-  /* WORD POP COMENTADO (v1.9.0): escondido da selecao de estilos enquanto o
-     problema do preview nao for resolvido. Fora do SUBTITLE_STYLES ele some
-     do SUBTITLE_STYLE_LIST e projetos salvos com ele caem no estilo padrao
-     (hormozi na preview / corgi-bold no export).
+  /* WORD POP COMMENTED OUT (v1.9.0): hidden from the style selection until the
+     preview problem is fixed. Outside SUBTITLE_STYLES it disappears
+     from SUBTITLE_STYLE_LIST and projects saved with it fall back to the default
+     style (hormozi in the preview / corgi-bold in the export).
   wordpop: {
     id: 'wordpop',
     name: 'Word Pop',
@@ -155,9 +155,9 @@ export const SUBTITLE_STYLES = {
     wordSpacing: 70,
     animationType: 'wordpop',
     popIntensity: 1,
-    // crescimento curto (~0.08s) - igual ao pop do velhinho.mp4
+    // short growth (~0.08s) - same as velhinho.mp4's pop
     popDuration: 0.08,
-    // 1.2x na palavra ativa (velhinho: ~1.2x, SEGURADO enquanto ativa)
+    // 1.2x on the active word (velhinho: ~1.2x, HELD while active)
     popSize: 20,
     bestFor: 'TikTok & viral content',
   },
@@ -225,9 +225,9 @@ export const SUBTITLE_STYLES = {
     italic: false,
     letterSpacing: 0,
     wordSpacing: 100,
-    // Caixa colada na palavra ativa (sem folga horizontal, 20% vertical)
-    // + pop sincronizado: caixa e palavra escalam JUNTOS ao redor do
-    // centro da palavra (ver cases 'popline' no preview e export).
+    // Box glued to the active word (no horizontal slack, 20% vertical)
+    // + synchronized pop: box and word scale TOGETHER around the
+    // word's center (see the 'popline' cases in preview and export).
     animationType: 'popline',
     popIntensity: 1,
     popDuration: 0.10,

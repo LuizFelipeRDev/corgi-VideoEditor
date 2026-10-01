@@ -33,4 +33,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    // docs/ holds local test media (gitignored): ffmpeg writes and media
+    // players lock files there, and chokidar's EBUSY on a locked file crashed
+    // the whole dev server twice — keep it out of the watcher.
+    watch: {
+      ignored: ['**/docs/**'],
+    },
+  },
 })

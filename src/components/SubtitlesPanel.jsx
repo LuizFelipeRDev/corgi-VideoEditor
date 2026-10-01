@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { SUBTITLE_STYLE_LIST, SUBTITLE_POSITION_LIST } from '../lib/subtitleStyles'
 import SubtitleConfigModal from './SubtitleConfigModal'
+import ReplaceWordModal from './ReplaceWordModal'
+import { countInSubtitles } from '../lib/wordReplace'
 import { useLang } from '../lib/i18n'
 
 function SubtitlesPanel({
@@ -12,6 +15,7 @@ function SubtitlesPanel({
   selectedFile,
   subtitlesEnabled,
   onUpdateSubtitle,
+  onReplaceWord,
   onDeleteSubtitle,
   onAddSubtitle,
   onSeekTo,
@@ -23,6 +27,8 @@ function SubtitlesPanel({
   wordsPerLine,
   linesCount,
   subtitleConfigs,
+  favoriteFonts,
+  onToggleFavoriteFont,
   onStyleChange,
   onPositionChange,
   onPositionModeChange,
@@ -36,6 +42,19 @@ function SubtitlesPanel({
   const [editingStart, setEditingStart] = useState(null)
   const [editingEnd, setEditingEnd] = useState(null)
   const [showConfig, setShowConfig] = useState(false)
+  // Floating "Replace word" chip: the selection captured from the text editor
+  // (word + mouse position) and the delayed (0.5s) fade-in flag.
+  const [replaceSel, setReplaceSel] = useState(null)
+  const [showChip, setShowChip] = useState(false)
+  const [showReplace, setShowReplace] = useState(false)
+  const [replaceBefore, setReplaceBefore] = useState('')
+  const [replaceAfter, setReplaceAfter] = useState('')
+  const [replaceIgnoreCase, setReplaceIgnoreCase] = useState(true)
+  const chipTimerRef = useRef(null)
+  // Set by Enter in a text/timing editor: the blur-commit that follows also
+  // writes the SRT (blur() dispatches synchronously, so this flag is consumed
+  // in the same tick — a click-away never sets it and saves nothing).
+  const saveOnBlurRef = useRef(false)
   const { t } = useLang()
   const textRef = useRef(null)
   const startRef = useRef(null)
@@ -62,6 +81,17 @@ function SubtitlesPanel({
       endRef.current.select()
     }
   }, [editingEnd])
+
+  const clearChip = () => {
+    clearTimeout(chipTimerRef.current)
+    setReplaceSel(null)
+    setShowChip(false)
+  }
+
+  // Opening/closing a text editor invalidates any armed chip.
+  useEffect(() => {
+    clearChip()
+  }, [editingText])
 
   const parseSrtTime = (timeStr) => {
     const match = timeStr.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/)
@@ -96,31 +126,94 @@ function SubtitlesPanel({
 
   if (!subtitlesEnabled) return null
 
+  // Enter's commit+save path: `subtitles` state has not flushed yet, so the
+  // save serializes the exact next array itself (same merge as the handlers).
+  const saveAfterCommit = (index, updates) => {
+    const next = subtitles.map((s, i) => (i === index ? { ...s, ...updates } : s))
+    onSave(next)
+  }
+
   const handleTextBlur = (index, value) => {
-    onUpdateSubtitle(index, { text: value })
+    const shouldSave = saveOnBlurRef.current
+    saveOnBlurRef.current = false
+    // Commit only real edits: a no-op blur (clicking the replace chip or its
+    // modal) must not mark the track dirty nor wipe the word timings (words = []).
+    const changed = value !== subtitles[index].text
+    if (changed) {
+      onUpdateSubtitle(index, { text: value })
+      if (shouldSave) saveAfterCommit(index, { text: value, words: [] })
+    }
     setEditingText(null)
   }
 
   const handleStartBlur = (index, value) => {
-    onUpdateSubtitle(index, { start: value })
+    const shouldSave = saveOnBlurRef.current
+    saveOnBlurRef.current = false
+    const changed = value !== subtitles[index].start
+    if (changed) {
+      onUpdateSubtitle(index, { start: value })
+      if (shouldSave) saveAfterCommit(index, { start: value })
+    }
     setEditingStart(null)
   }
 
   const handleEndBlur = (index, value) => {
-    onUpdateSubtitle(index, { end: value })
+    const shouldSave = saveOnBlurRef.current
+    saveOnBlurRef.current = false
+    const changed = value !== subtitles[index].end
+    if (changed) {
+      onUpdateSubtitle(index, { end: value })
+      if (shouldSave) saveAfterCommit(index, { end: value })
+    }
     setEditingEnd(null)
   }
 
   const handleTextKeyDown = (e, index, value) => {
     if (e.key === 'Enter') {
+      saveOnBlurRef.current = true
       e.target.blur()
     } else if (e.key === 'Escape') {
       setEditingText(null)
     }
   }
 
+  // A non-empty selection inside the text editor arms the floating chip:
+  // the word and the mouse position are captured now, the chip fades in
+  // after 0.5s. An empty selection (or typing) disarms it.
+  const handleTextMouseUp = (e) => {
+    const ta = e.currentTarget
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    if (start !== end && ta.value.slice(start, end).trim()) {
+      const word = ta.value.slice(start, end).trim()
+      clearTimeout(chipTimerRef.current)
+      setReplaceSel({ word, x: e.clientX, y: e.clientY })
+      setShowChip(false)
+      chipTimerRef.current = setTimeout(() => setShowChip(true), 500)
+    } else {
+      clearChip()
+    }
+  }
+
+  const openReplaceModal = () => {
+    if (!replaceSel) return
+    setReplaceBefore(replaceSel.word)
+    setReplaceAfter('')
+    setReplaceIgnoreCase(true)
+    setShowReplace(true)
+    setShowChip(false)
+    setEditingText(null)
+  }
+
+  const confirmReplace = () => {
+    onReplaceWord(replaceBefore, replaceAfter, replaceIgnoreCase)
+    setShowReplace(false)
+    clearChip()
+  }
+
   const handleTimeKeyDown = (e, index, value, field) => {
     if (e.key === 'Enter') {
+      saveOnBlurRef.current = true
       e.target.blur()
     } else if (e.key === 'Escape') {
       if (field === 'start') setEditingStart(null)
@@ -307,6 +400,8 @@ function SubtitlesPanel({
                       defaultValue={sub.text}
                       onBlur={(e) => handleTextBlur(index, e.target.value)}
                       onKeyDown={(e) => handleTextKeyDown(e, index, e.target.value)}
+                      onChange={clearChip}
+                      onMouseUp={handleTextMouseUp}
                       rows={2}
                       className="w-full px-1 py-1 border border-retro-black rounded bg-retro-bg text-[7px] font-pixel text-retro-black outline-none resize-none"
                     />
@@ -388,12 +483,55 @@ function SubtitlesPanel({
           config={subtitleConfigs[subtitleStyle] || {}}
           defaultWordsPerLine={wordsPerLine}
           defaultLinesCount={linesCount}
+          favoriteFonts={favoriteFonts}
+          onToggleFavoriteFont={onToggleFavoriteFont}
           onSave={(styleConfig) => {
             const newConfigs = { ...subtitleConfigs, [subtitleStyle]: styleConfig }
             onConfigSave(newConfigs)
             setShowConfig(false)
           }}
           onClose={() => setShowConfig(false)}
+        />
+      )}
+
+      {/* Floating chip: fades in 0.5s after a word is selected in the text
+          editor, anchored where the mouse was released (portal + fixed so no
+          scrolled/transformed ancestor can shift it). mousedown is swallowed
+          so the textarea never blurs before the click lands. */}
+      {replaceSel &&
+        createPortal(
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={openReplaceModal}
+            style={{
+              left: Math.min(replaceSel.x, window.innerWidth - 170),
+              top: Math.min(replaceSel.y + 14, window.innerHeight - 40),
+            }}
+            className={`fixed z-[70] px-2 h-6 border-2 border-retro-black bg-yellow-100 shadow-retro-sm font-pixel text-[7px] text-retro-black uppercase whitespace-nowrap transition-opacity duration-300 hover:bg-yellow-200 ${
+              showChip ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            &#8646; {t('replace.chip')}
+          </button>,
+          document.body
+        )}
+
+      {showReplace && (
+        <ReplaceWordModal
+          before={replaceBefore}
+          after={replaceAfter}
+          ignoreCase={replaceIgnoreCase}
+          count={countInSubtitles(subtitles, replaceBefore, replaceIgnoreCase)}
+          onChange={(field, value) => {
+            if (field === 'before') setReplaceBefore(value)
+            else if (field === 'after') setReplaceAfter(value)
+            else setReplaceIgnoreCase(value)
+          }}
+          onConfirm={confirmReplace}
+          onClose={() => {
+            setShowReplace(false)
+            clearChip()
+          }}
         />
       )}
     </div>

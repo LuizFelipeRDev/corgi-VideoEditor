@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLang } from '../lib/i18n'
 import SubtitleOverlay from './SubtitleOverlay'
 
-// Bytes -> "20 MB" / "1.5 GB" (uma casa decimal só quando agrega info)
+// Bytes -> "20 MB" / "1.5 GB" (one decimal place only when it adds info)
 const formatFileSize = (bytes) => {
   if (typeof bytes !== 'number' || !isFinite(bytes) || bytes < 0) return '—'
   if (bytes < 1024) return `${bytes} B`
@@ -50,7 +50,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
     const f = e.dataTransfer.files
     if (f.length > 0) {
       const filePath = window.api.getPathForFile(f[0])
-      // O File do drag/drop ja traz o tamanho em bytes — sem IPC
+      // The drag/drop File already carries the size in bytes — no IPC
       setSelectedFile({ path: filePath, name: f[0].name, folder: filePath.replace(/[\\/][^\\/]+$/, ''), size: f[0].size })
     } else {
       const p = await window.api.selectFile()
@@ -97,7 +97,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
         {selectedFile && (
           <button
             onClick={clearFile}
-            className="absolute top-1 right-1 w-5 h-5 bg-red-500 border border-red-700 rounded text-white text-[10px] font-bold hover:bg-red-600 z-10"
+            className="absolute top-1 right-1 w-5 h-5 bg-red-500 border border-red-700 rounded flex items-center justify-center text-white text-[10px] font-bold hover:bg-red-600 z-10"
             title={t('dropzone.clear')}
           >
             ✕

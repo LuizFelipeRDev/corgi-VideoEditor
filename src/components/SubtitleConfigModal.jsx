@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useLang } from '../lib/i18n'
 import { SUBTITLE_STYLES } from '../lib/subtitleStyles'
 import { FONTS } from '../global_config/fonts'
+import { IconStar, IconStarFilled } from '@tabler/icons-react'
 
-function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defaultLinesCount, onSave, onClose }) {
+function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defaultLinesCount, favoriteFonts = [], onToggleFavoriteFont, onSave, onClose }) {
   const { t } = useLang()
   const styleConfig = SUBTITLE_STYLES[subtitleStyle] || SUBTITLE_STYLES.hormozi
   const defaultFont = FONTS.find(f => f.family === styleConfig.fontFamily)?.id || 'Montserrat'
@@ -14,6 +15,15 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
   const [localFont, setLocalFont] = useState(config.fontId || defaultFont)
   const [localFontSize, setLocalFontSize] = useState(config.fontSize || styleConfig.fontSize)
   const [useGlobalConfig, setUseGlobalConfig] = useState(config.useGlobalConfig ?? true)
+  const [fontsOpen, setFontsOpen] = useState(false)
+
+  // Font dropdown order: starred favorites first, then everything else
+  // alphabetically (alphabetical inside each group too).
+  const sortedFonts = [...FONTS].sort((a, b) => {
+    const aFav = favoriteFonts.includes(a.id) ? 0 : 1
+    const bFav = favoriteFonts.includes(b.id) ? 0 : 1
+    return aFav - bFav || a.name.localeCompare(b.name)
+  })
 
   const handleReset = () => {
     setLocalPrimary(styleConfig.primaryColor)
@@ -45,17 +55,47 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
         <h3 className="font-pixel text-[8px] text-retro-black uppercase mb-4">{t('subConfig.title', { name: styleConfig.name })}</h3>
 
         <div className="flex flex-col gap-3">
-          <div>
+          <div className="relative">
             <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.font')}</label>
-            <select
-              value={localFont}
-              onChange={(e) => setLocalFont(e.target.value)}
-              className="w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none appearance-none cursor-pointer"
+            <button
+              type="button"
+              onClick={() => setFontsOpen((open) => !open)}
+              className="w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none cursor-pointer flex items-center justify-between gap-2"
             >
-              {FONTS.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
+              <span className="truncate min-w-0 text-left">{FONTS.find((f) => f.id === localFont)?.name || localFont}</span>
+              <span className={`text-[5px] leading-none shrink-0 transition-transform ${fontsOpen ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+            {fontsOpen && (
+              <>
+                {/* Click-catcher: the first outside click closes ONLY the list —
+                    it stops at the modal card, so neither the dropdown nor the
+                    modal itself closes on a stray click. */}
+                <div className="fixed inset-0 z-[60]" onClick={() => setFontsOpen(false)} />
+                <ul className="absolute left-0 right-0 top-full mt-1 z-[70] max-h-80 
+                overflow-y-auto border-2 border-retro-black rounded bg-retro-bg 
+                shadow-retro-sm font-pixel text-[7px] text-retro-black">
+                  {sortedFonts.map((f) => {
+                    const starred = favoriteFonts.includes(f.id)
+                    return (
+                      <li
+                        key={f.id}
+                        onClick={() => { setLocalFont(f.id); setFontsOpen(false) }}
+                        className={`flex items-center justify-between gap-2 px-2 py-1.5 cursor-pointer ${f.id === localFont ? 'bg-retro-black text-retro-bg' : 'hover:bg-yellow-100'}`}
+                      >
+                        <span className="truncate min-w-0 flex-1">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onToggleFavoriteFont?.(f.id) }}
+                          className={`shrink-0 cursor-pointer ${starred ? 'text-yellow-500' : 'opacity-40'}`}
+                        >
+                          {starred ? <IconStarFilled size={13} /> : <IconStar size={13} stroke={2} />}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </>
+            )}
           </div>
 
           <div>

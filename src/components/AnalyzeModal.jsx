@@ -14,16 +14,16 @@ function Stat({ label, value, unit }) {
   )
 }
 
-// ANALISAR E SUGERIR: roda o ffmpeg (silencedetect + astats janelado) no
-// arquivo selecionado, mostra a medicao e os 3 valores sugeridos. APLICAR
-// joga threshold/margin nos controles e liga o denoise medido no som.
+// ANALYZE AND SUGGEST: runs ffmpeg (silencedetect + windowed astats) on the
+// selected file, shows the measurement and the 3 suggested values. APPLY
+// puts threshold/margin into the controls and turns on the measured denoise in the sound.
 function AnalyzeModal({ filePath, onApply, onClose }) {
   const { t } = useLang()
   const [phase, setPhase] = useState('running') // running | ready | error
   const [msg, setMsg] = useState('')
   const [measurements, setMeasurements] = useState(null)
   const [suggestions, setSuggestions] = useState(null)
-  // Guarda contra o duplo-effect do React.StrictMode (dev): 1 execução só.
+  // Guard against React.StrictMode's double effect (dev): only 1 run.
   const startedRef = useRef(false)
 
   useEffect(() => {

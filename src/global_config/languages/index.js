@@ -2,11 +2,11 @@ import en from './en'
 import pt from './pt'
 
 /*
-  Registro de idiomas.
-  - DEFAULT_LANG: padrao do sistema (ingles), definido em um so lugar.
-  - DICTS: id -> dicionario de chaves.
-  - normalizeLang: aceita 'pt', 'pt-BR', 'EN', etc; desconhecido cai no padrao.
-  - checkLangParity: garante que todos os idiomas tenham as mesmas chaves.
+  Language registry.
+  - DEFAULT_LANG: system default (English), defined in a single place.
+  - DICTS: id -> key dictionary.
+  - normalizeLang: accepts 'pt', 'pt-BR', 'EN', etc; unknown falls back to the default.
+  - checkLangParity: guarantees every language has the same keys.
 */
 
 export const DEFAULT_LANG = 'en'

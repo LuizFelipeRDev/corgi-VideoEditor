@@ -39,9 +39,9 @@ function Controls({ processing, generatingSubtitles, onExport, progress, soundEn
         </button>
       </div>
 
-      {/* SOM AVANÇADO (modal) + 🎤 interruptor mestre (v1.7.0)
-          🎤 desligado → o botão do modal fica opaco e INCLICÁVEL e nada
-          de som vai para o export, mesmo com preset selecionado. */}
+      {/* ADVANCED SOUND (modal) + 🎤 master switch (v1.7.0)
+          🎤 off → the modal button becomes opaque and UNCLICKABLE and no
+          sound goes to the export, even with a preset selected. */}
       <div className="flex flex-row gap-2 mb-4">
         <button
           onClick={onOpenSound}

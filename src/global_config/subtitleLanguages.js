@@ -1,17 +1,17 @@
 import { LANGS } from './languages'
 
 /*
-  Idioma de SAIDA da legenda (Settings > Saida) — fonte unica.
-  - SUBTITLE_LANG_AUTO: padrao. O whisper detecta o idioma FALADO no audio,
-    independente do idioma da UI (UI em ingles + audio PT -> legenda PT).
-  - As demais opcoes vem de LANGS (registro de idiomas do sistema): adicionar
-    um idioma de UI la faz o dropdown crescer sozinho.
-  - Semantica (whisper nao traduz para idiomas arbitrarios):
-      auto -> -l auto  (transcreve no idioma falado)
-      en   -> -l auto -tr (traduz qualquer audio para ingles; -tr so traduz
-              PARA ingles)
-      outro -> -l <codigo> (forca o idioma falado; qualidade garantida apenas
-              se o audio realmente for desse idioma)
+  Subtitle OUTPUT language (Settings > Output) — single source of truth.
+  - SUBTITLE_LANG_AUTO: default. Whisper detects the language SPOKEN in the audio,
+    regardless of the UI language (UI in English + PT audio -> PT subtitle).
+  - The other options come from LANGS (system language registry): adding
+    a UI language there makes the dropdown grow by itself.
+  - Semantics (whisper does not translate into arbitrary languages):
+      auto -> -l auto  (transcribes in the spoken language)
+      en   -> -l auto -tr (translates any audio to English; -tr only translates
+              TO English)
+      other -> -l <code> (forces the spoken language; quality guaranteed only
+              if the audio really is in that language)
 */
 export const SUBTITLE_LANG_AUTO = 'auto'
 

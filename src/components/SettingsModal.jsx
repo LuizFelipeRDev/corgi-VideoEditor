@@ -30,13 +30,14 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', descKey: 'settings.modelDesc.large-v3' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, subtitleHMargin, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, cudaInstalled, advancedTools }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, cutImmediate, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, subtitleHMargin, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, cudaInstalled, advancedTools }) {
   const { lang, setLang, t } = useLang()
   const { theme, setTheme } = useTheme()
   const [tab, setTab] = useState('sistema')
   const [localFolder, setLocalFolder] = useState(outputFolder)
   const [localFormat, setLocalFormat] = useState(outputFormat)
   const [localResolution, setLocalResolution] = useState(outputResolution || 'original')
+  const [localCutImmediate, setLocalCutImmediate] = useState(cutImmediate ?? true)
   const [showResPopup, setShowResPopup] = useState(false)
   const resPopupRef = useRef(null)
   const [localSubtitles, setLocalSubtitles] = useState(subtitles)
@@ -59,8 +60,8 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
   const [downloading, setDownloading] = useState(null)
   const [downloadProgress, setDownloadProgress] = useState(0)
 
-  // Troca de idioma: aplica na hora em todo o app e persiste no config.ini
-  // (merge com o config atual para nao apagar as demais chaves).
+  // Language switch: applies immediately across the app and persists in config.ini
+  // (merges with the current config so the other keys are not erased).
   const handleLanguageChange = async (next) => {
     setLang(next)
     try {
@@ -73,8 +74,8 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
     }
   }
 
-  // Troca de tema: aplica na hora (data-theme no <html>) e persiste no
-  // config.ini (mesmo merge do idioma para nao apagar as demais chaves).
+  // Theme switch: applies immediately (data-theme on <html>) and persists in
+  // config.ini (same merge as the language so the other keys are not erased).
   const handleThemeChange = async (next) => {
     setTheme(next)
     try {
@@ -136,6 +137,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
       output_folder: localFolder,
       output_format: localFormat,
       output_resolution: localResolution,
+      cut_immediate: localCutImmediate,
       subtitles: localSubtitles,
       subtitle_model: localSubtitleModel,
       subtitle_language: localSubtitleLanguage,
@@ -495,9 +497,9 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
               </button>
 
               {showResPopup && (
-                // flex-col obriga os spans do Tooltip a virarem blocos: sem
-                // isso os itens eram inline-block e ficavam 2x1 (original ao
-                // lado de paisagem, retrato embaixo).
+                // flex-col forces the Tooltip spans to become blocks: without
+                // it the items were inline-block and ended up 2x1 (original next
+                // to landscape, portrait below).
                 <div className="absolute top-full left-0 right-0 mt-1 bg-retro-bg border-2 border-retro-black rounded shadow-retro z-50 flex flex-col">
                   {[
                     { id: 'original', icon: IconZoomScan, labelKey: 'settings.resOriginal', descKey: 'settings.resOriginalDesc', dims: t('settings.auto') },
@@ -547,6 +549,23 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
                 <option key={l.id} value={l.id}>{l.label}</option>
               ))}
             </select>
+          </div>
+
+          {/* Instant cut: when off, auto-editor runs only at export time
+              (the master AUTO CUT toggle must stay on for that). */}
+          <div className="mb-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localCutImmediate}
+                onChange={(e) => setLocalCutImmediate(e.target.checked)}
+                className="w-4 h-4 accent-retro-black"
+              />
+              <span className="font-pixel text-[7px] text-retro-black uppercase">{t('cut.immediate')}</span>
+              <Tooltip text={t('cut.immediateTip')}>
+                <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+              </Tooltip>
+            </label>
           </div>
 
           {needsVideo && isOutputAudio && (
@@ -724,8 +743,8 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, subtitles
             </label>
           </div>
 
-          {/* Espacamento horizontal: so faz sentido com a quebra automatica
-              ligada (sem ela a largura util nao muda nada no export). */}
+          {/* Horizontal spacing: only makes sense with auto wrap
+              turned on (without it the usable width changes nothing in the export). */}
           <div className={`mb-4 ${!localSubtitles || !localAutoLineWrap ? 'opacity-40 pointer-events-none' : ''}`}>
             <label className="flex items-center gap-2">
               <span className="font-pixel text-[7px] text-retro-black uppercase">

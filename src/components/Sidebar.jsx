@@ -1,19 +1,19 @@
 import { IconStethoscope, IconBrain, IconKeyboard } from '@tabler/icons-react'
 import { useLang } from '../lib/i18n'
 
-// Barra lateral vertical (lado esquerdo, sob o TitleBar). Hospeda os módulos
-// do backlog que vao chegando (ANALISAR E SUGERIR, Ducking, arnndn...).
+// Vertical sidebar (left side, under the TitleBar). Hosts the backlog
+// modules as they arrive (ANALYZE AND SUGGEST, Ducking, arnndn...).
 // The gate is advancedTools (ADVANCED OPTIONS) — when enabled, the bar
 // shows at ANY width. (It used hidden md:flex, hiding it below 768px:
 // with subtitles off the window shrank to 640 and the bar disappeared
 // even with advanced options enabled.)
 function Sidebar({ onSelect, disabled }) {
   const { t } = useLang()
-  // Modulos vao chegando aqui ao serem implementados (Ducking...).
+  // Modules land here as they get implemented (Ducking...).
   const modules = [
     { id: 'analyze', Icon: IconStethoscope, label: t('sidebar.analyze') },
     { id: 'rnnoise', Icon: IconBrain, label: t('sidebar.rnnoise') },
-    // ATALHOS entra sempre no FIM (push) — não é módulo do backlog.
+    // SHORTCUTS always goes at the END (push) — it is not a backlog module.
     { id: 'shortcuts', Icon: IconKeyboard, label: t('sidebar.shortcuts') },
   ]
   const btn =

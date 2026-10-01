@@ -86,9 +86,9 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
 
   const previewFontSize = getPreviewFontSize(configFontSize, fullscreen)
 
-  // POPLINE pede "borda um pouquinho grossa" nas letras: o contorno do
-  // preview acompanha o outlineSize do estilo (5.0) em vez do fixo (2,4)
-  // que os demais estilos usam - no export o \\bord ja sai pelo estilo.
+  // POPLINE asks for a "border a little thick" on the letters: the preview
+  // outline follows the style's outlineSize (5.0) instead of the fixed (2,4)
+  // the other styles use - in the export the \\bord already comes from the style.
   const outlineShadow = animType === 'popline'
     ? `0 0 ${stylePreset.outlineSize * 0.5}px ${stylePreset.outlineColor}, 0 0 ${stylePreset.outlineSize}px ${stylePreset.outlineColor}`
     : `0 0 2px ${stylePreset.outlineColor}, 0 0 4px ${stylePreset.outlineColor}`
@@ -99,10 +99,10 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     fontWeight: stylePreset.bold ? 'bold' : 'normal',
     fontStyle: stylePreset.italic ? 'italic' : 'normal',
     letterSpacing: `${stylePreset.letterSpacing * 0.2}px`,
-    // wordSpacing do preset: o export usa spaceWidth x wordSpacing/100,
-    // entao aqui aplicamos a MESMA proporcao sobre o espaco natural do
-    // navegador (negativo fecha, positivo abre - e em px do previewFontSize,
-    // igual ao "em" do export).
+    // preset's wordSpacing: the export uses spaceWidth x wordSpacing/100,
+    // so here we apply the SAME proportion to the browser's natural
+    // space (negative closes, positive opens - and in previewFontSize px,
+    // same as the export's "em").
     wordSpacing: `${(measureTextMetrics(' ', previewFontSize, fontFamily, stylePreset.bold).width * (((stylePreset.wordSpacing || 100) / 100) - 1)).toFixed(2)}px`,
     textAlign: 'center',
     lineHeight: 1.3,
@@ -111,8 +111,8 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     textShadow: outlineShadow,
     maxWidth: hMarginPct > 0 ? `${100 - 2 * hMarginPct}%` : (isPortrait ? '90%' : '85%'),
     wordBreak: 'break-word',
-    // Sem margem configurada vale o legado (retrato com 3% de folga);
-    // com margem a folga ja esta embutida em maxWidth, igual ao export.
+    // With no margin configured the legacy applies (portrait with 3% slack);
+    // with a margin the slack is already built into maxWidth, same as the export.
     ...(isPortrait && hMarginPct <= 0 ? { padding: '0 3%' } : {}),
     ...(animType === 'bounce' && popOn ? { animation: `subtitle-bounce ${popDur}s ease-out` } : {}),
   }
@@ -122,9 +122,9 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     ? activeSub.words
     : activeSub.text.split(/\s+/).map(w => ({ text: w }))
 
-  // Fatiamento do wordpop - MESMA fronteira do export (inicio de cada
-  // palavra): activeIdx = palavra que detem o destaque agora, prevIdx =
-  // a que acabou de perde-lo (ela so encolhe, sem pop).
+  // wordpop slicing - SAME boundary as the export (start of each
+  // word): activeIdx = word that holds the highlight now, prevIdx =
+  // the one that just lost it (it only shrinks, no pop).
   let activeIdx = -1
   let prevIdx = -1
   for (let k = 0; k < words.length; k++) {
@@ -135,10 +135,10 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     ? parseSrtTimeToSecondsExport(words[activeIdx].start)
     : null
 
-  // Empurrao x (espelha o export): as palavras da MESMA linha da ativa
-  // recuam PUSH_FACTOR da meia-extensao que ela abre. Usa a propriedade
-  // `translate` (INDEPENDENTE de transform): o keyframe do pop, que anima
-  // transform, nao derruba o empurrao durante os 100ms do pop.
+  // Push x (mirrors the export): the words on the SAME line as the active
+  // word retreat PUSH_FACTOR of the half-width it opens. Uses the
+  // `translate` property (INDEPENDENT of transform): the pop keyframe, which animates
+  // transform, doesn't drop the push during the pop's 100ms.
   const wplPush = wordsPerLine || 4
   let pushPx = 0
   if (animType === 'wordpop' && popOn && activeIdx >= 0) {
@@ -161,10 +161,10 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     return s !== null && e !== null && now >= s && now < e
   }
 
-  // POPLINE: geometria da faixa fina na base da palavra (referencia
-  // popline.png/md). A baseline dentro da caixa de linha (lineHeight 1.3
-  // do bloco) sai da metrica da propria fonte no canvas: metade do
-  // leading + ascent - o mesmo resultado do layout CSS do navegador.
+  // POPLINE: geometry of the thin band at the base of the word (reference
+  // popline.png/md). The baseline inside the line box (the block's
+  // lineHeight 1.3) comes from the font's own metric on the canvas: half the
+  // leading + ascent - the same result as the browser's CSS layout.
   const popBand = (() => {
     if (animType !== 'popline') return null
     const fs = previewFontSize
@@ -179,12 +179,12 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
         asc = m.fontBoundingBoxAscent
         desc = m.fontBoundingBoxDescent
       }
-    } catch (e) { /* sem canvas: aproximacao acima */ }
+    } catch (e) { /* no canvas: approximation above */ }
     const baseline = (lineH - (asc + desc)) / 2 + asc
-    // top/height fracionarios: sem arredondamento a faixa bate a baseline
-    // exatamente igual ao export (que arredonda so no ASS, +-0.5px em fs105).
+    // fractional top/height: without rounding the band matches the baseline
+    // exactly like the export (which rounds only in the ASS, +-0.5px at fs105).
     return {
-      // do TOPO da caixa de linha ate o topo da faixa
+      // from the TOP of the line box to the band top
       top: baseline - fs * SUBTITLE_POPLINE_BOX.bandTopRatio,
       height: fs * SUBTITLE_POPLINE_BOX.bandHeightRatio,
       radius: Math.max(1, Math.round(fs * SUBTITLE_POPLINE_BOX.bandHeightRatio * SUBTITLE_POPLINE_BOX.borderRadiusRatio)),
@@ -196,10 +196,10 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     const wordEnd = word.end ? parseSrtTimeToSecondsExport(word.end) : null
 
     const base = {
-      // inline-block: transform so se aplica fora de caixas inline. Sem ele
-      // o pop do wordpop/scale simplesmente nao renderizava. E como
-      // transform NUNCA participa do layout, a palavra cresce "por cima"
-      // das vizinhas sem empurra-las (mesma base que o popline usa).
+      // inline-block: transform only applies outside inline boxes. Without it
+      // the wordpop/scale pop simply didn't render. And since
+      // transform NEVER takes part in the layout, the word grows "over"
+      // its neighbors without pushing them (same base popline uses).
       display: 'inline-block',
       transition: 'color 0.05s, transform 0.1s',
     }
@@ -243,25 +243,25 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
       }
 
       case 'wordpop': {
-        // Velhinho.mp4: a palavra ativa cresce (~1.2x) e SEGURA o
-        // tamanho enquanto o destaque estiver nela (sem encolher
-        // antes, sem overshoot). As demais palavras ficam MENORES
-        // (90% = BASE_SCALE do export) e dao um leve pop 90->95->90
-        // em 100ms (subtitle-wordpop-small) a cada troca de destaque.
-        // transform (nao font-size): nao participa do layout => a frase
-        // nao pulsa nem a linha de cima leva empurrao indevido; o
-        // empurrao x INTENCIONAL das palavras da linha vem da
-        // propriedade `translate` (pushDx), mesmo fator do export.
+        // Velhinho.mp4: the active word grows (~1.2x) and HOLDS the
+        // size while the highlight is on it (no shrinking
+        // before, no overshoot). The other words stay SMALLER
+        // (90% = the export's BASE_SCALE) and do a light 90->95->90 pop
+        // over 100ms (subtitle-wordpop-small) at each highlight switch.
+        // transform (not font-size): doesn't take part in the layout => the sentence
+        // doesn't pulse and the line above doesn't get an undue push; the
+        // line's INTENTIONAL push x comes from the
+        // `translate` property (pushDx), same factor as the export.
         const isActive = wordStart !== null && wordEnd !== null && now >= wordStart && now < wordEnd
         const scaleVal = popOn ? 1 + (popSz / 100) : 1
-        // base das sem destaque espelha BASE_SCALE=90 do export
+        // base of the non-highlighted mirrors the export's BASE_SCALE=90
         const baseScale = popOn ? 0.9 : 1
-        // a que perdeu o destaque (prevIdx, la em cima) so ENCOLHE
-        // (transition 1.2->0.9, o mesmo \t de saida do export); o pop
-        // 90->95->90 em 100ms e so para quem ja estava parada na base.
-        // activeIdx % 2 alterna o NOME do keyframe a cada troca => o
-        // browser reinicia a animacao mesmo com render chegando a ~4Hz
-        // (onTimeUpdate nativo do video).
+        // the one that lost the highlight (prevIdx, up there) only SHRINKS
+        // (transition 1.2->0.9, the same \t exit as the export); the
+        // 90->95->90 pop over 100ms is only for those already resting at the base.
+        // activeIdx % 2 alternates the keyframe NAME at each switch => the
+        // browser restarts the animation even with renders arriving at ~4Hz
+        // (the video's native onTimeUpdate).
         const isPrevActive = i === prevIdx
         const inSmallPop = !isActive && !isPrevActive && popOn && lastStart !== null && (now - lastStart) * 1000 < 100
         const dx = pushDx(i)
@@ -292,13 +292,13 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
       }
 
       case 'popline': {
-        // POPLINE: faixa fina na BASE da palavra ("quase uma linha",
-        // cantos levemente arredondados - referencia popline.png/md)
-        // em vez de caixa envolvendo. A faixa e um filho posicionado
-        // dentro do span (largura = palavra, z-index -1 atras das
-        // letras - renderizado no JSX) e o pop anima o span inteiro =>
-        // faixa e palavra escalam JUNTAS, centradas no meio da palavra
-        // (transform-origin padrao), igual ao \org compartilhado do export.
+        // POPLINE: thin band at the BASE of the word ("almost a line",
+        // slightly rounded corners - reference popline.png/md)
+        // instead of a surrounding box. The band is a child positioned
+        // inside the span (width = word, z-index -1 behind the
+        // letters - rendered in JSX) and the pop animates the whole span =>
+        // band and word scale TOGETHER, centered in the middle of the word
+        // (default transform-origin), same as the export's shared \org.
         const isActive = isWordActive(word)
         return {
           ...base,

@@ -32,6 +32,16 @@ export const FONT_RENDER_SCALE = {
   'Fira Sans Condensed': 0.8333, // FiraSansCondensed-Bold.ttf: 1000/(935+265)
   'Luckiest Guy': 0.8159, // LuckiestGuy-Regular.ttf: 2048/(2006+504)
   'Titan One': 0.8734, // TitanOne-Regular.ttf: 1000/(970+175)
+  'Open Sans': 0.6935, // OpenSans-Bold.ttf: 2048/(2302+651)
+  'Lato': 0.7062, // Lato-Bold.ttf: 2000/(2233+599)
+  'Raleway': 0.7205, // Raleway-Bold.ttf: 1000/(1154+234)
+  'Nunito': 0.7262, // Nunito-Bold.ttf: 1000/(1077+300)
+  'Work Sans': 0.6906, // WorkSans-Bold.ttf: 1000/(1105+343)
+  'Playfair Display': 0.7092, // PlayfairDisplay-Bold.ttf: 1000/(1159+251)
+  'Caveat': 0.7758, // Caveat-Bold.ttf: 1000/(974+315)
+  'Lobster': 0.6711, // Lobster-Regular.ttf: 1000/(1000+490)
+  'Pacifico': 0.5168, // Pacifico-Regular.ttf: 1000/(1478+457)
+  'Permanent Marker': 0.7009, // PermanentMarker-Regular.ttf: 1024/(1136+325)
 }
 
 // Fallback para fontes fora da lista (estilos com familia propria).
@@ -64,6 +74,16 @@ export const FONT_WIN_ASCENT = {
   'Fira Sans Condensed': 0.7792, // 935/(935+265)
   'Luckiest Guy': 0.7992, // 2006/(2006+504)
   'Titan One': 0.8472, // 970/(970+175)
+  'Open Sans': 0.7795, // 2302/(2302+651)
+  'Lato': 0.7885, // 2233/(2233+599)
+  'Raleway': 0.8314, // 1154/(1154+234)
+  'Nunito': 0.7821, // 1077/(1077+300)
+  'Work Sans': 0.7631, // 1105/(1105+343)
+  'Playfair Display': 0.8220, // 1159/(1159+251)
+  'Caveat': 0.7556, // 974/(974+315)
+  'Lobster': 0.6711, // 1000/(1000+490)
+  'Pacifico': 0.7638, // 1478/(1478+457)
+  'Permanent Marker': 0.7775, // 1136/(1136+325)
 }
 
 // Fallback para fontes fora da lista (estilos com familia propria).

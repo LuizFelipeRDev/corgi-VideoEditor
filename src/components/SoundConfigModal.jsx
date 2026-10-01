@@ -10,7 +10,7 @@ import {
 
 const clone = (o) => JSON.parse(JSON.stringify(o))
 
-// Valores padrão de banda por "tom" do EQ (aplicados ao trocar o tom)
+// Default band values per EQ "tone" (applied when switching the tone)
 const TONE_BANDS = {
   flat: [0, 0, 0],
   brilho: [0, 1, 4],
@@ -18,7 +18,7 @@ const TONE_BANDS = {
   radio: [0, 0, 0],
 }
 
-// Checkbox retrô (mesmo desenho do SubtitleConfigModal)
+// Retro checkbox (same design as SubtitleConfigModal)
 function Check({ checked, onChange, label, children }) {
   return (
     <div className="mb-1">
@@ -33,7 +33,7 @@ function Check({ checked, onChange, label, children }) {
   )
 }
 
-// Slider com rótulo + valor à direita
+// Slider with label + value on the right
 function RangeRow({ label, value, display, min, max, step, onChange }) {
   return (
     <div>
@@ -54,7 +54,7 @@ function RangeRow({ label, value, display, min, max, step, onChange }) {
   )
 }
 
-// Input numérico compacto (Hz)
+// Compact numeric input (Hz)
 function HzRow({ label, value, min, max, onChange }) {
   return (
     <div className="flex items-center justify-between gap-2">
@@ -85,16 +85,16 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
 
   const isCustom = customPresets.some((p) => p.id === cfg.presetId)
   const chain = describeSoundChain(cfg)
-  // Indicador entre os botões (wireframe linha 113) — v1.8.0: a prévia é em
-  // TEMPO REAL (Web Audio), então nunca há espera de render: 'ready' quando a
-  // cadeia tem o que tratar; 'idle' = tudo desligado (o OUÇA TRATADO toca o
+  // Indicator between the buttons (wireframe line 113) — v1.8.0: the preview is
+  // REAL TIME (Web Audio), so there is never a render wait: 'ready' when the
+  // chain has something to process; 'idle' = everything off (PLAY TREATED plays the
   // original).
   const previewStatus = chain.length ? 'ready' : 'idle'
 
   const set = (group, key, value) =>
     setCfg((prev) => ({ ...prev, [group]: { ...prev[group], [key]: value } }))
 
-  // Pill retrô do seletor de motor de ruído (clássico afftdn x neural arnndn)
+  // Retro pill for the noise engine selector (classic afftdn x neural arnndn)
   const pillCls = (active) =>
     `h-6 px-2 border-2 border-retro-black rounded font-pixel text-[6px] uppercase ${
       active ? 'bg-retro-black text-retro-bg' : 'bg-retro-bg text-retro-black hover:bg-gray-200'
@@ -106,7 +106,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
     setDeleteArm(false)
     const next = { ...cfg, ...clone(preset.params), presetId: id }
     setCfg(next)
-    // Selecionar preset sincroniza a prévia em tempo real do rascunho (121)
+    // Selecting a preset syncs the real-time draft preview (121)
     onPreview?.(next)
   }
 
@@ -130,7 +130,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
       return
     }
     onPresetsChange(customPresets.filter((p) => p.id !== cfg.presetId))
-    // Params atuais são mantidos — só sai da origem apagada
+    // Current params are kept — they just leave the deleted source
     setCfg((prev) => ({ ...prev, presetId: 'podcast' }))
     setDeleteArm(false)
   }
@@ -147,7 +147,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
         }
     const next = { ...cfg, ...params }
     setCfg(next)
-    // RESTAURAR também sincroniza a prévia em tempo real (mesmo fluxo do preset)
+    // RESTORE also syncs the real-time preview (same flow as the preset)
     onPreview?.(next)
   }
 
@@ -169,7 +169,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
         className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro w-[26rem] max-w-[94vw] max-h-[86vh] p-4 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Cabeçalho */}
+        {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-pixel text-[8px] text-retro-black uppercase">{t('sound.modalTitle')}</h3>
           <button
@@ -180,7 +180,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           </button>
         </div>
 
-        {/* PRESET: sistema + CRUD do usuário */}
+        {/* PRESET: system + user CRUD */}
         <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('sound.preset')}</label>
         <div className="flex gap-1.5 mb-2">
           <select
@@ -218,7 +218,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           </button>
         </div>
 
-        {/* Salvar como preset */}
+        {/* Save as preset */}
         {saveOpen && (
           <div className="flex gap-1.5 mb-2">
             <input
@@ -242,7 +242,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           <p className="font-pixel text-[6px] text-red-700 uppercase mb-2">{t('sound.deleteAsk')}</p>
         )}
 
-        {/* Cadeia ativa (prévia do -af montado) */}
+        {/* Active chain (preview of the assembled -af) */}
         <div className="border-2 border-retro-black rounded bg-retro-bg px-2 py-1.5 mb-2">
           <span className="font-pixel text-[6px] text-retro-black/60 uppercase block mb-0.5">{t('sound.chainLabel')}</span>
           <span className="font-pixel text-[7px] text-retro-black break-all">
@@ -250,7 +250,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           </span>
         </div>
 
-        {/* Abas */}
+        {/* Tabs */}
         <div className="flex gap-0.5 shrink-0">
           {TABS.map(([id, key]) => (
             <button
@@ -265,7 +265,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           ))}
         </div>
 
-        {/* Conteúdo (rolável) */}
+        {/* Content (scrollable) */}
         <div className="border-2 border-t-0 border-retro-black rounded-b bg-retro-box p-3 overflow-y-auto min-h-0 flex-1">
           {tab === 'noise' && (
             <div className="flex flex-col gap-3 min-h-[147.5px]">
@@ -380,8 +380,8 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           )}
         </div>
 
-        {/* Prévia A/B em TEMPO REAL — troca na hora, na posição atual, sem
-            esperar render nem recarregar a fonte (crossfade no player) */}
+        {/* A/B preview in REAL TIME — switches instantly, at the current position, with no
+            render wait and no font reload (crossfade in the player) */}
         <div className="flex items-center gap-2 mt-2">
           <IconHeadphones size={14} stroke={2} className="text-retro-black shrink-0" />
           <button
@@ -390,8 +390,8 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           >
             {t('sound.listenOriginal')}
           </button>
-          {/* Indicador da cadeia (mesmo estilo dos botões — wireframe 113):
-              [verde] = há tratamento em tempo real | [tracejado] = cadeia vazia */}
+          {/* Chain indicator (same style as the buttons — wireframe 113):
+              [green] = there is real-time processing | [dashed] = empty chain */}
           <div
             title={t(previewStatus === 'ready' ? 'sound.previewReady' : 'sound.previewIdle')}
             className="w-7 h-7 shrink-0 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm flex items-center justify-center"
@@ -411,7 +411,7 @@ function SoundConfigModal({ config, customPresets, onPreview, onClose, onApply, 
           </button>
         </div>
 
-        {/* Rodapé */}
+        {/* Footer */}
         <p className="font-pixel text-[6px] text-retro-black/50 mt-2 uppercase">{t('sound.applyHint')}</p>
         <div className="flex gap-2 mt-1">
           <button onClick={handleRestore} className={`${btn} flex-1`}>{t('sound.restore')}</button>

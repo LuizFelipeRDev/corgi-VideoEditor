@@ -23,6 +23,7 @@ import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubt
 import { buildSoundChain, mergeSoundConfig, DEFAULT_SOUND_CONFIG, findPreset } from './lib/soundChain'
 import { parseRecents, touchRecent, evictRecent } from './lib/recentProjects'
 import { validateExportRange, shiftSubtitlesForRange } from './lib/exportRange'
+import { replaceInSubtitles } from './lib/wordReplace'
 import realtimeChain from './lib/realtimeChain'
 import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
 import { SUBTITLE_DISPLAY_DEFAULTS } from './global_config/subtitleConfig'
@@ -30,8 +31,8 @@ import { useLang } from './lib/i18n'
 import { LANGS } from './global_config/languages'
 import { SUBTITLE_LANG_AUTO } from './global_config/subtitleLanguages'
 
-// Alvos da "Resolução de saída" (chaves = valores de output_resolution no
-// config.ini e no .corgi.json). 'original' fica de fora: mantém a entrada.
+// Targets of "Output resolution" (keys = output_resolution values in
+// config.ini and in .corgi.json). 'original' stays out: keeps the input.
 const RESOLUTION_TARGETS = {
   landscape: { w: 1920, h: 1080 },
   landscape720: { w: 1280, h: 720 },
@@ -58,6 +59,10 @@ function App() {
   const [cutEnabled, setCutEnabled] = useState(false)
   const [cutBusy, setCutBusy] = useState(false)
   const [cutState, setCutState] = useState(null)
+  // Cut timing (Settings > Output): true = the toggle runs auto-editor right
+  // away (historical behavior); false = the preview keeps the original and
+  // the cut runs only at export (the AUTO CUT toggle must stay on for that).
+  const [cutImmediate, setCutImmediate] = useState(true)
   const [showCutConfig, setShowCutConfig] = useState(false)
   // Ref to the CURRENT file: generateCutPreview discards the result if the
   // user switches files mid-generation (the selectedFile closure would go
@@ -78,29 +83,29 @@ function App() {
   const [infoToast, setInfoToast] = useState(null)
   const [showAnalyze, setShowAnalyze] = useState(false)
   const [showRnnoise, setShowRnnoise] = useState(false)
-  const [showShortcuts, setShowShortcuts] = useState(false) // modal de atalhos (barra lateral)
-  // Modal "ABRIR" (projetos recentes): lista vem do config no momento de abrir
+  const [showShortcuts, setShowShortcuts] = useState(false) // shortcuts modal (sidebar)
+  // "OPEN" modal (recent projects): the list comes from config when opening
   const [showRecent, setShowRecent] = useState(false)
   const [recentProjects, setRecentProjects] = useState([])
-  // Status do modelo neural (get-rnnoise-status no boot): installed + path.
+  // Neural model status (get-rnnoise-status on boot): installed + path.
   const [rnnoiseStatus, setRnnoiseStatus] = useState(null)
   const [advancedTools, setAdvancedTools] = useState(true)
   const [exportedFolderPath, setExportedFolderPath] = useState('')
   const [showCudaModal, setShowCudaModal] = useState(false)
   const [cudaInstalled, setCudaInstalled] = useState(false)
-  const [projectFilePath, setProjectFilePath] = useState(null) // v1.8.0: .corgi.json atual (salvo/aberto)
-  const [confirmNewOpen, setConfirmNewOpen] = useState(false) // modal "salvar antes de limpar?"
+  const [projectFilePath, setProjectFilePath] = useState(null) // v1.8.0: current .corgi.json (saved/opened)
+  const [confirmNewOpen, setConfirmNewOpen] = useState(false) // "save before clearing?" modal
   const [errorMessage, setErrorMessage] = useState('')
   const errorBuffer = useRef('')
-  // Erro específico do ffmpeg (com stderr): chega antes do onFfmpegDone e
-  // NÃO pode ser sobrescrito pela mensagem genérica de legenda.
+  // ffmpeg-specific error (with stderr): arrives before onFfmpegDone and
+  // must NOT be overwritten by the generic subtitle message.
   const ffmpegErrRef = useRef('')
   const lastPct = useRef(0)
   const videoDurationRef = useRef(0)
   const videoRef = useRef(null)
   const exportingRef = useRef(false)
   const waveSurferRef = useRef(null)
-  const globalConfigRef = useRef(null) // v1.8.0: config.ini lido no boot (base do NOVO PROJETO)
+  const globalConfigRef = useRef(null) // v1.8.0: config.ini read at boot (basis of NEW PROJECT)
 
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
   const [subtitleModel, setSubtitleModel] = useState('tiny')
@@ -120,47 +125,50 @@ function App() {
   const [subtitlePersistence, setSubtitlePersistence] = useState(1)
   const [smartSubtitle, setSmartSubtitle] = useState(false)
   const [autoLineWrap, setAutoLineWrap] = useState(false)
-  // Espacamento horizontal da legenda ate a borda/parede do video, em % da
-  // largura. So produz efeito com autoLineWrap ligado (o valor efetivo é
-  // calculado nos pontos de consumo: export e preview).
+  // Horizontal spacing from the subtitle to the video edge/wall, in % of
+  // the width. Only takes effect with autoLineWrap on (the effective value is
+  // computed at the consumption points: export and preview).
   const [subtitleHMargin, setSubtitleHMargin] = useState(0.5)
   const [subtitleConfigs, setSubtitleConfigs] = useState({})
+  // Font ids starred in the SubtitleConfigModal dropdown (persisted in config.ini)
+  const [favoriteFonts, setFavoriteFonts] = useState([])
   const [subtitlesEdited, setSubtitlesEdited] = useState(false)
 
-  // --- Faixa de exportação (marcas I/O da onda) ---------------------------
-  // start/end em SEGUNDOS; null = sem marca. selectedMarker = marca clicada
-  // na onda, que o Delete apaga. exportRange é limpo ao trocar de arquivo.
+  // --- Export range (I/O marks on the waveform) ---------------------------
+  // start/end in SECONDS; null = no mark. selectedMarker = the mark clicked
+  // on the waveform, which Delete clears. exportRange is cleared when the file changes.
   const [exportRange, setExportRange] = useState({ start: null, end: null })
   const [selectedMarker, setSelectedMarker] = useState(null)
 
-  // --- Ctrl+Z (desfazer) --------------------------------------------------
-  // Pilha de snapshots do array de legendas, guardados ANTES de cada edição
-  // manual (texto/tempo, apagar, adicionar, limpar).
+  // --- Ctrl+Z (undo) ------------------------------------------------------
+  // Stack of snapshots of the subtitle array, saved BEFORE each manual
+  // edit (text/timing, delete, add, clear).
   const subtitlesHistoryRef = useRef([])
   const subtitlesRef = useRef(subtitles)
 
-  // --- v1.7.0: tratamento de som -----------------------------------------
-  // soundConfig.enabled é o interruptor MESTRE (botão 🎤): com ele desligado
-  // o modal fica inacessível e NENHUMA cadeia vai para o export.
+  // --- v1.7.0: sound processing -------------------------------------------
+  // soundConfig.enabled is the MASTER switch (🎤 button): with it off
+  // the modal becomes inaccessible and NO chain goes to the export.
   const [soundConfig, setSoundConfig] = useState(DEFAULT_SOUND_CONFIG)
   const [customPresets, setCustomPresets] = useState([])
   const [showSound, setShowSound] = useState(false)
-  const [abMode, setAbMode] = useState(null) // null = segue o 🎤 | 'original' | 'treated'
-  const [realtimeDraft, setRealtimeDraft] = useState(null) // rascunho do modal em audição
-  const [playRequest, setPlayRequest] = useState(0) // incrementa para tocar (A/B)
+  const [abMode, setAbMode] = useState(null) // null = follows the 🎤 | 'original' | 'treated'
+  const [realtimeDraft, setRealtimeDraft] = useState(null) // modal draft under audition
+  const [playRequest, setPlayRequest] = useState(0) // increments to play (A/B)
 
-  // Margem horizontal EFETIVA (%): 0 quando a quebra automatica esta
-  // desligada => export cai nos 10px legados e a preview no maxWidth 85/90%.
+  // EFFECTIVE horizontal margin (%): 0 when automatic line wrap is
+  // off => export falls back to the legacy 10px and the preview to maxWidth 85/90%.
   const hMarginPct = autoLineWrap ? subtitleHMargin : 0
 
-  // Aplica o config.ini (configuracoes GLOBAIS) nos estados — usado no boot e
-  // pelo NOVO PROJETO, que precisa desfazer o que um projeto aberto sobrescreveu.
+  // Applies config.ini (GLOBAL settings) to state — used on boot and by
+  // NEW PROJECT, which needs to undo what an open project overwrote.
   const applyConfig = (c) => {
     if (!c) return
     setThreshold(c.threshold)
     setMarginVal(c.margin)
     setMarginAfter(c.margin_after ?? '0.5')
     setSmooth(c.smooth ?? '0.2')
+    setCutImmediate(c.cut_immediate !== 'false')
     setOutputFormat(c.output_format || 'mp3')
     setOutputResolution(c.output_resolution || 'original')
     if (c.output_folder) setOutputFolder(c.output_folder)
@@ -182,8 +190,23 @@ function App() {
     setSubtitleHMargin(Number.isFinite(hMargin) ? Math.min(20, Math.max(0, hMargin)) : 0.5)
     setAdvancedTools(c.advanced_tools !== 'false')
     try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
+    setFavoriteFonts(String(c.favorite_fonts || '').split(',').map((id) => id.trim()).filter(Boolean))
     try { setSoundConfig(mergeSoundConfig(JSON.parse(c.sound_config || 'null'))) } catch { setSoundConfig(mergeSoundConfig(null)) }
     try { setCustomPresets(JSON.parse(c.sound_presets || '[]') || []) } catch { setCustomPresets([]) }
+  }
+
+  // Star toggle in the font dropdown: state updates instantly (the list
+  // re-sorts with favorites first) and saveConfig merges this single key
+  // into config.ini, leaving every other setting untouched. The config ref
+  // is kept in sync too — applyConfig re-runs from it on NEW PROJECT.
+  const toggleFavoriteFont = (fontId) => {
+    const next = favoriteFonts.includes(fontId)
+      ? favoriteFonts.filter((id) => id !== fontId)
+      : [...favoriteFonts, fontId]
+    const joined = next.join(',')
+    setFavoriteFonts(next)
+    globalConfigRef.current = { ...globalConfigRef.current, favorite_fonts: joined }
+    window.api.saveConfig({ favorite_fonts: joined })
   }
 
   useEffect(() => {
@@ -194,7 +217,7 @@ function App() {
 
     window.api.checkCudaInstalled().then(setCudaInstalled)
 
-    // Modelo neural (rnnoise): status inicial — installed + path pro -af.
+    // Neural model (rnnoise): initial status — installed + path for -af.
     window.api.rnnoiseStatus?.().then((s) => s && setRnnoiseStatus(s)).catch(() => {})
 
     window.api.onOutput((raw) => {
@@ -302,8 +325,8 @@ function App() {
 
     window.api.onFfmpegDone((ok) => {
       if (!ok) {
-        // O main manda ffmpeg-error (específico, com stderr) ANTES do done;
-        // sem este ref a mensagem real era engolida pela genérica.
+        // main sends ffmpeg-error (specific, with stderr) BEFORE done;
+        // without this ref the real message was swallowed by the generic one.
         setErrorMessage(ffmpegErrRef.current || t('app.errRender'))
         setShowError(true)
       }
@@ -326,16 +349,16 @@ function App() {
     }
   }, [subtitlesEnabled])
 
-  // --- v1.8.0: prévia em TEMPO REAL ("A/B instantâneo") ---------------------
-  // A cadeia do 🎤 roda em Web Audio DENTRO do AudioContext do wavesurfer
-  // (realtimeChain). Trocar de lado do A/B é um crossfade de ganho: sem
-  // render ffmpeg, sem recarregar a fonte — dá pra ouvir na hora, de onde a
-  // playhead estiver. O 'treated' ouve o RASCUNHO do modal; o resto, a cfg
-  // salva. O EXPORT continua usando o ffmpeg exato.
+  // --- v1.8.0: preview in REAL TIME ("instant A/B") -------------------------
+  // The 🎤 chain runs in Web Audio INSIDE the wavesurfer AudioContext
+  // (realtimeChain). Switching A/B sides is a gain crossfade: no
+  // ffmpeg render, no font reload — you can hear it right away, from wherever
+  // the playhead is. 'treated' hears the modal DRAFT; the rest, the saved
+  // config. EXPORT still uses the exact ffmpeg.
   const realtimeActive = abMode === 'treated' || (soundConfig.enabled && abMode !== 'original')
   const realtimeCfg = abMode === 'treated' && realtimeDraft ? realtimeDraft : soundConfig
-  // A FORMA da onda acompanha o que está sendo OUVIDO: tratada quando a
-  // prévia está ativa e há o que tratar, original no lado A / 🎤 off.
+  // The SHAPE of the waveform follows what is being HEARD: treated when the
+  // preview is active and there is something to treat, original on side A / 🎤 off.
   const shapeCfg = useMemo(
     () => (realtimeActive && buildSoundChain(realtimeCfg) ? realtimeCfg : null),
     [realtimeActive, realtimeCfg]
@@ -345,19 +368,19 @@ function App() {
     realtimeChain.setBypass(!realtimeActive)
   }, [realtimeCfg, realtimeActive])
 
-  // Player (WebAudioPlayer) entregue pelo Waveform a cada criação/destruição
+  // Player (WebAudioPlayer) handed over by the Waveform on each creation/destruction
   const handlePlayerCreated = (player) => realtimeChain.attach(player)
 
-  // Troca/limpeza de arquivo: zera o A/B e o rascunho em audição — a cadeia
-  // em tempo real é religada no player novo pelo Waveform (handlePlayerCreated)
+  // File switch/clear: resets the A/B and the draft under audition — the
+  // real-time chain is re-connected on the new player by the Waveform (handlePlayerCreated)
   useEffect(() => {
     setAbMode(null)
     setRealtimeDraft(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFile])
 
-  // 🎤: interruptor mestre do Som Avançado — a prévia em tempo real acompanha
-  // na hora (crossfade no player, sem pausar nem renderizar nada)
+  // 🎤: master switch of Advanced Sound — the real-time preview follows
+  // right away (crossfade in the player, without pausing or rendering anything)
   const handleToggleSound = async () => {
     if (!selectedFile || processing || generatingSubtitles) return
     const next = { ...soundConfig, enabled: !soundConfig.enabled }
@@ -369,26 +392,28 @@ function App() {
   }
 
   // --- AUTO CUT (v1.10.1) ---------------------------------------------------
-  // File the PREVIEW plays/shows: the cut one while the cut is on.
+  // File the PREVIEW plays/shows: the cut one while the cut is on AND instant
+  // cut is on (instant off → the preview keeps the original until export).
   // selectedFile stays the ORIGINAL — export always starts from it (and trims
   // the I/O range first, a contract the preview does not reproduce).
   const previewFile = useMemo(
     () =>
-      cutEnabled && cutState && cutState.srcPath === selectedFile?.path
+      cutImmediate && cutEnabled && cutState && cutState.srcPath === selectedFile?.path
         ? { ...selectedFile, path: cutState.path }
         : selectedFile,
-    [selectedFile, cutEnabled, cutState]
+    [selectedFile, cutImmediate, cutEnabled, cutState]
   )
 
-  // Preview subtitles remapped to the cut timeline (same remap as export).
-  // The edit panel stays on the ORIGINAL timeline: edit the source and remap
-  // on the fly is exactly the export contract.
+  // Preview subtitles remapped to the cut timeline (same remap as export —
+  // same instant-cut gate as the video above). The edit panel stays on the
+  // ORIGINAL timeline: edit the source and remap on the fly is exactly the
+  // export contract.
   const previewSubtitles = useMemo(
     () =>
-      cutEnabled && cutState?.segments?.length && cutState.srcPath === selectedFile?.path
+      cutImmediate && cutEnabled && cutState?.segments?.length && cutState.srcPath === selectedFile?.path
         ? remapSubtitleTimestamps(subtitles, cutState.segments, cutState.fps)
         : subtitles,
-    [subtitles, selectedFile, cutEnabled, cutState]
+    [subtitles, selectedFile, cutImmediate, cutEnabled, cutState]
   )
 
   // Generates the preview cut: auto-editor (cut audio) + Premiere cutmap
@@ -481,6 +506,8 @@ function App() {
   // Master toggle: OFF goes back to the original ("like it was before",
   // deleting the generated .CUT); ON generates the cut (the button shows
   // GENERATING CUT...) and the preview starts playing/showing the final result.
+  // Instant cut OFF (Settings > Output): ON only flips the switch — the
+  // preview stays on the original and auto-editor runs at export time.
   const handleToggleCut = async () => {
     if (!selectedFile || processing || generatingSubtitles || cutBusy) return
     if (cutEnabled) {
@@ -488,6 +515,10 @@ function App() {
       setCutEnabled(false)
       setCutState(null)
       if (old?.path) window.api.deleteFile(old.path).catch(() => {})
+      return
+    }
+    if (!cutImmediate) {
+      setCutEnabled(true)
       return
     }
     await generateCutPreview()
@@ -501,15 +532,15 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFile?.path])
 
-  // Prévia A/B do modal — em TEMPO REAL: 'original' só põe o bypass (crossfade),
-  // 'treated' troca a cfg do RASCUNHO (preset/ajustes ainda não aplicados) na
-  // cadeia. Troca na hora, na posição atual — sem render e sem recarga.
-  // NUNCA trata o arquivo final.
+  // Modal A/B preview — in REAL TIME: 'original' just applies the bypass (crossfade),
+  // 'treated' swaps the DRAFT config (preset/tweaks not yet applied) into the
+  // chain. Switches instantly, at the current position — no render, no reload.
+  // NEVER processes the final file.
   const handleListenSound = (mode, draftCfg) => {
     if (!selectedFile || processing) return
     if (mode === 'treated') {
       const cfg = draftCfg || soundConfig
-      // Cadeia vazia (tudo desligado) não tem o que tratar — toca o original
+      // Empty chain (everything off) has nothing to treat — plays the original
       if (!buildSoundChain(cfg)) {
         setAbMode('original')
       } else {
@@ -522,10 +553,10 @@ function App() {
     setPlayRequest((r) => r + 1)
   }
 
-  // APLICAR do modal: só SALVA e fecha — nada é tratado naquele momento (o
-  // tratamento roda apenas na exportação). A prévia em tempo real passa a
-  // seguir a cfg salva (o efeito do realtimeChain já religa a cadeia) e a
-  // FORMA da onda redesenha conforme a nova cfg (render offline).
+  // Modal APPLY: only SAVES and closes — nothing is processed at that moment (the
+  // processing runs only at export). The real-time preview then follows the
+  // saved config (the realtimeChain effect reconnects the chain) and the
+  // SHAPE of the waveform redraws for the new config (offline render).
   const handleApplySound = async (cfg) => {
     setShowSound(false)
     setAbMode(null)
@@ -535,12 +566,12 @@ function App() {
 
   const handleSoundPresets = (presets) => handleSaveSettings({ sound_presets: presets })
 
-  // --- v1.8.0: projetos ----------------------------------------------------
+  // --- v1.8.0: projects ----------------------------------------------------
   const cloneDeep = (o) => JSON.parse(JSON.stringify(o))
 
-  // Snapshot do que o projeto precisa para reabrir igual: mídia, legenda
-  // gerada, PRESET de som (id + 🎤; tweaks não salvos como preset se perdem),
-  // config de legenda e os ajustes de corte/exportação.
+  // Snapshot of what the project needs to reopen the same way: media,
+  // generated subtitles, sound PRESET (id + 🎤; tweaks not saved as preset are lost),
+  // subtitle config and the cut/export settings.
   const buildProjectData = () => ({
     version: 1,
     savedAt: new Date().toISOString(),
@@ -567,8 +598,8 @@ function App() {
     export: { format: outputFormat, resolution: outputResolution },
   })
 
-  // [💾]: primeira vez abre o "Salvar como" (pasta da mídia + nome dela);
-  // depois que já existe caminho, regrava por cima sem perguntar.
+  // [💾]: first time opens "Save as" (media folder + its name);
+  // once a path exists, overwrites in place without asking.
   const handleSaveProject = async () => {
     if (processing || generatingSubtitles) return false
     let target = projectFilePath
@@ -581,7 +612,7 @@ function App() {
     if (res && res.success) {
       setProjectFilePath(target)
       setInfoToast(t('project.saved'))
-      markProjectRecent(target) // salvo agora → topo dos recentes (fire-and-forget)
+      markProjectRecent(target) // saved now → top of recents (fire-and-forget)
       return true
     }
     setErrorMessage(res?.error || t('project.saveFailed'))
@@ -589,10 +620,10 @@ function App() {
     return false
   }
 
-  // Registra o projeto nos recentes (config.ini → recent_projects; o
-  // save-config do main faz merge de chaves, então nada mais é tocado).
-  // Chamado em abrir e em salvar — fonte da verdade é o config, sem lista
-  // duplicada no renderer (o modal relê no momento de abrir).
+  // Registers the project in recents (config.ini → recent_projects; main's
+  // save-config merges keys, so nothing else is touched).
+  // Called on open and on save — the config is the source of truth, no list
+  // duplicated in the renderer (the modal re-reads it when opening).
   const markProjectRecent = async (path) => {
     if (!path) return
     try {
@@ -604,7 +635,7 @@ function App() {
     }
   }
 
-  // Recent ilegível (arquivo sumiu/corrompido) → tira da lista (auto-limpeza)
+  // Unreadable recent (file gone/corrupted) → drops it from the list (self-cleanup)
   const dropProjectRecent = async (path) => {
     try {
       const cur = await window.api.getConfig()
@@ -615,15 +646,15 @@ function App() {
     }
   }
 
-  // Carrega um projeto com o resultado já em mão — diálogo nativo OU path
-  // direto do modal de recentes passam por aqui (mesmo corpo de aplicação).
+  // Loads a project with the result already in hand — native dialog OR path
+  // straight from the recents modal go through here (same apply body).
   const applyLoadedProject = async (r) => {
     const d = r.data || {}
     const mediaPath = typeof d.mediaPath === 'string' ? d.mediaPath : ''
 
-    // Som: o projeto guarda só o preset (sistema ou custom) + o estado do 🎤.
-    // Tweaks não salvos como preset não estão aqui e se perdem por definição;
-    // preset apagado → volta pras configurações globais.
+    // Sound: the project stores only the preset (system or custom) + the 🎤 state.
+    // Tweaks not saved as preset are not here and are lost by definition;
+    // preset deleted → falls back to the global settings.
     const savedSound = d.sound || {}
     let cfg
     const preset = findPreset(savedSound.presetId, customPresets)
@@ -634,8 +665,8 @@ function App() {
       cfg = { ...cfg, enabled: savedSound.enabled === true }
     }
 
-    // Restaura partindo dos GLOBAIS e aplicando por cima só o que o save tem
-    // (nada de estado sobrando do projeto anterior).
+    // Restores starting from the GLOBALS and applying on top only what the save
+    // has (no leftover state from the previous project).
     applyConfig(globalConfigRef.current)
 
     let file = null
@@ -646,7 +677,7 @@ function App() {
     setSelectedFile(file)
     setSubtitles(Array.isArray(d.subtitles) ? d.subtitles : [])
     setSubtitlesEdited(d.subtitlesEdited === true)
-    // Projeto novo na memória: o undo não pode desfazer edições do projeto anterior
+    // New project in memory: undo cannot revert edits from the previous project
     subtitlesHistoryRef.current = []
     setSoundConfig(cfg)
 
@@ -694,7 +725,7 @@ function App() {
     }
   }
 
-  // ABRIR manual: diálogo nativo (fluxo original) → aplica + registra nos recentes
+  // MANUAL OPEN: native dialog (original flow) → applies + registers in recents
   const handleOpenProject = async () => {
     if (processing || generatingSubtitles) return
     const r = await window.api.openProject()
@@ -708,8 +739,8 @@ function App() {
     await markProjectRecent(r.path)
   }
 
-  // Clique numa linha do modal de recentes: lê o arquivo direto (sem diálogo),
-  // aplica igual e reordena pro topo. Falhou → some da lista e avisa.
+  // Click on a row of the recents modal: reads the file directly (no dialog),
+  // applies it the same way and reorders to the top. Failed → drops off the list and warns.
   const handleOpenRecent = async (path) => {
     if (processing || generatingSubtitles) return
     setShowRecent(false)
@@ -732,8 +763,8 @@ function App() {
     await markProjectRecent(path)
   }
 
-  // ABRIR (TitleBar) → modal de recentes; a lista é relida do config aqui
-  // pra sempre refletir o estado atual (abrir/salvar já persistiram antes).
+  // OPEN (TitleBar) → recents modal; the list is re-read from the config here
+  // so it always reflects the current state (open/save already persisted before).
   const handleOpenClick = async () => {
     if (processing || generatingSubtitles) return
     try {
@@ -745,7 +776,7 @@ function App() {
     setShowRecent(true)
   }
 
-  // "ABRIR MANUALMENTE" do modal → fecha e cai no diálogo nativo original
+  // "OPEN MANUALLY" from the modal → closes and falls into the original native dialog
   const handleOpenManual = async () => {
     setShowRecent(false)
     await handleOpenProject()
@@ -766,12 +797,12 @@ function App() {
     setRealtimeDraft(null)
     setSeekTo(null)
     setCurrentTime(0)
-    applyConfig(globalConfigRef.current) // de volta pras configurações globais
+    applyConfig(globalConfigRef.current) // back to the global settings
     setInfoToast(t('project.created'))
   }
 
-  // [📄]: com conteúdo, pergunta se salva antes de limpar (wireframe v1.8.0);
-  // vazio, limpa direto.
+  // [📄]: with content, asks whether to save before clearing (wireframe v1.8.0);
+  // empty, clears right away.
   const requestNewProject = () => {
     if (processing || generatingSubtitles) return
     if (selectedFile || subtitles.length > 0 || projectFilePath) setConfirmNewOpen(true)
@@ -780,8 +811,8 @@ function App() {
 
   const handleExport = async () => {
     if (!selectedFile || processing || generatingSubtitles || cutBusy) return
-    // Faixa marcada (I/O): recorta SÓ quando início E fim estão marcados.
-    // Falta um dos dois → avisa EXATAMENTE qual (antes de entrar em processing).
+    // Marked range (I/O): trims ONLY when start AND end are both marked.
+    // One of the two missing → warns EXACTLY which one (before entering processing).
     const rangeState = validateExportRange(exportRange)
     if (rangeState === 'missing-start') {
       setErrorMessage(t('export.needStart'))
@@ -799,9 +830,9 @@ function App() {
       return
     }
     const hasRange = rangeState === 'ok'
-    // Player para imediatamente ao iniciar a exportacao — video e wavesurfer
-    // pausados INDEPENDENTES (em arquivo de audio nao existe videoRef, e o
-    // wavesurfer precisa parar tambem)
+    // Player stops immediately when the export starts — video and wavesurfer
+    // paused INDEPENDENTLY (an audio file has no videoRef, and the
+    // wavesurfer needs to stop too)
     if (videoRef.current) videoRef.current.pause()
     if (waveSurferRef?.current) waveSurferRef.current.pause()
     exportingRef.current = true
@@ -811,8 +842,8 @@ function App() {
     videoDurationRef.current = 0
     setProgress({ pct: 0, text: '0%' })
 
-    // 🎤 gate: o Som Avançado só vai para o export com o interruptor mestre
-    // LIGADO — mesmo com preset escolhido, desligado não monta cadeia nenhuma.
+    // 🎤 gate: Advanced Sound only goes to the export with the master switch
+    // ON — even with a preset chosen, off builds no chain at all.
     const soundChain = soundConfig.enabled
       ? buildSoundChain(soundConfig, { rnnoiseModel: rnnoiseStatus?.installed ? rnnoiseStatus.path : null })
       : ''
@@ -820,9 +851,9 @@ function App() {
 
     const base = selectedFile.name.replace(/\.[^.]+$/, '')
     const inputExt = selectedFile.name.split('.').pop().toLowerCase()
-    // Com faixa marcada, só sobrevive o que está DENTRO do trecho — deslocado
-    // para a timeline do recorte (o arquivo cortado começa em 0). Se nenhuma
-    // legenda cair dentro, não queima nem grava SRT lateral.
+    // With a marked range, only what is INSIDE the segment survives — shifted
+    // to the trim timeline (the cut file starts at 0). If no subtitle
+    // falls inside, it neither burns nor writes a sidecar SRT.
     const rangeStartMs = hasRange ? Math.round(exportRange.start * 1000) : 0
     const rangeEndMs = hasRange ? Math.round(exportRange.end * 1000) : 0
     const sourceSubtitles = hasRange
@@ -830,16 +861,16 @@ function App() {
       : subtitles
     const hasSubtitles = sourceSubtitles.length > 0
     const shouldBurn = burnSubtitles && hasSubtitles
-    // Burn DESLIGADO + legendas geradas: grava um .srt lateral com o MESMO
-    // nome do arquivo exportado (a promessa do hint settings.burnSrtOnly)
+    // Burn OFF + generated subtitles: writes a sidecar .srt with the SAME
+    // name as the exported file (the promise of the settings.burnSrtOnly hint)
     const writeSidecarSrt = hasSubtitles && !burnSubtitles
     const videoExts = ['mp4', 'mkv', 'mov', 'webm', 'avi']
     const isVideoInput = videoExts.includes(inputExt)
-    // O formato escolhido no Config e quem manda no container de saida: o
-    // pipeline de video so roda quando a saida E video. Green screen e queima
-    // de legenda so fazem sentido em saida de video (o SettingsModal ja avisa
-    // "requer formato de video" nesse caso). Antes, qualquer recurso ligado
-    // OU input de audio forçava mp4 e ignorava o formato escolhido.
+    // The format chosen in Config rules the output container: the
+    // video pipeline only runs when the output IS video. Green screen and subtitle
+    // burn only make sense for video output (SettingsModal already warns
+    // "requires video format" in that case). Before, any feature on
+    // OR an audio input forced mp4 and ignored the chosen format.
     const needsVideo = videoExts.includes(outputFormat)
     if (!needsVideo && (greenScreen || shouldBurn)) {
       console.warn('[export] green screen/queima de legenda ignorados: saida em formato de audio')
@@ -852,10 +883,10 @@ function App() {
       ? await window.api.joinPath(outputFolder, `${base}_TEMP.${inputExt}`)
       : await window.api.joinPath(selectedFile.folder, `${base}_TEMP.${inputExt}`)
 
-    // Faixa marcada (I/O): recorta o trecho ANTES do auto-editor — o corte
-    // por silêncio, o remapeamento de legendas e a queima rodam todos já
-    // dentro do trecho. '-ss' na ENTRADA + '-t' na saída dá corte frame-
-    // accurate (re-encode com o encoder padrão do container).
+    // Marked range (I/O): trims the segment BEFORE auto-editor — the silence
+    // cut, subtitle remapping and the burn all already run
+    // inside the segment. '-ss' on the INPUT + '-t' on the output gives a frame-
+    // accurate cut (re-encode with the container's default encoder).
     let workPath = selectedFile.path
     let rangePath = null
     if (hasRange) {
@@ -956,12 +987,17 @@ function App() {
     try {
       let assPath = null
 
-      // Duracao usada só para animar a barra de progresso do ffmpeg — na
-      // timeline EXPORTADA (com faixa I/O, já deslocada e aparada)
+      // Duration used only to animate the ffmpeg progress bar — on the
+      // EXPORTED timeline (with the I/O range, already shifted and trimmed)
       const duration = exportSubtitles.length > 0
         ? parseSrtTime(exportSubtitles[exportSubtitles.length - 1].end) / 1000
         : 3600
-      videoDurationRef.current = duration
+      // REAL duration of the work file (cut/trimmed). The subtitle/3600 guess
+      // fed BOTH the progress base and the lavfi background: an audio-input
+      // export with no subtitles built a 1-hour black canvas and -shortest
+      // left seconds of black+silence past the audio (mp4 silent tail).
+      const workDuration = (await window.api.getMediaDuration(exportAudioPath)) || duration
+      videoDurationRef.current = Math.min(duration, workDuration)
 
       if (needsVideo) {
         let ffmpegArgs
@@ -971,24 +1007,31 @@ function App() {
             '-i', exportAudioPath,
           ]
         } else {
-          // #00A800 = mesmo verde do preview (DropZone); o 'green' nomeado do
-          // ffmpeg (#008000) saia escuro demais no video exportado.
+          // #00A800 = same green as the preview (DropZone); ffmpeg's named
+          // 'green' (#008000) came out too dark in the exported video.
           const bgColor = greenScreen ? '0x00A800' : 'black'
           const bgTgt = resTarget(outputResolution)
           const bgRes = bgTgt ? `${bgTgt.w}x${bgTgt.h}` : '1920x1080'
+          // Background ends WITH the work file: d=duration (subtitles/3600
+          // guess) let the black canvas outlive the audio and the -shortest
+          // overshoot wrote seconds of black+silence after the last frame.
           ffmpegArgs = [
             '-y',
             '-f', 'lavfi',
-            '-i', `color=c=${bgColor}:s=${bgRes}:d=${duration}`,
+            '-i', `color=c=${bgColor}:s=${bgRes}:d=${workDuration}`,
             '-i', exportAudioPath,
           ]
         }
 
         const videoFilters = []
         if (isVideoInput && outputResolution !== 'original') {
-          // Id desconhecido (config antiga) mantém o comportamento antigo: paisagem.
+          // Unknown id (old config) keeps the old behavior: landscape.
           const tgt = resTarget(outputResolution) || RESOLUTION_TARGETS.landscape
-          videoFilters.push(`scale=${tgt.w}:${tgt.h}`)
+          // Same framing as the preview (object-contain over the canvas):
+          // scale keeping the source aspect ratio, then pad the leftover
+          // bands black. A plain scale=W:H stretched mismatched aspects
+          // (landscape source on a portrait target came out "amassado").
+          videoFilters.push(`scale=${tgt.w}:${tgt.h}:force_original_aspect_ratio=decrease,pad=${tgt.w}:${tgt.h}:(ow-iw)/2:(oh-ih)/2:color=black`)
         }
 
         if (shouldBurn) {
@@ -1000,8 +1043,8 @@ function App() {
           const videoW = tgt ? tgt.w : inputW
           const videoH = tgt ? tgt.h : inputH
           console.log(`[export] ASS: style=${subtitleStyle} ${styleCfg.wordsPerLine || wordsPerLine}palavras/${styleCfg.linesCount || linesCount}linha(s) wrap=${autoLineWrap} margemH=${hMarginPct}% res=${videoW}x${videoH}`)
-          // O canvas so mede com a webfont depois que ela carrega; sem isto o
-          // highlightbox sai com as palavras coladas no video final.
+          // The canvas only measures after the webfont loads; without this the
+          // highlightbox comes out with the words glued together in the final video.
           const fontLoaded = await ensureExportFontLoaded(styleCfg.fontId || undefined, subtitleStyle, styleCfg.fontSize || undefined)
           if (!fontLoaded) {
             console.warn(`[export] AVISO: fonte de medicao nao confirmada (${styleCfg.fontId || 'default'}) - palavras podem sair coladas`)
@@ -1028,9 +1071,9 @@ function App() {
 
             setProgress({ pct: 95, text: t('export.burning') })
 
-            // fontsdir: informa ao libass onde procurar fontes que nao estao instaladas no Windows
-            // (ex: Komika Axis). Sem isso o export cai no fallback (Arial). Escaping validado com o ffmpeg:
-            // unidade precisa de 2 barras (E\\:) e espacos de 1 barra (fonts\ com\ espaco).
+            // fontsdir: tells libass where to look for fonts not installed in Windows
+            // (e.g.: Komika Axis). Without it the export falls back (Arial). Escaping validated with ffmpeg:
+            // the drive needs 2 backslashes (E\\:) and spaces 1 backslash (fonts\ with\ space).
             const fontsDir = await window.api.getFontsPath()
             if (!(await window.api.pathExists(fontsDir))) {
               console.warn(`[export] AVISO: pasta de fontes ausente (${fontsDir}) - video saindo com a fonte padrao do sistema`)
@@ -1044,19 +1087,19 @@ function App() {
           }
         }
 
-        // O -vf fica FORA do if(shouldBurn): dentro dele, a resolucao (scale)
-        // era ignorada quando a queima de legenda estava desligada.
+        // The -vf stays OUTSIDE if(shouldBurn): inside it, the resolution (scale)
+        // was ignored when subtitle burning was off.
         if (videoFilters.length > 0) {
           ffmpegArgs.push('-vf', videoFilters.join(','))
         }
 
-        // Codecs por container: webm so aceita VP9/VP8 + Opus/Vorbis
+        // Codecs per container: webm only accepts VP9/VP8 + Opus/Vorbis
         if (outputFormat === 'webm') {
           ffmpegArgs.push('-c:v', 'libvpx-vp9', '-cpu-used', '4', '-deadline', 'realtime', '-c:a', 'libopus')
         } else {
           ffmpegArgs.push('-c:v', 'libx264', '-c:a', 'aac')
         }
-        // Tratamento de som (v1.7.0): mesma cadeia ouvida na prévia
+        // Sound processing (v1.7.0): same chain heard in the preview
         if (soundChain) ffmpegArgs.push('-af', soundChain)
         ffmpegArgs.push('-shortest', outPath)
         const ffmpegResult = await window.api.runFfmpeg(ffmpegArgs, outputDir)
@@ -1067,16 +1110,16 @@ function App() {
           return
         }
       } else {
-        // Saida de audio: descarta a trilha de video e usa o codec do formato
-        // escolhido (o '-c:a aac' fixo antigo era rejeitado por mp3/wav/flac/ogg).
+        // Audio output: drops the video track and uses the chosen format's
+        // codec (the old fixed '-c:a aac' was rejected by mp3/wav/flac/ogg).
         const audioCodecs = { mp3: 'libmp3lame', wav: 'pcm_s16le', flac: 'flac', ogg: 'libvorbis', aac: 'aac', m4a: 'aac' }
         const ffmpegArgs = ['-y', '-i', exportAudioPath, '-vn']
         if (soundChain) {
-          // Som avançado ligado: -af exige re-encode (impossível com 'copy')
+          // Advanced sound on: -af requires re-encode (impossible with 'copy')
           ffmpegArgs.push('-af', soundChain)
           ffmpegArgs.push('-c:a', audioCodecs[outputFormat] || 'aac')
         } else {
-          // Mesmo formato da entrada: corta sem reencodar (perda zero)
+          // Same format as the input: cuts without re-encoding (zero loss)
           ffmpegArgs.push('-c:a', inputExt === outputFormat ? 'copy' : (audioCodecs[outputFormat] || 'aac'))
         }
         ffmpegArgs.push(outPath)
@@ -1089,8 +1132,8 @@ function App() {
         }
       }
 
-      // Burn DESLIGADO: grava o .srt lateral com o MESMO nome do arquivo
-      // exportado (exportSubtitles ja remapeado para a timeline cortada)
+      // Burn OFF: writes the sidecar .srt with the SAME name as the file
+      // exported (exportSubtitles already remapped to the cut timeline)
       if (writeSidecarSrt) {
         try {
           const srtPath = outPath.replace(/\.[^.]+$/, '.srt')
@@ -1126,8 +1169,8 @@ function App() {
 
   const handleGenerateSubtitles = async () => {
     if (!selectedFile || generatingSubtitles || processing) return
-    // Player para imediatamente ao gerar legenda — video e wavesurfer
-    // pausados INDEPENDENTES (em arquivo de audio nao existe videoRef)
+    // Player stops immediately when generating subtitles — video and wavesurfer
+    // paused INDEPENDENTLY (an audio file has no videoRef)
     if (videoRef.current) videoRef.current.pause()
     if (waveSurferRef?.current) waveSurferRef.current.pause()
     whisperGenRef.current++
@@ -1135,7 +1178,7 @@ function App() {
     setGeneratingSubtitles(true)
     setSubtitles([])
     setSubtitlesEdited(false)
-    // Geração nova substitui tudo: o undo anterior não faz mais sentido
+    // New generation replaces everything: the previous undo no longer makes sense
     subtitlesHistoryRef.current = []
 
     try {
@@ -1202,7 +1245,7 @@ function App() {
         setSubtitles(enriched)
       }
       setGeneratingSubtitles(false)
-      // AUTO: informa o idioma que o whisper detectou no audio
+      // AUTO: reports the language whisper detected in the audio
       if (subtitleLanguage === SUBTITLE_LANG_AUTO && result?.detectedLanguage) {
         const detected = LANGS.find((l) => l.id === result.detectedLanguage)?.label
           || result.detectedLanguage.toUpperCase()
@@ -1254,6 +1297,18 @@ function App() {
     })
   }
 
+  // Replaces every whole-word match of `before` across the whole track in one
+  // undo snapshot — word timings are kept, only the strings change.
+  const handleReplaceWord = (before, after, ignoreCase) => {
+    if (!before || !after || before === after) return 0
+    const { next, count } = replaceInSubtitles(subtitles, before, after, ignoreCase)
+    if (count === 0) return 0
+    pushUndoSnapshot()
+    setSubtitlesEdited(true)
+    setSubtitles(next)
+    return count
+  }
+
   const handleDeleteSubtitle = (index) => {
     pushUndoSnapshot()
     setSubtitlesEdited(true)
@@ -1281,11 +1336,15 @@ function App() {
     })
   }
 
-  const handleSaveSubtitles = async () => {
+  const handleSaveSubtitles = async (list) => {
+    // `list` lets the Enter commit+save pass the next array directly: at that
+    // point `subtitles` state has not flushed yet. The SAVE button calls it
+    // bare and serializes current state.
+    const src = Array.isArray(list) ? list : subtitles
     const baseName = selectedFile.name.replace(/\.[^.]+$/, '')
     const srtPath = await window.api.joinPath(selectedFile.folder, `${baseName}_words.srt`)
     const lines = []
-    subtitles.forEach((sub, i) => {
+    src.forEach((sub, i) => {
       lines.push(String(i + 1))
       lines.push(`${sub.start} --> ${sub.end}`)
       lines.push(sub.text)
@@ -1321,6 +1380,7 @@ function App() {
     if (newConfig.margin !== undefined) setMarginVal(newConfig.margin)
     if (newConfig.margin_after !== undefined) setMarginAfter(newConfig.margin_after)
     if (newConfig.smooth !== undefined) setSmooth(newConfig.smooth)
+    if (newConfig.cut_immediate !== undefined) setCutImmediate(newConfig.cut_immediate === true || newConfig.cut_immediate === 'true')
     if (newConfig.output_folder !== undefined) setOutputFolder(newConfig.output_folder)
     if (newConfig.output_format !== undefined) setOutputFormat(newConfig.output_format)
     if (newConfig.output_resolution !== undefined) setOutputResolution(newConfig.output_resolution)
@@ -1352,6 +1412,7 @@ function App() {
       margin: newConfig.margin ?? marginVal,
       margin_after: newConfig.margin_after ?? marginAfter,
       smooth: newConfig.smooth ?? smooth,
+      cut_immediate: String(newConfig.cut_immediate ?? cutImmediate),
       output_folder: newConfig.output_folder ?? outputFolder,
       output_format: newConfig.output_format ?? outputFormat,
       output_resolution: newConfig.output_resolution ?? outputResolution,
@@ -1376,16 +1437,21 @@ function App() {
       sound_presets: JSON.stringify(newConfig.sound_presets ?? customPresets),
       language: newConfig.language ?? lang,
     })
-    // Globais do NOVO/LOAD acompanham o recém-salvo: antes o ref ficava com o
-    // snapshot do boot e NOVO revertia (ex.: trocou a resolução, NOVO voltava
-    // pra resolução antiga em vez da última salva).
+    // NEW/LOAD globals follow the just-saved ones: before, the ref kept the
+    // boot snapshot and NEW reverted (e.g.: changed the resolution, NEW went
+    // back to the old resolution instead of the last saved one).
     try {
       globalConfigRef.current = await window.api.getConfig()
-    } catch { /* mantém o snapshot do boot */ }
+    } catch { /* keeps the boot snapshot */ }
+
+    // Instant cut just turned ON while AUTO CUT is active: the preview cut
+    // never ran (or is stale) — build it now with the fresh values.
+    const wantImmediate = newConfig.cut_immediate === true || newConfig.cut_immediate === 'true'
+    if (wantImmediate && cutEnabled) generateCutPreview()
   }
 
-  // Clique nos botoes da barra lateral. ANALISAR precisa de arquivo carregado;
-  // RNNOISE e ajuste de config, abre sempre.
+  // Click on the sidebar buttons. ANALYZE needs a loaded file;
+  // RNNOISE and config settings always open.
   const handleSidebarSelect = (id) => {
     if (id === 'rnnoise') {
       setShowRnnoise(true)
@@ -1403,18 +1469,18 @@ function App() {
     setShowAnalyze(true)
   }
 
-  // APLICAR da sugestao: threshold + margin nos controles e denoise medido
-  // ligado na cadeia de som (com o som ligado, senao o denoise nao faz efeito).
-  // Persiste no config.ini na hora (merge, mesmo fluxo do idioma/tema).
+  // Suggestion APPLY: threshold + margin on the controls and measured denoise
+  // enabled in the sound chain (with sound on, otherwise denoise has no effect).
+  // Persists to config.ini right away (merge, same flow as language/theme).
   const handleApplySuggestions = async (suggestions) => {
     const { threshold, margin, denoiseDb } = suggestions
     setThreshold(String(threshold))
     setMarginVal(String(margin))
     // The suggestion is symmetric: BOTH margin sides take the measured value.
     setMarginAfter(String(margin))
-    // AUTO CUT on: parameters changed → the preview went stale,
+    // AUTO CUT on + instant cut: parameters changed → the preview went stale,
     // regenerate on the spot with fresh values (no waiting for a toggle).
-    if (cutEnabled) generateCutPreview({ threshold: String(threshold), margin: String(margin), marginAfter: String(margin) })
+    if (cutEnabled && cutImmediate) generateCutPreview({ threshold: String(threshold), margin: String(margin), marginAfter: String(margin) })
     const nextSound = { ...soundConfig, enabled: true, noise: { ...soundConfig.noise, denoiseOn: true, denoiseDb } }
     setSoundConfig(nextSound)
     setShowAnalyze(false)
@@ -1436,9 +1502,9 @@ function App() {
     }
   }
 
-  // APLICAR do modulo RNNoise: motor de ruído escolhido persiste no config
-  // (mesmo merge do ANALISAR). Com motor ativo o som mestre liga junto —
-  // cadeia desligada não faz efeito nenhum.
+  // RNNoise module APPLY: chosen noise engine persists in the config
+  // (same merge as ANALYZE). With an engine active the master audio turns on
+  // as well — a chain turned off has no effect at all.
   const handleApplyRnnoise = async (noiseDraft) => {
     const nextSound = { ...soundConfig, ...(noiseDraft.denoiseOn ? { enabled: true } : {}), noise: noiseDraft }
     setSoundConfig(nextSound)
@@ -1463,7 +1529,7 @@ function App() {
   }
 
   // --- Undo (Ctrl+Z) ------------------------------------------------------
-  // Snapshot guardado ANTES da edição (ver pushUndoSnapshot nos handlers).
+  // Snapshot saved BEFORE the edit (see pushUndoSnapshot in the handlers).
   const pushUndoSnapshot = () => {
     const hist = subtitlesHistoryRef.current
     hist.push(subtitlesRef.current)
@@ -1478,19 +1544,19 @@ function App() {
     setSubtitlesEdited(prev.length > 0)
   }
 
-  // Espelho do array de legendas: o snapshot lê o valor ATUAL em render
-  // (o setSubtitles funcional dos handlers não entrega o valor pra fora).
+  // Mirror of the subtitle array: the snapshot reads the CURRENT value at
+  // render (the handlers' functional setSubtitles does not deliver the value outside).
   useEffect(() => {
     subtitlesRef.current = subtitles
   }, [subtitles])
 
-  // Troca de arquivo zera as marcas I/O do export (a faixa é do arquivo).
+  // File switch clears the export I/O marks (the range belongs to the file).
   useEffect(() => {
     setExportRange({ start: null, end: null })
     setSelectedMarker(null)
   }, [selectedFile?.path])
 
-  // --- Transporte por teclado ---------------------------------------------
+  // --- Keyboard transport --------------------------------------------------
   const togglePlayPause = () => {
     const ws = waveSurferRef.current
     const vid = videoRef.current
@@ -1508,7 +1574,7 @@ function App() {
     }
   }
 
-  // ←/→ pula 5s na timeline (o seek do wavesurfer espelha no vídeo)
+  // ←/→ jumps 5s on the timeline (the wavesurfer seek mirrors to the video)
   const nudgeSeek = (delta) => {
     const ws = waveSurferRef.current
     const vid = videoRef.current
@@ -1522,7 +1588,7 @@ function App() {
     }
   }
 
-  // I = INÍCIO do export no playhead atual · O = FIM
+  // I = START of the export at the current playhead · O = END
   const setExportMarker = (which) => {
     const ws = waveSurferRef.current
     if (!selectedFile || !ws) return
@@ -1537,13 +1603,13 @@ function App() {
     setSelectedMarker(null)
   }
 
-  // --- Atalhos de teclado globais -----------------------------------------
-  // Ctrl+S salvar · Ctrl+O abrir · Ctrl+N novo · Ctrl+Z desfazer ·
-  // Espaço play/pause · ←/→ pular · I/O marcar faixa do export ·
-  // Delete apaga a marca selecionada.
-  // Nada disso dispara enquanto o foco está num campo de texto (INPUT,
-  // TEXTAREA, SELECT ou contenteditable) — Ctrl+* segue valendo para salvar
-  // o projeto mesmo editando uma legenda.
+  // --- Global keyboard shortcuts ------------------------------------------
+  // Ctrl+S save · Ctrl+O open · Ctrl+N new · Ctrl+Z undo ·
+  // Space play/pause · ←/→ jump · I/O mark the export range ·
+  // Delete clears the selected mark.
+  // None of this fires while focus is in a text field (INPUT,
+  // TEXTAREA, SELECT or contenteditable) — Ctrl+* still saves
+  // the project even while editing a subtitle.
   useEffect(() => {
     const onKey = (e) => {
       if (processing || generatingSubtitles) return
@@ -1567,7 +1633,7 @@ function App() {
       if (typing || e.altKey) return
 
       if (e.key === ' ') {
-        e.preventDefault() // não deixa a tecla "clicar" o botão em foco
+        e.preventDefault() // keeps the key from "clicking" the focused button
         togglePlayPause()
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault()
@@ -1679,6 +1745,7 @@ function App() {
             selectedFile={selectedFile}
             subtitlesEnabled={subtitlesEnabled}
             onUpdateSubtitle={handleUpdateSubtitle}
+            onReplaceWord={handleReplaceWord}
             onDeleteSubtitle={handleDeleteSubtitle}
             onAddSubtitle={handleAddSubtitle}
             onSeekTo={handleSeekTo}
@@ -1690,6 +1757,8 @@ function App() {
             wordsPerLine={wordsPerLine}
             linesCount={linesCount}
             subtitleConfigs={subtitleConfigs}
+            favoriteFonts={favoriteFonts}
+            onToggleFavoriteFont={toggleFavoriteFont}
             onStyleChange={(style) => handleSaveSettings({ subtitle_style: style })}
             onPositionChange={(pos) => handleSaveSettings({ subtitle_position: pos })}
             onPositionModeChange={(mode) => handleSaveSettings({ subtitle_position_mode: mode })}
@@ -1711,6 +1780,7 @@ function App() {
           outputFolder={outputFolder}
           outputFormat={outputFormat}
           outputResolution={outputResolution}
+          cutImmediate={cutImmediate}
           subtitles={subtitlesEnabled}
           subtitleModel={subtitleModel}
           subtitleLanguage={subtitleLanguage}
@@ -1767,7 +1837,7 @@ function App() {
           onClose={() => {
             setShowSound(false)
             setAbMode(null)
-            // Rascunho descartado (sem APLICAR): a cadeia volta a seguir a cfg SALVA
+            // Draft discarded (no APPLY): the chain goes back to following the SAVED config
             setRealtimeDraft(null)
           }}
           onApply={handleApplySound}
@@ -1784,8 +1854,8 @@ function App() {
           onClose={() => setShowCutConfig(false)}
           onSave={(v) => {
             handleSaveSettings({ threshold: v.threshold, margin: v.margin, margin_after: v.marginAfter, smooth: v.smooth })
-            // Cut on + fresh parameters: regenerate the preview on the spot.
-            if (cutEnabled) generateCutPreview(v)
+            // Cut on + instant cut + fresh parameters: regenerate the preview on the spot.
+            if (cutEnabled && cutImmediate) generateCutPreview(v)
           }}
         />
       )}

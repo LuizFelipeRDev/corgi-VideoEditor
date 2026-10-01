@@ -1,13 +1,13 @@
-// Cadeia de tratamento de som (v1.7.0) — funções puras.
-// Usado pelo export (-af), pela prévia renderizada e pelo SoundConfigModal.
-// Testável fora do Electron: importar direto (node --experimental ou página de teste).
+// Sound processing chain (v1.7.0) — pure functions.
+// Used by the export (-af), by the rendered preview and by SoundConfigModal.
+// Testable outside Electron: import directly (node --experimental or a test page).
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
 const clone = (o) => JSON.parse(JSON.stringify(o))
 
 // ---------------------------------------------------------------------------
-// Presets do sistema — NUNCA podem ser apagados pelo usuário (imutáveis).
-// Cada params usa o mesmo formato de soundConfig: { noise, dynamics, eq, fx }.
+// System presets — can NEVER be deleted by the user (immutable).
+// Each params uses the same format as soundConfig: { noise, dynamics, eq, fx }.
 // ---------------------------------------------------------------------------
 export const SYSTEM_PRESETS = [
   {
@@ -62,16 +62,16 @@ export const SYSTEM_PRESETS = [
   },
 ]
 
-// Configuração padrão: preset Podcast + 🎤 DESLIGADO (nada vai ao export).
+// Default config: Podcast preset + 🎤 OFF (nothing goes to the export).
 export const DEFAULT_SOUND_CONFIG = {
   enabled: false,
   presetId: 'podcast',
   ...clone(SYSTEM_PRESETS[0].params),
-  // Motor de ruído: 'classic' (afftdn) ou 'rnnoise' (arnndn, exige modelo)
+  // Noise engine: 'classic' (afftdn) or 'rnnoise' (arnndn, requires model)
   noise: { denoiseMode: 'classic', ...clone(SYSTEM_PRESETS[0].params).noise },
 }
 
-// Merge defensivo do JSON salvo no config.ini sobre o padrão.
+// Defensive merge of the JSON saved in config.ini over the default.
 export function mergeSoundConfig(saved) {
   const base = clone(DEFAULT_SOUND_CONFIG)
   if (!saved || typeof saved !== 'object') return base
@@ -82,13 +82,13 @@ export function mergeSoundConfig(saved) {
     const g = saved[group]
     out[group] = { ...base[group], ...(g && typeof g === 'object' ? g : {}) }
   }
-  // Sanitiza denoiseDb salvo por versões antigas (clamp -50..-10 deixava
-  // passar -19..-10, que o afftdn rejeita e quebrava o export).
+  // Sanitizes denoiseDb saved by old versions (the clamp -50..-10 let
+  // -19..-10 pass, which afftdn rejects and broke the export).
   out.noise.denoiseDb = clamp(Math.round(Number(out.noise.denoiseDb) || -25), -80, -20)
   return out
 }
 
-// Busca preset por id (sistema primeiro, depois os do usuário).
+// Finds a preset by id (system first, then the user's).
 export function findPreset(id, customPresets = []) {
   const sys = SYSTEM_PRESETS.find((p) => p.id === id)
   if (sys) return { id: sys.id, nameKey: sys.nameKey, system: true, params: sys.params }
@@ -98,13 +98,13 @@ export function findPreset(id, customPresets = []) {
 }
 
 // ---------------------------------------------------------------------------
-// Escapa um path de arquivo pra dentro de uma opção de filtro (-af).
-// O parser do ffmpeg tem níveis: o nível 1 (grafos) consome o backslash
-// simples, então o ':' do drive Windows precisa de BACKSLASH DUPLO (\\:) pra
-// chegar inteiro no nível 2 (opções). Aspas simples NÃO funcionam (somem no
-// nível 1) — validado contra o ffmpeg real do projeto nos dois sentidos
-// (path simples e path com espaço/parênteses, via exec igual ao run-ffmpeg).
-// Apóstrofo no path é removido (janela rara: o export falha alto, não mudo).
+// Escapes a file path for inside a filter option (-af).
+// The ffmpeg parser has levels: level 1 (graphs) consumes a single
+// backslash, so the Windows drive ':' needs a DOUBLE BACKSLASH (\\:) to
+// arrive whole at level 2 (options). Single quotes do NOT work (they vanish at
+// level 1) — validated against the project's real ffmpeg in both directions
+// (plain path and path with space/parentheses, via exec just like run-ffmpeg).
+// Apostrophe in the path is removed (rare window: the export fails loudly, not muted).
 // ---------------------------------------------------------------------------
 export function escFilterPath(p) {
   return String(p)
@@ -114,11 +114,11 @@ export function escFilterPath(p) {
 }
 
 // ---------------------------------------------------------------------------
-// Montagem da cadeia -af (ordem: gating de ruído → EQ → dinâmica → FX).
-// Retorna '' quando não há nada ligado — o export aí segue sem -af.
-// opts.rnnoiseModel = path do modelo neural quando o motor está em modo
-// 'rnnoise'; sem o path o ramo neural cai no afftdn clássico (as chamadas
-// de truthiness — forma d'onda, escuta A/B — só precisam de uma cadeia).
+// Building the -af chain (order: noise gating → EQ → dynamics → FX).
+// Returns '' when nothing is on — the export then proceeds without -af.
+// opts.rnnoiseModel = path of the neural model when the engine is in
+// 'rnnoise' mode; without the path the neural branch falls back to classic afftdn (truthiness
+// callers — waveform, A/B listening — only need a chain).
 // ---------------------------------------------------------------------------
 export function buildSoundChain(cfg, opts = {}) {
   if (!cfg || typeof cfg !== 'object') return ''
@@ -131,13 +131,13 @@ export function buildSoundChain(cfg, opts = {}) {
   if (n.highpassOn) parts.push(`highpass=f=${clamp(Math.round(Number(n.highpassHz) || 80), 20, 500)}`)
   if (n.denoiseOn) {
     if (n.denoiseMode === 'rnnoise' && opts.rnnoiseModel) {
-      // arnndn (RNNoise): modelo neural treinado pra voz. O graph do ffmpeg
-      // auto-ressampla (44.1k/48k) — não precisa de aresample explícito.
+      // arnndn (RNNoise): neural model trained for voice. The ffmpeg graph
+      // auto-resamples (44.1k/48k) — no explicit aresample needed.
       parts.push(`arnndn=m=${escFilterPath(opts.rnnoiseModel)}`)
     } else {
-      // nf do afftdn aceita só [-80, -20] NESTE ffmpeg — valor fora derruba o
-      // export inteiro ("Error applying option 'nf'"), então o clamp é a
-      // última linha de defesa (sliders e merge já entregam na faixa).
+      // afftdn's nf accepts only [-80, -20] IN this ffmpeg — an out-of-range value takes down the
+      // whole export ("Error applying option 'nf'"), so the clamp is the
+      // last line of defense (sliders and merge already deliver in range).
       parts.push(`afftdn=nf=${clamp(Math.round(Number(n.denoiseDb) || -25), -80, -20)}`)
     }
   }
@@ -146,7 +146,7 @@ export function buildSoundChain(cfg, opts = {}) {
 
   if (eqActive(e)) {
     if (e.tone === 'radio') {
-      // Voz de rádio: banda estreita (corte grave + corte agudo)
+      // Radio voice: narrow band (low cut + high cut)
       parts.push('highpass=f=300', 'lowpass=f=3400')
     }
     const bands = [['110', e.low], ['1000', e.mid], ['8000', e.high]]
@@ -166,7 +166,7 @@ export function buildSoundChain(cfg, opts = {}) {
   if (d.normalizeOn) {
     const lufs = clamp(Number(d.lufs ?? -16), -30, -5)
     const lra = clamp(Number(d.lra ?? 11), 1, 50)
-    // Com limitador ligado, o pico máximo vira o TP do loudnorm (fonte única)
+    // With the limiter on, the maximum peak becomes the loudnorm TP (single source)
     const tp = d.limiterOn ? clamp(Number(d.ceiling ?? -1), -6, -0.1) : -1.5
     parts.push(`loudnorm=I=${lufs}:TP=${tp}:LRA=${lra}`)
   } else if (d.limiterOn) {
@@ -182,7 +182,7 @@ export function buildSoundChain(cfg, opts = {}) {
 
   if (f.speedOn) {
     const speed = clamp(Number(f.speed ?? 1), 0.5, 2)
-    // atempo por último: encurta/aumenta a timeline inteira (avisa na UI)
+    // atempo last: shortens/lengthens the entire timeline (warns in the UI)
     if (Math.abs(speed - 1) > 0.001) parts.push(`atempo=${speed}`)
   }
 
@@ -194,7 +194,7 @@ function eqActive(e) {
   return e.tone === 'radio' || [e.low, e.mid, e.high].some((g) => (Number(g) || 0) !== 0)
 }
 
-// Nomes legíveis da cadeia (prévia no topo do modal): ['highpass', 'afftdn', ...]
+// Readable names of the chain (preview at the top of the modal): ['highpass', 'afftdn', ...]
 export function describeSoundChain(cfg) {
   if (!cfg || typeof cfg !== 'object') return []
   const n = cfg.noise || {}
@@ -215,7 +215,7 @@ export function describeSoundChain(cfg) {
   return names
 }
 
-// Hash curto para o nome do arquivo de prévia no temp (quebra cache entre cadeias).
+// Short hash for the preview file name in temp (breaks cache between chains).
 export function shortHash(str) {
   let h = 5381
   for (let i = 0; i < str.length; i++) h = ((h << 5) + h) ^ str.charCodeAt(i)

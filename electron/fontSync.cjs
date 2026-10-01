@@ -2,17 +2,17 @@ const fs = require('fs')
 const path = require('path')
 
 /**
- * Espelha a pasta de fontes da build (resources/fonts) para a pasta do usuario
+ * Mirrors the build's font folder (resources/fonts) into the user's folder
  * (%APPDATA%/corgi-editor/fonts).
  *
- * Por que nao basta "se a pasta nao existir, copia": em instalacoes antigas a
- * pasta ja existia desatualizada e nunca mais era atualizada - faltavam fontes
- * em producao (ex.: Montserrat-ExtraBold, a do estilo padrao) e o export caia
- * no fallback do sistema (Arial) sem nenhum aviso.
+ * Why "if the folder does not exist, copy" is not enough: in old installations the
+ * folder already existed outdated and was never updated again - fonts were
+ * missing in production (e.g. Montserrat-ExtraBold, the default style one) and the export fell
+ * into the system fallback (Arial) with no warning.
  *
- * Roda a cada inicializacao e:
- *  - copia os arquivos que faltam (ou que mudaram de tamanho)
- *  - remove da pasta do usuario os .ttf que nao existem mais na build
+ * Runs at every startup and:
+ *  - copies the files that are missing (or whose size changed)
+ *  - removes from the user's folder the .ttf files that no longer exist in the build
  *
  * @returns {{missingSrc?: true, emptySrc?: true, added?: number, removed?: number, total?: number}}
  */
@@ -36,7 +36,7 @@ function syncFontsDir(srcDir, dstDir) {
     }
   }
 
-  // fonte que saiu da build tambem sai da pasta do usuario
+  // a font that left the build also leaves the user's folder
   let removed = 0
   for (const f of fs.readdirSync(dstDir)) {
     if (f.toLowerCase().endsWith('.ttf') && !srcFiles.includes(f)) {

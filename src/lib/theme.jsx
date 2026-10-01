@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from 'react'
 
-// Temas disponiveis. 'modern' e o padrao da primeira instalacao.
+// Available themes. 'modern' is the first-installation default.
 const THEMES = ['retro', 'modern']
 
 export const normalizeTheme = (value) => (THEMES.includes(value) ? value : 'modern')
@@ -17,10 +17,10 @@ function applyTheme(theme) {
 }
 
 export function ThemeProvider({ children }) {
-  // O valor inicial vem SINCRONO do preload (electron/main.cjs passa
-  // --corgi-theme via additionalArguments), e o data-theme e aplicado dentro
-  // do initializer — ou seja, antes do primeiro paint. Sem "flash" do tema
-  // antigo ao abrir o app. No navegador (sem window.api) cai em 'modern'.
+  // The initial value comes SYNCHRONOUSLY from the preload (electron/main.cjs
+  // passes --corgi-theme via additionalArguments), and data-theme is applied
+  // inside the initializer — that is, before the first paint. No "flash" of the
+  // old theme when opening the app. In the browser (without window.api): 'modern'.
   const [theme, setThemeState] = useState(() => {
     const initial = normalizeTheme(
       typeof window !== 'undefined' && window.api ? window.api.initialTheme : null,

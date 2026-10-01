@@ -57,10 +57,10 @@
 }
 
 /*
-  Font-weight segue a regra validada com o ffmpeg: o libass so engorda o glifo quando o
-  peso do arquivo e menor que 700 (Anton, Archivo Black, Luckiest Guy, Titan One) - nesses
-  casos declaramos 'normal' para o navegador tambem sintetizar negrito no preview; nos
-  demais (>=700) declaramos 'bold' para o navegador NAO sintetizar, igual ao export.
+  Font-weight follows the rule validated with ffmpeg: libass only fattens the glyph when the
+  file's weight is lower than 700 (Anton, Archivo Black, Luckiest Guy, Titan One) - in those
+  cases we declare 'normal' so the browser also synthesizes bold in the preview; for the
+  others (>=700) we declare 'bold' so the browser does NOT synthesize, matching the export.
 */
 @font-face {
   font-family: 'Anton';
@@ -132,6 +132,79 @@
   font-style: normal;
 }
 
+/* Extra families added on request: weight follows the libass rule above
+   (files >= 700 declared bold so the browser does not synthesize; 400-only
+   files declared normal so both sides synthesize when bold is requested). */
+@font-face {
+  font-family: 'Open Sans';
+  src: url('./global_config/fonts/OpenSans-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Lato';
+  src: url('./global_config/fonts/Lato-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Raleway';
+  src: url('./global_config/fonts/Raleway-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nunito';
+  src: url('./global_config/fonts/Nunito-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Work Sans';
+  src: url('./global_config/fonts/WorkSans-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('./global_config/fonts/PlayfairDisplay-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Caveat';
+  src: url('./global_config/fonts/Caveat-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Lobster';
+  src: url('./global_config/fonts/Lobster-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Pacifico';
+  src: url('./global_config/fonts/Pacifico-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Permanent Marker';
+  src: url('./global_config/fonts/PermanentMarker-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -147,20 +220,20 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
   55%  { transform: scale(1.05); }
   100% { transform: scale(1.00); }
 }
-/* POPLINE: pop so pra cima (sem "encolher" antes), pico em 40% da
-   duracao - mesma forma do \\t do export (subtitleRender.js). O
-   transform escala a caixa E a palavra juntos (ambos sao o mesmo span). */
+/* POPLINE: pop only upward (no "shrink" before), peak at 40% of the
+   duration - same shape as the export's \\t (subtitleRender.js). The
+   transform scales the box AND the word together (both are the same span). */
 @keyframes subtitle-popline {
   0%   { transform: scale(1.00); }
   40%  { transform: scale(1.15); }
   100% { transform: scale(1.00); }
 }
-/* WORDPOP: pop rapido e pequeno nas palavras SEM destaque, disparado
-   a cada troca de destaque (espelho do \t 90->95->90 em 100ms do
-   export). A base 0.90 e o MESMO scale inline das sem destaque, entao
-   nao ha salto na entrada/saida da animacao. Dois nomes alternam por
-   fronteira para o browser reiniciar a animacao mesmo com render
-   raro (~4Hz). */
+/* WORDPOP: fast, small pop on words WITHOUT highlight, triggered
+   at every highlight change (mirror of the export's \t 90->95->90 in 100ms).
+   The 0.90 base is the SAME inline scale as the non-highlighted ones, so
+   there is no jump on animation start/end. Two names alternate per
+   border so the browser restarts the animation even with rare
+   rendering (~4Hz). */
 @keyframes subtitle-wordpop-small {
   0%   { transform: scale(0.90); }
   30%  { transform: scale(0.95); }
@@ -177,8 +250,8 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
   100% { width: 0%; }
 }
 
-/* Ampulheta da prévia tratada (SoundConfigModal) — estilo XP: gira 180°,
-   pausa, gira mais 180°, pausa; o ciclo fecha em 360° sem salto visual. */
+/* Hourglass of the treated preview (SoundConfigModal) — XP style: rotates 180°,
+   pauses, rotates another 180°, pauses; the cycle closes at 360° with no visual jump. */
 @keyframes hourglass-flip {
   0%, 40%  { transform: rotate(0deg); }
   50%, 90% { transform: rotate(180deg); }
@@ -189,12 +262,12 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
 }
 
 /* =====================================================================
-   TEMA (data-theme no <html>, aplicado por src/lib/theme.jsx)
+   THEME (data-theme on <html>, applied by src/lib/theme.jsx)
    ---------------------------------------------------------------------
-   retro (padrao): valores originais, byte a byte - nada muda em relacao
-   ao app atual. modern: troca as variaveis e suaviza bordas, cantos,
-   sombras e tipografia. As classes Tailwind continuam as mesmas; so o
-   valor por tras delas muda.
+   retro (default): original values, byte for byte - nothing changes with
+   respect to the current app. modern: swaps the variables and softens borders, corners,
+   shadows and typography. The Tailwind classes stay the same; only the
+   value behind them changes.
    ===================================================================== */
 :root {
   /* retro */
@@ -208,28 +281,28 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
 }
 
 [data-theme='modern'] {
-  /* modern — superficies em camadas (estilo Linear/Vercel) */
-  --c-bg: 16 16 20;         /* #101014 controles, inputs, barras */
-  --c-box: 23 23 28;        /* #17171c painel/chrome/modais */
-  --c-ink: 232 232 234;     /* #e8e8ea texto */
-  --c-accent: 155 48 255;   /* #9B30FF — mesmo roxo do estilo Popline */
+  /* modern — layered surfaces (Linear/Vercel style) */
+  --c-bg: 16 16 20;         /* #101014 controls, inputs, bars */
+  --c-box: 23 23 28;        /* #17171c panel/chrome/modals */
+  --c-ink: 232 232 234;     /* #e8e8ea text */
+  --c-accent: 155 48 255;   /* #9B30FF — same purple as the Popline style */
   --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
   --shadow-1: 0 4px 16px rgba(0, 0, 0, 0.45);
   --shadow-2: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
-/* Fundo da janela/documento acompanha o tema (fica atras do root, so aparece
-   no pre-paint e em bordas de scroll). */
+/* Window/document background follows the theme (sits behind the root, only appears
+   in pre-paint and on scroll edges). */
 body { background-color: rgb(var(--c-box)); }
 
-/* ====== MODERN: texto padrao ======
-   Sem classe de cor o navegador herda preto; no tema escuro isso fica
-   invisivel. Definir a cor aqui cobre todos os elementos sem text-*. */
+/* ====== MODERN: default text ======
+   Without a color class the browser inherits black; in the dark theme that becomes
+   invisible. Setting the color here covers all elements without text-*. */
 [data-theme='modern'] { color: rgb(var(--c-ink)); }
 
-/* ====== MODERN: superficies invertidas e estados de feedback ======
-   Cores fixas da paleta Tailwind usadas em botões/hover/labels sao claras
-   demais para fundo escuro — re-mapeadas para equivalentes dark. */
+/* ====== MODERN: inverted surfaces and feedback states ======
+   Fixed Tailwind palette colors used in buttons/hover/labels are too
+   light for a dark background — remapped to dark equivalents. */
 [data-theme='modern'] .bg-retro-black { background-color: #26262e; }
 [data-theme='modern'] .text-retro-bg { color: #e8e8ea; }
 [data-theme='modern'] .bg-green-50 { background-color: #10291c; }
@@ -249,13 +322,13 @@ body { background-color: rgb(var(--c-box)); }
 [data-theme='modern'] .text-green-600,
 [data-theme='modern'] .text-green-700 { color: #4ade80; }
 [data-theme='modern'] .text-red-600 { color: #f87171; }
-/* fill do progresso do EXPORTAR: texto claro por cima precisa de fundo
-   escuro/saturado — usa o accent no modern (nao verde claro). */
+/* EXPORT progress fill: light text on top needs a dark/saturated
+   background — uses the accent in modern (not light green). */
 [data-theme='modern'] .bg-green-500\/80 { background-color: rgb(var(--c-accent) / 0.85); }
 
-/* ====== MODERN: bordas, cantos e profundidade ======
-   Retro = bordas grossas pretas e sombra dura; modern = borda fina
-   translucida e sombra suave (valores das variaveis la em cima). */
+/* ====== MODERN: borders, corners and depth ======
+   Retro = thick black borders and hard shadow; modern = thin
+   translucent border and soft shadow (values from the variables above). */
 [data-theme='modern'] .border-retro-black { border-color: rgba(255, 255, 255, 0.10); }
 [data-theme='modern'] .border-2,
 [data-theme='modern'] .border-t-2,
@@ -267,26 +340,26 @@ body { background-color: rgb(var(--c-box)); }
 [data-theme='modern'] .rounded-t { border-top-left-radius: 8px; border-top-right-radius: 8px; }
 [data-theme='modern'] .rounded-lg { border-radius: 12px; }
 [data-theme='modern'] .btn-retro:active { transform: translate(1px, 1px); }
-/* foco visivel (outline-none nos inputs) */
+/* visible focus (outline-none on inputs) */
 [data-theme='modern'] input:focus-visible,
 [data-theme='modern'] select:focus-visible,
 [data-theme='modern'] textarea:focus-visible {
   border-color: rgb(var(--c-accent) / 0.7);
 }
 
-/* ====== MODERN: escala tipografica ======
-   Press Start 2P ocupa muito mais o em que Inter: sem re-escala os rotulos
-   de 5-10px (feitos para fonte pixel) ficariam ilegiveis no modern.
-   So afeta elements com estas classes (icones de video em text-[12px]
-   ficam fora de proposito). */
+/* ====== MODERN: typographic scale ======
+   Press Start 2P takes up much more em than Inter: without re-scaling the
+   5-10px labels (made for pixel font) would be illegible in modern.
+   Only affects elements with these classes (video icons in text-[12px]
+   stay out on purpose). */
 [data-theme='modern'] .text-\[5px\] { font-size: 10px; }
 [data-theme='modern'] .text-\[6px\] { font-size: 11px; }
 [data-theme='modern'] .text-\[7px\] { font-size: 12px; }
 [data-theme='modern'] .text-\[8px\] { font-size: 13px; }
 [data-theme='modern'] .text-\[9px\] { font-size: 14px; }
 [data-theme='modern'] .text-\[10px\] { font-size: 15px; }
-/* translate-y-[2px] centraliza a baseline da fonte pixel nos inputs;
-   Inter ja nasce centrada, entao zera no modern. */
+/* translate-y-[2px] centers the pixel font baseline in the inputs;
+   Inter is already centered, so it zeroes out in modern. */
 [data-theme='modern'] .translate-y-\[2px\] { transform: translateY(0); }
 
 /* ====== MODERN: scrollbars ====== */

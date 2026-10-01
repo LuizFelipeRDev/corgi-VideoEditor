@@ -5,16 +5,16 @@ import { useTheme } from '../lib/theme'
 import { useLang } from '../lib/i18n'
 import realtimeChain from '../lib/realtimeChain'
 
-// Pixels por segundo de audio renderizados. Mantem a densidade MINIMA de
-// ~0,5s por barra (barWidth 2 + barGap 1 = 3px; 3px / 6px-s = 0,5s): arquivos
-// mais longos que ~3min viram faixa com scroll horizontal em vez de ficarem
-// espremidos. Curtos (<= ~3min) continuam preenchendo o container como antes.
+// Rendered audio pixels per second. Keeps the MINIMUM density of
+// ~0.5s per bar (barWidth 2 + barGap 1 = 3px; 3px / 6px-s = 0.5s): files
+// longer than ~3min become a strip with horizontal scroll instead of being
+// squeezed. Short ones (<= ~3min) keep filling the container as before.
 const MIN_PX_PER_SEC = 6
 
-// Scrollbar fina DENTRO do Shadow DOM do wavesurfer — o ::-webkit-scrollbar do
-// documento nao alcanca shadow root. So aparece quando o audio e longo o
-// suficiente para gerar scroll (o .scroll interno so ganha overflow-x: auto
-// nesse caso).
+// Thin scrollbar INSIDE the wavesurfer Shadow DOM — the document's
+// ::-webkit-scrollbar does not reach the shadow root. It only appears when the
+// audio is long enough to generate scroll (the inner .scroll only gets
+// overflow-x: auto in that case).
 const WS_SCROLLBAR_CSS = `
   .scroll::-webkit-scrollbar { height: 8px; }
   .scroll::-webkit-scrollbar-track { background: transparent; }
@@ -31,24 +31,24 @@ const WS_SCROLLBAR_CSS = `
   .scroll::-webkit-scrollbar-corner { background: transparent; }
 `
 
-// Estilo unico dos botoes de transporte (40x40 — wireframe v1.5.0)
+// Single style for the transport buttons (40x40 — wireframe v1.5.0)
 const TRANSPORT_BTN_CLASS =
   'w-10 h-10 flex items-center justify-center bg-retro-box border border-retro-black rounded hover:bg-green-100 disabled:opacity-30 disabled:cursor-not-allowed'
 
-// Largura (em px) das marcas de início/fim do export na onda — convertidas
-// para segundos a cada redesenho conforme a escala atual (px/s).
+// Width (in px) of the export start/end marks on the waveform — converted
+// to seconds on every redraw according to the current scale (px/s).
 const EXPORT_MARK_PX = 6
 
-// Regua de tempo (estilo Premiere — wireframe v1.6.0): rotulo + tick grande a
-// cada 10s, tick pequeno a cada 5s. As posicoes sao % da duracao, entao nao
-// dependem da escala px/s (que muda com o preenchimento/scroll da faixa).
+// Time ruler (Premiere style — wireframe v1.6.0): label + big tick every
+// 10s, small tick every 5s. The positions are % of the duration, so they don't
+// depend on the px/s scale (which changes with the strip's fill/scroll).
 const fmtTime = (s) => {
   const m = Math.floor(s / 60)
   const sec = Math.floor(s % 60)
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-// Relogio do transporte (hh:mm:ss): posicao atual / duracao total
+// Transport clock (hh:mm:ss): current position / total duration
 const fmtHMS = (s) => {
   const total = Math.max(0, Math.floor(s))
   const h = Math.floor(total / 3600)
@@ -60,10 +60,10 @@ const fmtHMS = (s) => {
 function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles, playRequest, onPlayer, shapeCfg, exportRange, selectedMarker, onSelectMarker }) {
   const containerRef = useRef(null)
   const wsRef = useRef(null)
-  // Plugin Regions (marcas I/O do export) — criado junto com o wavesurfer
+  // Regions plugin (export I/O marks) — created together with the wavesurfer
   const regionsRef = useRef(null)
-  // Callback das marcas sempre "fresca" no handler (o efeito do wavesurfer
-  // só roda na troca de arquivo/tema)
+  // Marks callback always "fresh" in the handler (the wavesurfer effect
+  // only runs on file/theme change)
   const onSelectMarkerRef = useRef(onSelectMarker)
   onSelectMarkerRef.current = onSelectMarker
   const { theme } = useTheme()
@@ -78,28 +78,28 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   const rulerInnerRef = useRef(null)
   const playheadRef = useRef(null)
   const durationRef = useRef(0)
-  // v1.8.0: a prévia A/B é feita em TEMPO REAL (Web Audio dentro do player) —
-  // a fonte de áudio nunca troca mais; a posição só precisa sobreviver à
-  // recriação do wavesurfer (troca de tema/arquivo).
-  const lastTimeRef = useRef(0) // última posição conhecida do transporte
-  const lastFileRef = useRef(null) // arquivo que "detém" a posição atual
-  const restoreTimeRef = useRef(0) // posição a restaurar no próximo 'ready'
-  const pendingPlayRef = useRef(false) // play pedido antes do wavesurfer ficar pronto
-  const appliedSeekRef = useRef(null) // último seekTo já aplicado (evita reaplicar no 'ready')
-  // v1.8.0: FORMA da onda seguindo o tratamento (render offline → envelope)
-  const shapeTokenRef = useRef(0) // descarta renders de cfgs antigas
-  const shapeTimerRef = useRef(null) // debounce do render offline
-  const shapeDrawnRef = useRef(null) // { ws, key } já desenhado (evita refazer)
+  // v1.8.0: the A/B preview is done in REAL TIME (Web Audio inside the player) —
+  // the audio source never switches anymore; the position only needs to survive
+  // wavesurfer recreation (theme/file change).
+  const lastTimeRef = useRef(0) // last known transport position
+  const lastFileRef = useRef(null) // file that "holds" the current position
+  const restoreTimeRef = useRef(0) // position to restore on the next 'ready'
+  const pendingPlayRef = useRef(false) // play requested before wavesurfer becomes ready
+  const appliedSeekRef = useRef(null) // last seekTo already applied (avoids reapplying on 'ready')
+  // v1.8.0: SHAPE of the waveform following the treatment (offline render → envelope)
+  const shapeTokenRef = useRef(0) // discards renders of old cfgs
+  const shapeTimerRef = useRef(null) // debounce of the offline render
+  const shapeDrawnRef = useRef(null) // { ws, key } already drawn (avoids redoing)
 
-  // Elemento com overflow-x que realmente rola (dentro do Shadow DOM do
-  // wavesurfer) — a regua acompanha o scroll por ele.
+  // Element with overflow-x that actually scrolls (inside the wavesurfer
+  // Shadow DOM) — the ruler follows the scroll through it.
   const getScroller = () => {
     const host = containerRef.current && containerRef.current.firstElementChild
     const shadow = host && host.shadowRoot
     return (shadow && shadow.querySelector('.scroll')) || null
   }
 
-  // Posicao da linha do playhead na regua (% da duracao — sem re-render)
+  // Position of the playhead line on the ruler (% of duration — no re-render)
   const updatePlayhead = (time) => {
     const d = durationRef.current
     if (playheadRef.current && d > 0) {
@@ -107,7 +107,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     }
   }
 
-  // Relogio hh:mm:ss do transporte: so re-renderiza quando o segundo muda
+  // Transport hh:mm:ss clock: only re-renders when the second changes
   const syncClock = (time) => {
     const sec = Math.floor(time)
     setCurTime((prev) => (prev === sec ? prev : sec))
@@ -136,8 +136,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     durationRef.current = 0
     setDuration(0)
     setCurTime(0)
-    // Mesmo arquivo (ex.: troca de tema): a posição do transporte sobrevive
-    // à recriação do wavesurfer; arquivo novo começa em 0.
+    // Same file (e.g., theme change): the transport position survives
+    // wavesurfer recreation; a new file starts at 0.
     const sameFile = lastFileRef.current === selectedFile.path
     restoreTimeRef.current = sameFile ? lastTimeRef.current : 0
     lastFileRef.current = selectedFile.path
@@ -159,7 +159,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       backend: 'WebAudio',
     })
 
-    // Estiliza a scrollbar nativa do .scroll (shadow root do wavesurfer)
+    // Styles the native scrollbar of .scroll (wavesurfer's shadow root)
     const host = containerRef.current && containerRef.current.firstElementChild
     const shadow = host && host.shadowRoot
     if (shadow && !shadow.querySelector('style[data-ws-scrollbar]')) {
@@ -169,15 +169,15 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       shadow.appendChild(styleEl)
     }
 
-    // O vídeo é mudo — o wavesurfer é a saída de áudio do app inteiro. O
-    // tratamento do 🎤 acontece DESTE lado (Web Audio em tempo real), então a
-    // fonte é sempre o arquivo original.
+    // The video is silent — wavesurfer is the audio output of the whole app. The
+    // 🎤 treatment happens ON THIS side (real-time Web Audio), so the
+    // source is always the original file.
     ws.load(`file:///${selectedFile.path.replace(/\\/g, '/')}`)
 
-    // --- Marcas I/O do export (Regions) ---------------------------------
-    // Marcador fino em cada ponta + faixa sombreada entre as duas (quando
-    // existem início E fim). A faixa só PINTA — clique nela continua fazendo
-    // seek; quem seleciona é a marca (Delete apaga a selecionada).
+    // --- Export I/O marks (Regions) ---------------------------------
+    // Thin marker at each end + shaded band between the two (when
+    // start AND end exist). The band only PAINTS — clicking it still
+    // performs a seek; the mark is what selects (Delete removes the selected one).
     const regions = ws.registerPlugin(RegionsPlugin.create())
     regionsRef.current = regions
     regions.on('region-clicked', (region, e) => {
@@ -186,8 +186,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
         onSelectMarkerRef.current?.(region.id === 'expIn' ? 'start' : 'end')
       }
     })
-    // A faixa é só visual: sem pointer-events o clique nela cai na onda e
-    // faz seek (o marcador dela fica por cima, selecionável).
+    // The band is purely visual: without pointer-events a click on it falls on the
+    // waveform and performs a seek (its marker stays on top, selectable).
     regions.on('region-created', (region) => {
       if (region.id === 'expBand' && region.element) {
         region.element.style.pointerEvents = 'none'
@@ -200,7 +200,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       const d = ws.getDuration() || 0
       durationRef.current = d
       setDuration(d)
-      // Restaura a posição quando o wavesurfer é recriado (não mexe em arquivo novo)
+      // Restores the position when wavesurfer is recreated (doesn't touch a new file)
       const restore = restoreTimeRef.current
       if (restore > 0 && (!d || restore < d)) {
         ws.setTime(restore)
@@ -208,13 +208,13 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
         updatePlayhead(restore)
         syncClock(restore)
       }
-      // Play pedido antes do wavesurfer ficar pronto (prévia A/B do modal)
+      // Play requested before wavesurfer becomes ready (modal A/B preview)
       if (pendingPlayRef.current) {
         pendingPlayRef.current = false
         ws.play()
         if (videoRef?.current) videoRef.current.play()
       }
-      // Regua: acompanha o scroll horizontal da faixa (.scroll do shadow DOM)
+      // Ruler: follows the horizontal scroll of the strip (.scroll of the shadow DOM)
       const scroller = getScroller()
       if (scroller) {
         const onScroll = () => {
@@ -226,8 +226,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
         onScroll()
         detachScroll = () => scroller.removeEventListener('scroll', onScroll)
       }
-      // Largura da regua = largura real do wrapper do wavesurfer (mede no
-      // proximo frame, apos o proprio wavesurfer concluir o layout)
+      // Ruler width = actual width of the wavesurfer wrapper (measured on the
+      // next frame, after wavesurfer itself finishes the layout)
       requestAnimationFrame(() => {
         if (wsRef.current !== ws) return
         const wrapper = ws.getWrapper()
@@ -258,8 +258,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
 
     wsRef.current = ws
     if (waveSurferRef) waveSurferRef.current = ws
-    // v1.8.0: entrega o player (WebAudioPlayer) pra cadeia de prévia em tempo
-    // real se conectar no AudioContext dele.
+    // v1.8.0: hands the player (WebAudioPlayer) over so the realtime preview
+    // chain can connect to its AudioContext.
     if (onPlayer) onPlayer(ws.getMediaElement())
 
     return () => {
@@ -273,10 +273,10 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     }
   }, [selectedFile, theme])
 
-  // --- Regiões do export: refaz as marcas a cada mudança -------------------
-  // Redesenha do zero: marcas finas de início/fim + faixa sombreada quando
-  // existem as DUAS. Deps: marcas/seleção (estado), ready (onda decodificada)
-  // e rulerW (wrapper mudou de largura → a largura em SEGUNDOS da marca muda).
+  // --- Export regions: rebuilds the marks on every change -------------------
+  // Redraws from scratch: thin start/end marks + shaded band when
+  // BOTH exist. Deps: marks/selection (state), ready (waveform decoded)
+  // and rulerW (wrapper width changed → the mark's width in SECONDS changes).
   useEffect(() => {
     const regions = regionsRef.current
     const ws = wsRef.current
@@ -290,7 +290,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
 
     const wrapper = ws.getWrapper()
     const wrapperW = wrapper ? wrapper.offsetWidth : 0
-    // px → segundos pela escala atual (6px de marca na onda)
+    // px → seconds using the current scale (6px mark on the waveform)
     const lineSec = wrapperW > 0 ? (EXPORT_MARK_PX * d) / wrapperW : d * 0.01
     const { start, end } = exportRange
 
@@ -327,11 +327,11 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     }
   }, [exportRange, selectedMarker, ready, rulerW])
 
-  // v1.8.0: a FORMA da onda acompanha o que está sendo OUVIDO — quando a
-  // prévia está tratada, a MESMA cadeia roda offline (realtimeChain.
-  // renderEnvelope) e os picos são redesenhados. Nada mexe no player nem na
-  // reprodução; lado original (ou 🎤 off) volta à forma do arquivo original.
-  // Debounce: refaz só quando a cfg para de mudar (preset/ajustes/A-B).
+  // v1.8.0: the SHAPE of the waveform follows what is being HEARD — when the
+  // preview is treated, the SAME chain runs offline (realtimeChain.
+  // renderEnvelope) and the peaks are redrawn. Nothing touches the player or
+  // playback; the original side (or 🎤 off) goes back to the original file's shape.
+  // Debounce: only redoes when the cfg stops changing (preset/settings/A-B).
   useEffect(() => {
     const ws = wsRef.current
     const token = ++shapeTokenRef.current
@@ -347,8 +347,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       if (!renderer || typeof renderer.render !== 'function') return
       try {
         if (env) {
-          // Buffer "falso": o renderer mapeia array↔largura por tempo de
-          // duração — o envelope esticado na duração real vira a forma.
+          // "Fake" buffer: the renderer maps array↔width by duration —
+          // the envelope stretched to the real duration becomes the shape.
           const dur = decoded.duration || 0
           renderer.render({
             duration: dur,
@@ -360,11 +360,11 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
         } else if (renderer.audioData !== decoded) {
           renderer.render(decoded)
         }
-        // repinta cursor/preenchimento na posição atual (sem dar play)
+        // repaints cursor/fill at the current position (without playing)
         try {
           ws.updateProgress()
         } catch {
-          // sem progresso ainda — ok
+          // no progress yet — ok
         }
         shapeDrawnRef.current = { ws, key }
       } catch (e) {
@@ -387,10 +387,10 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     return () => clearTimeout(shapeTimerRef.current)
   }, [shapeCfg, ready])
 
-  // Scroll horizontal com a roda do mouse: a faixa interna do wavesurfer so
-  // roda na horizontal via Shift+roda ou barra de rolagem; aqui a roda
-  // vertical comum tambem desloca a faixa. Anexado no PAINEL (e nao na faixa)
-  // para responder tambem sobre a regua de tempo acima.
+  // Horizontal scroll with the mouse wheel: wavesurfer's inner strip only
+  // scrolls horizontally via Shift+wheel or the scrollbar; here the normal
+  // vertical wheel also moves the strip. Attached to the PANEL (not the strip)
+  // so it also responds over the time ruler above.
   useEffect(() => {
     const container = containerRef.current
     const panel = container && container.parentElement
@@ -398,10 +398,10 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     const onWheel = (e) => {
       const ws = wsRef.current
       if (!ws) return
-      // Evento ja horizontal (trackpad): deixa o navegador tratar
+      // Already a horizontal event (trackpad): let the browser handle it
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
       const wrapper = ws.getWrapper()
-      // Sem scroll quando a faixa cabe no container (audio curto)
+      // No scroll when the strip fits in the container (short audio)
       if (!wrapper || wrapper.offsetWidth <= container.clientWidth) return
       e.preventDefault()
       ws.setScroll(ws.getScroll() + e.deltaY)
@@ -410,9 +410,9 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     return () => panel.removeEventListener('wheel', onWheel)
   }, [])
 
-  // A largura da regua acompanha a largura da faixa: quando a janela muda
-  // (640 <-> 900 com legendas) o wavesurfer re-layouta e o wrapper muda.
-  // O rAF garante a medicao Depois do proprio wavesurfer processar o resize.
+  // The ruler width follows the strip's width: when the window changes
+  // (640 <-> 900 with subtitles) wavesurfer re-lays-out and the wrapper changes.
+  // The rAF guarantees the measurement AFTER wavesurfer itself processes the resize.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -444,8 +444,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       appliedSeekRef.current = null
       return
     }
-    // Aplica cada seekTo UMA vez: no 'ready' da recarga de fonte (🎤/A-B) a
-    // posição volta a ser a do transporte, não o último clique do painel.
+    // Applies each seekTo ONCE: on the 'ready' of a source reload (🎤/A-B) the
+    // position goes back to the transport's, not the panel's last click.
     if (appliedSeekRef.current === seekTo) return
     if (wsRef.current && ready) {
       appliedSeekRef.current = seekTo
@@ -454,9 +454,9 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     }
   }, [seekTo, ready])
 
-  // v1.7.0: play pedido pelo SoundConfigModal (prévia A/B). Se o wavesurfer
-  // está recarregando a fonte de áudio, o 'ready' consome a intenção; se já
-  // está pronto, toca na hora.
+  // v1.7.0: play requested by SoundConfigModal (A/B preview). If wavesurfer
+  // is reloading the audio source, 'ready' consumes the intent; if it's
+  // already ready, it plays right away.
   useEffect(() => {
     if (!playRequest) return
     if (wsRef.current && ready) {
@@ -468,8 +468,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playRequest])
 
-  // Botoes DEDICADOS: [▶] so toca, [⏸] so pausa (o estado atual fica
-  // desabilitado, virando leitura visual imediata — wireframe v1.5.0).
+  // DEDICATED buttons: [▶] only plays, [⏸] only pauses (the current state
+  // is disabled, becoming an immediate visual read — wireframe v1.5.0).
   const handlePlay = (e) => {
     e.stopPropagation()
     if (wsRef.current) {
@@ -502,7 +502,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     }
   }
 
-  // Posicoes da regua: rotulo/tick grande de 10 em 10s, tick menor a cada 5s
+  // Ruler positions: label/big tick every 10s, smaller tick every 5s
   const rulerMajors = []
   const rulerMinors = []
   if (duration > 0) {
@@ -513,8 +513,8 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   return (
     <div className="space-y-1">
       <div className="w-full border-2 border-retro-black rounded bg-retro-bg shadow-retro p-2">
-        {/* Regua de tempo estilo Premiere (v1.6.0): rotulos de 10 em 10s,
-            ticks 10s/5s e linha do playhead — acompanha o scroll da faixa */}
+        {/* Time ruler Premiere style (v1.6.0): labels every 10s,
+            10s/5s ticks and the playhead line — follows the strip's scroll */}
         <div className="relative w-full h-[16px] overflow-hidden select-none pointer-events-none">
           {duration > 0 && rulerW > 0 && (
             <div
@@ -535,14 +535,14 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
                   className="absolute top-0 bottom-0"
                   style={{ left: `${(s / duration) * 100}%` }}
                 >
-                  <span className="absolute top-0 left-[2px] font-pixel text-[6px] leading-none text-retro-black/70 whitespace-nowrap">
+                  <span className="absolute top-1 left-[2px] font-pixel text-[6px] leading-none text-retro-black/70 whitespace-nowrap">
                     {fmtTime(s)}
                   </span>
                   <span className="absolute bottom-0 left-0 w-[1px] h-[5px] bg-retro-black/50" />
                 </div>
               ))}
-              {/* Marcas I/O do export: chip I = início, O = fim (o fundo
-                  escuro marca qual está selecionada p/ Delete) */}
+              {/* Export I/O marks: chip I = start, O = end (the dark
+                  background marks which one is selected for Delete) */}
               {exportRange?.start != null && (
                 <div
                   className="absolute top-0"
@@ -574,9 +574,9 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
         <div ref={containerRef} className="w-full min-h-[80px] rounded overflow-hidden" />
       </div>
 
-      {/* Container proprio de transporte (wireframe v1.5.0): relogio
-          hh:mm:ss a esquerda, botoes centralizados + status Carregando/Pronto
-          alinhado a direita */}
+      {/* Dedicated transport container (wireframe v1.5.0): clock
+          hh:mm:ss on the left, centered buttons + Loading/Ready status
+          aligned to the right */}
       <div className="relative w-full border-2 border-retro-black rounded bg-retro-bg shadow-retro p-2 flex items-center justify-center">
         <span className="absolute left-2 font-pixel text-[6px] text-retro-black/70 tabular-nums">
           {fmtHMS(curTime)}/{fmtHMS(duration)}

@@ -1,29 +1,29 @@
 /*
-  Portugues — mesmas chaves de en.js (paridade checada em index.js).
-  Os textos existentes do UI foram mantidos exatamente como estavam
-  (inclusive a grafia sem acentos usada no app).
+  Portuguese — same keys as en.js (parity checked in index.js).
+  The existing UI texts were kept exactly as they were
+  (including the unaccented spelling used in the app).
 */
 export default {
-  // --- Comum ---
+  // --- Common ---
   'common.save': 'SALVAR',
   'common.yes': 'SIM',
   'common.no': 'NAO',
   'common.close': 'FECHAR',
   'common.error': 'ERRO',
 
-  // --- Abas do SettingsModal ---
+  // --- SettingsModal tabs ---
   'tabs.system': 'Sistema',
   'tabs.general': 'Geral',
   'tabs.output': 'Saida',
   'tabs.subtitles': 'Legendas',
 
-  // --- Aba Sistema ---
+  // --- System tab ---
   'system.language': 'IDIOMA',
   'system.languageHint': 'Idioma do Sistema.',
   'system.theme': 'TEMA',
   'system.themeHint': 'Aparência da interface, aplicada imediatamente.',
 
-  // --- Settings > Geral ---
+  // --- Settings > General ---
   'settings.folderLabel': 'PASTA DE DESTINO',
   'settings.folderPlaceholder': 'Mesma pasta do arquivo',
   'settings.gpuLabel': 'GPU (NVIDIA)',
@@ -45,7 +45,7 @@ export default {
   'settings.modelDesc.medium': 'Alta qualidade, mais lento',
   'settings.modelDesc.large-v3': 'Maxima qualidade, bem lento',
 
-  // --- Settings > Saida ---
+  // --- Settings > Output ---
   'settings.formatLabel': 'FORMATO DE SAIDA',
   'settings.resolutionLabel': 'RESOLUCAO DE SAIDA',
   'settings.resOriginal': 'Original',
@@ -59,7 +59,7 @@ export default {
   'settings.auto': 'Auto',
   'settings.audioNoBurn': 'Formato atual ({format}) nao suporta legenda embarcada',
 
-  // --- Settings > Legendas ---
+  // --- Settings > Subtitles ---
   'settings.enableSubtitles': 'Ativar legendas',
   'settings.positionModeLabel': 'MODO DE POSICAO',
   'settings.posFixed': 'Posicao Pre-definida',
@@ -86,14 +86,14 @@ export default {
   'settings.bgGreen': 'verde',
   'settings.bgBlack': 'preto',
 
-  // --- Confirmacoes (dialogo do SettingsModal) ---
+  // --- Confirmations (SettingsModal dialog) ---
   'settings.confirmBurn': 'Imbutir legenda requer saida em video. Trocar automaticamente para MP4?',
   'settings.confirmGreen': 'Video com fundo verde requer saida em video. Trocar automaticamente para MP4?',
   'settings.confirmAudioFormat': 'Formato de audio nao suporta legenda embarcada nem fundo verde. Desativar essas opcoes?',
   'settings.confirmSubtitles': 'Legendas embarcadas requerem saida em video. Trocar automaticamente para MP4?',
   'settings.confirmDownloadModel': 'Baixar modelo "{label}" ({size})?',
 
-  // --- Painel de legendas ---
+  // --- Subtitles panel ---
   'panel.title': 'LEGENDAS',
   'panel.style': 'Estilo',
   'panel.position': 'Posicao',
@@ -110,7 +110,7 @@ export default {
   'panel.regenerate': 'REGERAR LEGENDA',
   'panel.regenerating': 'REGERANDO...',
 
-  // --- Waveform (barra de transporte) ---
+  // --- Waveform (transport bar) ---
   'waveform.loading': 'Carregando...',
   'waveform.ready': 'Pronto',
   'waveform.markHint': 'I/O: marca início/fim do export · Delete: apaga',
@@ -135,15 +135,18 @@ export default {
   'cut.tipOn': 'Corte LIGADO — prévia = resultado final. Clique para ver como estava antes.',
   'cut.tipOff': 'Corte DESLIGADO — sem corte, silêncios intactos. Clique para gerar e ouvir o resultado final.',
   'cut.failed': 'Falha ao gerar o corte',
+  // Cut timing (Settings > Output tab)
+  'cut.immediate': 'Corte imediato',
+  'cut.immediateTip': 'Marcado: faz o corte na hora ao ativar o botão de corte. Desmarcado: o corte acontece só na exportação (mantenha o AUTO CUT ativo).',
 
-  // --- Barra inferior ---
+  // --- Bottom bar ---
   'bottombar.folder': 'PASTA:',
   'bottombar.sameAsFile': 'MESMA DO ARQUIVO',
   'bottombar.about': 'Sobre',
   'bottombar.openOutputFolder': 'Abrir pasta de destino',
   'bottombar.settings': 'Configurações',
 
-  // --- App (erros / toast) ---
+  // --- App (errors / toast) ---
   'app.errGenerate': 'Erro ao gerar legendas',
   'app.errGenerateWhisper': 'Erro ao gerar legendas com whisper.cpp',
   'app.errRender': 'Erro ao renderizar legendas',
@@ -153,7 +156,7 @@ export default {
   'app.exportToast': 'Exportacao concluida!',
   'app.openFolder': 'ABRIR PASTA',
 
-  // --- Projetos (v1.8.0) ---
+  // --- Projects (v1.8.0) ---
   'project.new': 'NOVO PROJETO',
   'project.save': 'SALVAR PROJETO',
   'project.open': 'ABRIR PROJETO',
@@ -176,7 +179,7 @@ export default {
   'project.fullscreen': 'Tela cheia (F11)',
   'project.exitFullscreen': 'Sair da tela cheia (F11)',
 
-  // --- DropZone (zona de arraste + info do arquivo) ---
+  // --- DropZone (drag zone + file info) ---
   'dropzone.clear': 'Limpar',
   'dropzone.orClickHere': 'ou clique aqui',
   'dropzone.fullscreen': 'Tela cheia',
@@ -185,7 +188,7 @@ export default {
   'dropzone.name': 'NOME:',
   'dropzone.size': 'TAMANHO:',
 
-  // --- SubtitleConfigModal (configuracao por estilo) ---
+  // --- SubtitleConfigModal (per-style settings) ---
   'subConfig.title': 'Configuracao - {name}',
   'subConfig.font': 'Fonte',
   'subConfig.fontSize': 'Tamanho da Fonte - {size}',
@@ -207,7 +210,7 @@ export default {
   'cuda.download': 'BAIXAR',
   'cuda.error': 'Falha no download',
 
-  // --- Export (textos de progresso) ---
+  // --- Export (progress texts) ---
   'export.converting': 'Convertendo...',
   'export.analyzingCut': 'Analisando corte...',
   'export.burning': 'Imbutindo legenda...',
@@ -216,22 +219,22 @@ export default {
   'export.needEnd': 'Falta o FIM do export — posicione o playhead e marque com a tecla O.',
   'export.badRange': 'O INÍCIO do export está DEPOIS do fim — reposicione as marcas (I/O).',
 
-  // --- Painel (legendas) ---
+  // --- Panel (subtitles) ---
   'panel.newSubtitle': 'Nova legenda',
 
-  // --- Posicoes da legenda (botoes do painel) ---
+  // --- Subtitle positions (panel buttons) ---
   'positions.top': 'TOPO',
   'positions.middle': 'MEIO',
   'positions.bottom': 'BAIXO',
 
-  // --- Settings > Saida: idioma de saida da legenda ---
+  // --- Settings > Output: subtitle output language ---
   'settings.subtitleLangLabel': 'IDIOMA DA LEGENDA',
   'settings.subtitleLangAuto': 'AUTO (IDIOMA FALADO)',
   'settings.subtitleLangTooltip':
     'Auto detecta o idioma falado no audio (a legenda sai nesse idioma). English traduz qualquer audio para ingles. Outros idiomas forcam o idioma falado — use apenas quando o audio realmente for desse idioma, senao o resultado sai errado.',
   'app.detectedLanguage': 'Idioma detectado: {lang}',
 
-  // --- Som avançado (v1.7.0) ---
+  // --- Advanced sound (v1.7.0) ---
   'sound.modalTitle': 'CONFIGURAÇÕES DE SOM',
   'sound.advBtn': 'SOM AVANÇADO',
   'sound.micTipOn': 'Som avançado LIGADO — clique para desativar',
@@ -356,4 +359,16 @@ export default {
   'shortcuts.delMarker': 'Apagar a marca selecionada',
   'shortcuts.fullscreen': 'Tela cheia / sair da tela cheia',
   'shortcuts.keySpace': 'ESPAÇO',
+
+  // --- Word replacement (subtitles panel) ---
+  'replace.chip': 'Substituir palavra',
+  'replace.title': 'Substituir em toda a legenda',
+  'replace.before': 'Antes',
+  'replace.after': 'Depois',
+  'replace.ignoreCase': 'Ignorar maiúsculas/minúsculas',
+  'replace.count1': '1 ocorrência será substituída',
+  'replace.countN': '{n} ocorrências serão substituídas',
+  'replace.none': 'Nenhuma ocorrência encontrada',
+  'replace.ok': 'SUBSTITUIR',
+  'replace.cancel': 'CANCELAR',
 }

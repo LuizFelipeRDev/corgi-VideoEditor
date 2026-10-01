@@ -61,6 +61,10 @@ export const SOUND_PRESETS = '[]'            // JSON: presets saved by the user
 // --- Tools and misc ---
 export const ADVANCED_TOOLS = 'true'         // 'true' = sidebar (ADVANCED OPTIONS) enabled
 export const RECENT_PROJECTS = '[]'          // JSON: [{ path, at }] — OPEN dialog
+export const FAVORITE_FONTS = ''             // CSV: font ids starred in SubtitleConfigModal
+
+// --- Cut timing (AUTO CUT) ---
+export const CUT_IMMEDIATE = 'true'          // 'true' = the toggle runs the cut right away; 'false' = the cut runs only on export
 
 // ------------------------------------------------------------
 // EXACT config.ini keys — consumed by electron/main.cjs.
@@ -102,4 +106,7 @@ export const CONFIG_DEFAULTS = {
 
   advanced_tools: ADVANCED_TOOLS,
   recent_projects: RECENT_PROJECTS,
+  favorite_fonts: FAVORITE_FONTS,
+
+  cut_immediate: CUT_IMMEDIATE,
 }

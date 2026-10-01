@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
-// Tema inicial lido de --corgi-theme (adicionado em electron/main.cjs).
-// Exposto sincrono para o renderer aplicar data-theme antes do primeiro paint.
+// Initial theme read from --corgi-theme (added in electron/main.cjs).
+// Exposed synchronously so the renderer applies data-theme before the first paint.
 const _themeArg = process.argv.find((a) => a.startsWith('--corgi-theme='));
 const _initialTheme = _themeArg ? _themeArg.slice('--corgi-theme='.length) : 'modern';
 
@@ -128,6 +128,7 @@ contextBridge.exposeInMainWorld('api', {
   getFontsPath: () => ipcRenderer.invoke('get-fonts-path'),
   pathExists: (targetPath) => ipcRenderer.invoke('path-exists', targetPath),
   getFileSize: (targetPath) => ipcRenderer.invoke('get-file-size', targetPath),
+  getMediaDuration: (filePath) => ipcRenderer.invoke('get-media-duration', filePath),
   selectProjectSavePath: (opts) => ipcRenderer.invoke('select-project-save-path', opts),
   openProject: () => ipcRenderer.invoke('open-project'),
   getWhisperDir: () => ipcRenderer.invoke('get-whisper-dir'),

@@ -1,6 +1,6 @@
 {
   "name": "corgi-editor",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "description": "CORGI-EDITOR - Edição automática de vídeo/áudio",
   "main": "dist/electron/main.js",
   "scripts": {

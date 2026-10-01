@@ -1,6 +1,6 @@
 import { useLang } from '../lib/i18n'
 
-// Confirmação de NOVO PROJETO (v1.8.0): salvar e limpar / limpar / cancelar.
+// NEW PROJECT confirmation (v1.8.0): save and clear / clear / cancel.
 function ConfirmModal({ message, primaryLabel, secondaryLabel, cancelLabel, onPrimary, onSecondary, onCancel }) {
   const { t } = useLang()
   return (

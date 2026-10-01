@@ -3,9 +3,9 @@ import { IconBrain, IconDownload } from '@tabler/icons-react'
 import { useLang } from '../lib/i18n'
 import { describeSoundChain } from '../lib/soundChain'
 
-// Módulo da barra lateral: status/download do modelo neural (rnnoise) +
-// escolha do motor de ruído (off / clássico afftdn / neural arnndn).
-// APLICAR persiste noise no sound_config (mesmo merge do ANALISAR).
+// Sidebar module: status/download of the neural model (rnnoise) +
+// choice of the noise engine (off / classic afftdn / neural arnndn).
+// APPLY persists noise in sound_config (same merge as ANALYZE).
 function RnnoiseModal({ config, rnnoiseInstalled, onStatusChange, onApply, onClose }) {
   const { t } = useLang()
   const [draft, setDraft] = useState(() => ({ ...config.noise }))
@@ -13,10 +13,10 @@ function RnnoiseModal({ config, rnnoiseInstalled, onStatusChange, onApply, onClo
   const [downloading, setDownloading] = useState(false)
   const [pct, setPct] = useState(0)
   const [err, setErr] = useState('')
-  // códigos de falha de rede vindos do main → chaves i18n
+  // network failure codes coming from main → i18n keys
   const ERR_I18N = { dns: 'rnnoise.errorDns', timeout: 'rnnoise.errorTimeout', conn: 'rnnoise.errorConn' }
 
-  // Progresso do download (main -> preload). Limpo ao fechar.
+  // Download progress (main -> preload). Cleared on close.
   useEffect(() => {
     window.api.onRnnoiseDownloadProgress?.((d) => setPct(d?.progress || 0))
     return () => window.api.onRnnoiseDownloadProgress?.(null)
@@ -39,7 +39,7 @@ function RnnoiseModal({ config, rnnoiseInstalled, onStatusChange, onApply, onClo
       if (!window.api?.downloadRnnoise) throw new Error('IPC downloadRnnoise ausente')
       const res = await window.api.downloadRnnoise()
       if (!res || !res.success) {
-        // main devolve um code de rede (dns/timeout/conn) → texto em i18n
+        // main returns a network code (dns/timeout/conn) → text in i18n
         const key = res && ERR_I18N[res.code]
         throw new Error(key ? t(key) : (res && res.error) || t('rnnoise.downloadFailed'))
       }
@@ -80,7 +80,7 @@ function RnnoiseModal({ config, rnnoiseInstalled, onStatusChange, onApply, onClo
 
         <p className="font-pixel text-[6px] text-retro-black/70 leading-relaxed mb-3">{t('rnnoise.desc')}</p>
 
-        {/* Modelo neural (status + download) */}
+        {/* Neural model (status + download) */}
         <div className="bg-retro-bg border-2 border-retro-black rounded p-3 mb-3">
           <div className="flex items-center justify-between mb-1 gap-2">
             <span className="font-pixel text-[6px] text-retro-black/60 uppercase">{t('rnnoise.model')}</span>
@@ -114,7 +114,7 @@ function RnnoiseModal({ config, rnnoiseInstalled, onStatusChange, onApply, onClo
           {err && <p className="font-pixel text-[6px] text-red-700 mt-1">{err}</p>}
         </div>
 
-        {/* Motor de ruído: off / clássico (afftdn) / neural (arnndn) */}
+        {/* Noise engine: off / classic (afftdn) / neural (arnndn) */}
         <div className="bg-retro-bg border-2 border-retro-black rounded p-3 mb-3">
           <span className="font-pixel text-[6px] text-retro-black/60 uppercase block mb-1.5">{t('rnnoise.mode')}</span>
           <div className="flex gap-1.5 flex-wrap">
@@ -152,7 +152,7 @@ function RnnoiseModal({ config, rnnoiseInstalled, onStatusChange, onApply, onClo
           )}
         </div>
 
-        {/* Cadeia que vai ao export */}
+        {/* Chain that goes to the export */}
         <div className="border-2 border-retro-black rounded bg-retro-bg px-2 py-1.5 mb-3">
           <span className="font-pixel text-[6px] text-retro-black/60 uppercase block mb-0.5">{t('sound.chainLabel')}</span>
           <span className="font-pixel text-[7px] text-retro-black break-all">

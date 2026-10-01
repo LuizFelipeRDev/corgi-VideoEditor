@@ -1,29 +1,29 @@
-// AudioWorklet da prévia em TEMPO REAL (v1.8.0 — "A/B instantâneo").
-// Importado como TEXTO (?raw) e servido via Blob URL: assim funciona igual em
-// dev (http://localhost) e no build (file://), sem depender de addModule(file).
+// AudioWorklet of the REAL-TIME preview (v1.8.0 — "instant A/B").
+// Imported as TEXT (?raw) and served via Blob URL: this way it works the same in
+// dev (http://localhost) and in the build (file://), without depending on addModule(file).
 //
-// Aproxima na AUDIÇÃO o que o ffmpeg faz no export e que o Web Audio puro não
-// tem — dois processadores, um por instância (via `mode`):
-//   'gate' ≈ afftdn  — reduz o leito de RUÍDO quando o sinal cai (silêncios)
-//   'agc'  ≈ loudnorm — segura o loudness perto do alvo (volume uniforme)
-// O EXPORT continua usando o ffmpeg exato; isto aqui é só pra decidir rápido.
+// Approximates at LISTENING time what ffmpeg does on export and what pure Web Audio does not
+// have — two processors, one per instance (via `mode`):
+//   'gate' ≈ afftdn  — reduces the NOISE floor when the signal drops (silences)
+//   'agc'  ≈ loudnorm — holds loudness near the target (uniform volume)
+// The EXPORT keeps using exact ffmpeg; this here is just to decide quickly.
 
 const dbToLin = (db) => Math.pow(10, db / 20)
-// Abaixo de -60 dBFS nao existe "conteudo pra normalizar" — e silencio (ou o
-// ruido ja cortado pelo gate). Com env no silencio o alvo (targetRms/env)
-// explodiria e inflaria o ganho; melhor congelar.
+// Below -60 dBFS there is no "content to normalize" — it's silence (or
+// noise already cut by the gate). With env on silence the target (targetRms/env)
+// would explode and inflate the gain; better to freeze.
 const AGC_FLOOR = dbToLin(-60)
-// Teto de SEGURANÇA: a prévia nunca entrega acima de AGC_HEADROOM× o alvo.
-// O alvo sai de um env que pode estar DEFASADO do que toca agora (silêncio→
-// voz, ou env/gain congelados de uma parada/grafo recriado = o "primeiro
-// segundo estourado" da prévia: o ganho corria pra lá com τ≈1 s). No
-// estacionário level≈env e o teto fica 1.5× acima do alvo — nunca limita o
-// que é normal.
+// SAFETY ceiling: the preview never delivers above AGC_HEADROOM× the target.
+// The target comes from an env that can be OUT OF SYNC with what plays now (silence→
+// voice, or env/gain frozen from a stop/recreated graph = the "blown
+// first second" of the preview: the gain was running there with τ≈1 s). In
+// steady state level≈env and the ceiling stays 1.5× above the target — never limits
+// what is normal.
 const AGC_HEADROOM = 1.5
-// Trava DURA por bloco (RMS instantâneo): cobre a janela em que o `level`
-// ainda não pegou o salto do sinal (1º bloco de um salto) ou o ganho veio
-// enorme de uma sessão anterior. Só engata acima de ~4× o alvo — picos
-// normais de fala passam livres.
+// HARD lock per block (instantaneous RMS): covers the window where `level`
+// has not caught the signal jump yet (1st block of a jump) or the gain came
+// huge from a previous session. Only engages above ~4× the target — normal
+// speech peaks pass free.
 const AGC_HARD = 4
 
 class CorgiApproxProcessor extends AudioWorkletProcessor {
@@ -31,12 +31,12 @@ class CorgiApproxProcessor extends AudioWorkletProcessor {
     super()
     this.mode = 'gate'
     this.on = true
-    this.threshold = dbToLin(-35) // gate: abre quando o sinal passa disto
-    this.targetRms = 0.2           // agc: alvo de RMS (~ lufs + 2 dBFS)
-    this.env = 0                   // envelope do sinal (gate) / loudness (agc)
-    this.level = 0                 // agc: nível RÁPIDO do sinal (só o teto)
-    this.gain = 1                  // ganho suavizado aplicado
-    this.warmed = false            // agc: primeiro bloco ainda nao mediu nada
+    this.threshold = dbToLin(-35) // gate: opens when the signal passes this
+    this.targetRms = 0.2           // agc: RMS target (~ lufs + 2 dBFS)
+    this.env = 0                   // signal envelope (gate) / loudness (agc)
+    this.level = 0                 // agc: FAST level of the signal (only the ceiling)
+    this.gain = 1                  // smoothed gain applied
+    this.warmed = false            // agc: first block has not measured anything yet
     this.port.onmessage = (e) => {
       const d = e.data || {}
       if (d.mode) this.mode = d.mode
@@ -55,13 +55,13 @@ class CorgiApproxProcessor extends AudioWorkletProcessor {
     return this.processAgc(input, output, n)
   }
 
-  // ≈ afftdn: abre rápido quando a voz entra (sem "tick"), fecha devagar e de
-  // forma CONSERVADORA (~ -34 dB) — aproxima o corte espectral do ffmpeg.
+  // ≈ afftdn: opens fast when the voice enters (no "tick"), closes slowly and
+  // CONSERVATIVELY (~ -34 dB) — approximates the ffmpeg spectral cut.
   processGate(input, output, n) {
     const atk = 1 - Math.exp(-1 / (sampleRate * 0.003))
     const rel = 1 - Math.exp(-1 / (sampleRate * 0.12))
-    const gOpen = 0.02    // ganho sobe em ~3 ms
-    const gClose = 0.0006 // ganho desce em ~35 ms (release sem clique)
+    const gOpen = 0.02    // gain rises in ~3 ms
+    const gClose = 0.0006 // gain falls in ~35 ms (release without click)
     const active = this.on
     const th = this.threshold
     let env = this.env
@@ -81,55 +81,55 @@ class CorgiApproxProcessor extends AudioWorkletProcessor {
     return true
   }
 
-  // ≈ loudnorm: RMS lento (por bloco) → ganho na direção do alvo — sobe
-  // devagar, desce rápido nos picos — interpolado entre blocos (sem zipper).
+  // ≈ loudnorm: slow RMS (per block) → gain toward the target — rises
+  // slowly, falls fast on peaks — interpolated between blocks (no zipper).
   processAgc(input, output, n) {
     let sum = 0
     for (let i = 0; i < n; i++) sum += input[0][i] * input[0][i]
     const rms = Math.sqrt(sum / n)
     const block = n / sampleRate
-    // Nível do sinal AGORA (ataque 5 ms / release 100 ms) — só alimenta o
-    // teto de segurança abaixo; não entra no cálculo do alvo normal.
+    // Signal level NOW (attack 5 ms / release 100 ms) — only feeds the
+    // safety ceiling below; it does not enter the normal target calculation.
     this.level += (rms - this.level) * (rms > this.level ? 1 - Math.exp(-block / 0.005) : 1 - Math.exp(-block / 0.1))
     if (this.warmed) {
       this.env += (rms - this.env) * (rms > this.env ? 1 - Math.exp(-block / 0.4) : 1 - Math.exp(-block / 1.5))
     } else {
-      // 1º bloco mede de verdade. Partir de env=0 faria targetRms/1e-4 =
-      // teto de ×16 e o ganho corria pra lá (τ≈1 s) => o "primeiro segundo
-      // muito alto" na primeira ativação de um ajuste de áudio (o env só
-      // existe enquanto áudio flui pelo worklet; antes do primeiro play ele
-      // ainda está congelado no zero).
+      // 1st block measures for real. Starting from env=0 would make targetRms/1e-4 =
+      // a ×16 ceiling and the gain would run there (τ≈1 s) => the "first second
+      // too loud" on the first activation of an audio adjustment (the env only
+      // exists while audio flows through the worklet; before the first play it
+      // is still frozen at zero).
       this.env = rms
       this.warmed = true
     }
     let target = !this.on
       ? 1
-      : // Silêncio: alvo calculado de um env≈0 estouraria no teto e inflaria
-        // o ganho — a voz entraria multiplicada. Congela no valor atual.
+      : // Silence: a target computed from an env≈0 would blow past the ceiling and inflate
+        // the gain — the voice would come in multiplied. Freezes at the current value.
         this.env < AGC_FLOOR
         ? this.gain
         : Math.min(16, Math.max(0.05, this.targetRms / this.env))
-    // Teto de segurança (só com o AGC ligado): o alvo sai de um env que pode
-    // estar DEFASADO do que toca agora — silêncio→voz, ou env/gain congelados
-    // de uma parada (depois de "algum tempo" parado) => o ganho corria pra lá
-    // com τ≈1 s e o primeiro segundo saía estourado. No estacionário
-    // level≈env e o teto fica ~1.5× acima do alvo — nunca limita o normal.
+    // Safety ceiling (only with AGC on): the target comes from an env that can
+    // be OUT OF SYNC with what plays now — silence→voice, or env/gain frozen
+    // from a stop (after being stopped "for a while") => the gain would run there
+    // with τ≈1 s and the first second came out blown. In steady state
+    // level≈env and the ceiling stays ~1.5× above the target — never limits the normal.
     let cap = Infinity
     if (this.on) {
       cap = (this.targetRms * AGC_HEADROOM) / Math.max(this.level, AGC_FLOOR)
       if (target > cap) target = cap
     }
     let from = this.gain
-    // sobe τ=1 s (normal); desce τ=150 ms — e τ=30 ms enquanto estiver ACIMA
-    // do teto: lá o env ainda não pegou o nível real e deixar correr a
-    // τ=1 s é exatamente o "primeiro segundo estourado".
+    // rises τ=1 s (normal); falls τ=150 ms — and τ=30 ms while it stays ABOVE
+    // the ceiling: there the env has not caught the real level yet and letting it run at
+    // τ=1 s is exactly the "blown first second".
     const overCap = this.gain > cap
     const tau = target > this.gain ? 1.0 : overCap ? 0.03 : 0.15
     this.gain += (target - this.gain) * (1 - Math.exp(-block / tau))
-    // Trava DURA no ganho do bloco: RMS instantâneo, vale mesmo no primeiro
-    // bloco do salto (o level ainda não alcançou) e com ganho herdado de uma
-    // sessão anterior (ex.: ×16 de um trecho calmo). `from` também: a
-    // interpolação do bloco inteiro tem que nascer já travada.
+    // HARD lock on the block's gain: instantaneous RMS, applies even on the first
+    // block of the jump (the level has not caught up yet) and with gain inherited from a
+    // previous session (e.g. ×16 from a quiet stretch). `from` too: the
+    // interpolation of the whole block must start out already locked.
     if (this.on) {
       const hard = (this.targetRms * AGC_HARD) / Math.max(rms, AGC_FLOOR)
       if (this.gain > hard) this.gain = hard

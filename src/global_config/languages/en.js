@@ -1,34 +1,34 @@
 /*
-  English (DEFAULT) — fonte de referencia das chaves.
-  Regras:
-  - Chaves pontilhadas e estaveis; nunca usar o texto visivel como chave.
-  - Todo idioma deve ter EXATAMENTE as mesmas chaves deste arquivo
-    (paridade checada em index.js / checkLangParity).
-  - Textos entre {chave} sao interpolados: t('chave', { chave: valor }).
-  - Este arquivo e a traducao do PT que ja existia no UI; PT mantem o texto
-    original byte a byte.
+  English (DEFAULT) — reference source of the keys.
+  Rules:
+  - Dotted, stable keys; never use the visible text as the key.
+  - Every language must have EXACTLY the same keys as this file
+    (parity checked in index.js / checkLangParity).
+  - Texts between {key} are interpolated: t('key', { key: value }).
+  - This file is the translation of the PT that already existed in the UI; PT keeps
+    the original text byte for byte.
 */
 export default {
-  // --- Comum ---
+  // --- Common ---
   'common.save': 'SAVE',
   'common.yes': 'YES',
   'common.no': 'NO',
   'common.close': 'CLOSE',
   'common.error': 'ERROR',
 
-  // --- Abas do SettingsModal ---
+  // --- SettingsModal tabs ---
   'tabs.system': 'System',
   'tabs.general': 'General',
   'tabs.output': 'Output',
   'tabs.subtitles': 'Subtitles',
 
-  // --- Aba Sistema ---
+  // --- System tab ---
   'system.language': 'LANGUAGE',
   'system.languageHint': 'System Language.',
   'system.theme': 'THEME',
   'system.themeHint': 'Interface appearance, applied immediately.',
 
-  // --- Settings > Geral ---
+  // --- Settings > General ---
   'settings.folderLabel': 'OUTPUT FOLDER',
   'settings.folderPlaceholder': 'Same folder as the file',
   'settings.gpuLabel': 'GPU (NVIDIA)',
@@ -50,7 +50,7 @@ export default {
   'settings.modelDesc.medium': 'High quality, slower',
   'settings.modelDesc.large-v3': 'Maximum quality, very slow',
 
-  // --- Settings > Saida ---
+  // --- Settings > Output ---
   'settings.formatLabel': 'OUTPUT FORMAT',
   'settings.resolutionLabel': 'OUTPUT RESOLUTION',
   'settings.resOriginal': 'Original',
@@ -64,7 +64,7 @@ export default {
   'settings.auto': 'Auto',
   'settings.audioNoBurn': 'Current format ({format}) does not support burned-in subtitles',
 
-  // --- Settings > Legendas ---
+  // --- Settings > Subtitles ---
   'settings.enableSubtitles': 'Enable subtitles',
   'settings.positionModeLabel': 'POSITION MODE',
   'settings.posFixed': 'Preset position',
@@ -91,14 +91,14 @@ export default {
   'settings.bgGreen': 'green',
   'settings.bgBlack': 'black',
 
-  // --- Confirmacoes (dialogo do SettingsModal) ---
+  // --- Confirmations (SettingsModal dialog) ---
   'settings.confirmBurn': 'Burning subtitles requires video output. Switch to MP4 automatically?',
   'settings.confirmGreen': 'Green background video requires video output. Switch to MP4 automatically?',
   'settings.confirmAudioFormat': 'Audio format does not support burned-in subtitles or green background. Disable these options?',
   'settings.confirmSubtitles': 'Burned-in subtitles require video output. Switch to MP4 automatically?',
   'settings.confirmDownloadModel': 'Download model "{label}" ({size})?',
 
-  // --- Painel de legendas ---
+  // --- Subtitles panel ---
   'panel.title': 'SUBTITLES',
   'panel.style': 'Style',
   'panel.position': 'Position',
@@ -115,7 +115,7 @@ export default {
   'panel.regenerate': 'REGENERATE SUBTITLE',
   'panel.regenerating': 'REGENERATING...',
 
-  // --- Waveform (barra de transporte) ---
+  // --- Waveform (transport bar) ---
   'waveform.loading': 'Loading...',
   'waveform.ready': 'Ready',
   'waveform.markHint': 'I/O: mark export start/end · Delete: removes',
@@ -140,15 +140,18 @@ export default {
   'cut.tipOn': 'Cut ON — preview = final result. Click to see how it was before.',
   'cut.tipOff': 'Cut OFF — no cut, silences intact. Click to generate and hear the final result.',
   'cut.failed': 'Failed to generate the cut',
+  // Cut timing (Settings > Output tab)
+  'cut.immediate': 'Instant cut',
+  'cut.immediateTip': 'Checked: cuts right away when the cut button is turned on. Unchecked: the cut runs only on export (keep AUTO CUT on).',
 
-  // --- Barra inferior ---
+  // --- Bottom bar ---
   'bottombar.folder': 'FOLDER:',
   'bottombar.sameAsFile': 'SAME AS FILE',
   'bottombar.about': 'About',
   'bottombar.openOutputFolder': 'Open output folder',
   'bottombar.settings': 'Settings',
 
-  // --- App (erros / toast) ---
+  // --- App (errors / toast) ---
   'app.errGenerate': 'Error generating subtitles',
   'app.errGenerateWhisper': 'Error generating subtitles with whisper.cpp',
   'app.errRender': 'Error rendering subtitles',
@@ -158,7 +161,7 @@ export default {
   'app.exportToast': 'Export completed!',
   'app.openFolder': 'OPEN FOLDER',
 
-  // --- Projetos (v1.8.0) ---
+  // --- Projects (v1.8.0) ---
   'project.new': 'NEW PROJECT',
   'project.save': 'SAVE PROJECT',
   'project.open': 'OPEN PROJECT',
@@ -181,7 +184,7 @@ export default {
   'project.fullscreen': 'Fullscreen (F11)',
   'project.exitFullscreen': 'Exit fullscreen (F11)',
 
-  // --- DropZone (zona de arraste + info do arquivo) ---
+  // --- DropZone (drag zone + file info) ---
   'dropzone.clear': 'Clear',
   'dropzone.orClickHere': 'or click here',
   'dropzone.fullscreen': 'Fullscreen',
@@ -190,7 +193,7 @@ export default {
   'dropzone.name': 'NAME:',
   'dropzone.size': 'SIZE:',
 
-  // --- SubtitleConfigModal (configuracao por estilo) ---
+  // --- SubtitleConfigModal (per-style settings) ---
   'subConfig.title': 'Settings - {name}',
   'subConfig.font': 'Font',
   'subConfig.fontSize': 'Font size - {size}',
@@ -212,7 +215,7 @@ export default {
   'cuda.download': 'DOWNLOAD',
   'cuda.error': 'Download failed',
 
-  // --- Export (textos de progresso) ---
+  // --- Export (progress texts) ---
   'export.converting': 'Converting...',
   'export.analyzingCut': 'Analyzing cut...',
   'export.burning': 'Burning subtitles...',
@@ -221,15 +224,15 @@ export default {
   'export.needEnd': 'Export END is missing — move the playhead and press O to mark it.',
   'export.badRange': 'Export START is AFTER the end — move the markers (I/O).',
 
-  // --- Painel (legendas) ---
+  // --- Panel (subtitles) ---
   'panel.newSubtitle': 'New subtitle',
 
-  // --- Posicoes da legenda (botoes do painel) ---
+  // --- Subtitle positions (panel buttons) ---
   'positions.top': 'TOP',
   'positions.middle': 'MIDDLE',
   'positions.bottom': 'BOTTOM',
 
-  // --- Settings > Saida: idioma de saida da legenda ---
+  // --- Settings > Output: subtitle output language ---
   'settings.subtitleLangLabel': 'SUBTITLE LANGUAGE',
   'settings.subtitleLangAuto': 'AUTO (DETECT SPOKEN LANGUAGE)',
   'settings.subtitleLangTooltip':
@@ -361,4 +364,16 @@ export default {
   'shortcuts.delMarker': 'Remove the selected marker',
   'shortcuts.fullscreen': 'Fullscreen / exit fullscreen',
   'shortcuts.keySpace': 'SPACE',
+
+  // --- Word replacement (subtitles panel) ---
+  'replace.chip': 'Replace word',
+  'replace.title': 'Replace across all subtitles',
+  'replace.before': 'Before',
+  'replace.after': 'After',
+  'replace.ignoreCase': 'Ignore case',
+  'replace.count1': '1 occurrence will be replaced',
+  'replace.countN': '{n} occurrences will be replaced',
+  'replace.none': 'No occurrences found',
+  'replace.ok': 'REPLACE',
+  'replace.cancel': 'CANCEL',
 }

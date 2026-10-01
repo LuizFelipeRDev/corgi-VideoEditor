@@ -6,7 +6,7 @@ import logo from '../../assets/logo02.png'
 function TitleBar({ onNew, onSave, onOpen, disabled }) {
   const { t } = useLang()
   const [isFullScreen, setIsFullScreen] = useState(false)
-  // Estado do fullscreen vem do main (botão aqui + atalho F11 saem do mesmo IPC).
+  // Fullscreen state comes from main (the button here + the F11 shortcut use the same IPC).
   useEffect(() => {
     if (window.api.onFullscreenChange) window.api.onFullscreenChange(setIsFullScreen)
   }, [])

@@ -3,17 +3,17 @@ import { IconFolder } from '@tabler/icons-react'
 import { useLang } from '../lib/i18n'
 import { projectLabel } from '../lib/recentProjects'
 
-// Modal "PROJETOS RECENTES" — abre ao clicar ABRIR (TitleBar). Lista os 5
-// últimos projetos abertos/salvos (config.ini → recent_projects); clicar em
-// uma linha carrega direto, e quem preferir continua abrindo pelo diálogo
-// nativo (ABRIR MANUALMENTE). Arquivo que sumiu do disco fica visível com
-// badge "arquivo não encontrado" e desabilitado.
+// "RECENT PROJECTS" modal — opens when clicking OPEN (TitleBar). Lists the 5
+// last opened/saved projects (config.ini → recent_projects); clicking a
+// row loads it directly, and whoever prefers still opens through the
+// native dialog (OPEN MANUALLY). A file missing from disk stays visible with
+// a "file not found" badge and disabled.
 function RecentProjectsModal({ projects, onOpenPath, onOpenManual, onClose }) {
   const { t, lang } = useLang()
   const [missing, setMissing] = useState({})
 
-  // Checagem de existência por linha (pathExists é barato e local). Roda a cada
-  // troca de lista; desmontagem não aplica resultado de pathExists atrasado.
+  // Per-row existence check (pathExists is cheap and local). Runs on every
+  // list change; unmount does not apply a late pathExists result.
   useEffect(() => {
     let alive = true
     const check = async () => {

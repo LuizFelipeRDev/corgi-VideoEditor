@@ -16,15 +16,15 @@ const configPath = path.join(userDataPath, 'config.ini');
 
 function copyBundledFiles() {
   if (isDev) return;
-  // Nunca pode lancar excecao: quem chama e
+  // It must never throw an exception: the caller is
   // app.whenReady().then(() => { copyBundledFiles(); createWindow(); }),
-  // entao um erro aqui fecharia o app sem abrir janela e sem aviso.
+  // so an error here would close the app without opening a window and without any warning.
   try {
     const srcBin = path.join(process.resourcesPath, 'bin');
     const dstBin = path.join(userDataPath, 'bin');
-    // Copia apenas o que FALTA (nunca sobrescreve): instalacoes antigas
-    // ganham os arquivos novos (whisper CPU embutido) e o set CUDA/modelos
-    // baixados pelo usuario em %APPDATA% permanecem intactos.
+    // Copies only what is MISSING (never overwrites): old installations
+    // get the new files (bundled CPU whisper) and the CUDA/models set
+    // downloaded by the user in %APPDATA% remain intact.
     const copyMissing = (src, dst) => {
       let added = 0;
       fs.mkdirSync(dst, { recursive: true });
@@ -45,9 +45,9 @@ function copyBundledFiles() {
     console.error('[setup] AVISO: falha ao copiar binarios:', err.message);
   }
 
-  // Fontes espelhadas a cada inicializacao (ver fontSync.cjs): instalacoes
-  // antigas recebem as fontes que faltavam, senao o export cai na fonte do
-  // sistema (Arial) mesmo com o fontsdir no filtro ass.
+  // Fonts mirrored at every startup (see fontSync.cjs): old installations
+  // receive the fonts that were missing, otherwise the export falls back to the
+  // system font (Arial) even with the fontsdir in the ass filter.
   try {
     const res = syncFontsDir(path.join(process.resourcesPath, 'fonts'), path.join(userDataPath, 'fonts'));
     if (res.missingSrc) {
@@ -76,6 +76,13 @@ function getFfmpegPath() {
   return path.join(devRoot, 'bin', 'ffmpeg.exe');
 }
 
+function getFfprobePath() {
+  if (!isDev) {
+    return path.join(userDataPath, 'bin', 'ffprobe.exe');
+  }
+  return path.join(devRoot, 'bin', 'ffprobe.exe');
+}
+
 function getWhisperCliPath() {
   if (!isDev) {
     return path.join(userDataPath, 'bin', 'whisper', 'whisper-cli.exe');
@@ -90,12 +97,12 @@ function getWhisperDir() {
   return path.join(devRoot, 'bin', 'whisper');
 }
 
-// Modelo neural do arnndn (RNNoise) — baixado sob demanda pelo app, NUNCA
-// empacotado (AGENTS.md: só o ggml-tiny vem no build). ~300 KB de texto.
-// somnolent-hogwash = treino Speech x Recording (ruído de gravação) do
-// repositório GregorR/rnnoise-models — declarado "sem copyright" pelo autor.
-// Primário = raw.githubusercontent; espelho = jsDelivr (mesmo arquivo de outro
-// CDN) — cobre falha de DNS pontual do GitHub (ENOTFOUND já observado na rede).
+// Neural model of the arnndn (RNNoise) — downloaded on demand by the app, NEVER
+// bundled (AGENTS.md: only ggml-tiny ships in the build). ~300 KB of text.
+// somnolent-hogwash = Speech x Recording training (recording noise) from the
+// GregorR/rnnoise-models repository — declared "no copyright" by the author.
+// Primary = raw.githubusercontent; mirror = jsDelivr (same file on another
+// CDN) — covers an intermittent GitHub DNS failure (ENOTFOUND already seen on the network).
 const RNNOISE_MODEL_URLS = [
   'https://raw.githubusercontent.com/GregorR/rnnoise-models/master/somnolent-hogwash-2018-09-01/sh.rnnn',
   'https://cdn.jsdelivr.net/gh/GregorR/rnnoise-models@master/somnolent-hogwash-2018-09-01/sh.rnnn',
@@ -103,7 +110,7 @@ const RNNOISE_MODEL_URLS = [
 const RNNOISE_MODEL_URL = RNNOISE_MODEL_URLS[0];
 const RNNOISE_MODEL_FILE = 'sh.rnnn';
 
-// Falha de rede → código curto que o renderer traduz via i18n.
+// Network failure → short code that the renderer translates via i18n.
 function rnnoiseNetCode(err) {
   const code = (err && (err.code || (err.cause && err.cause.code))) || '';
   if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'dns';
@@ -113,8 +120,8 @@ function rnnoiseNetCode(err) {
   return 'unknown';
 }
 
-// 2 tentativas por URL com pausa (DNS/conexão costuma falhar de forma
-// passageira), depois tenta o espelho. HTTP 4xx não repete na mesma URL.
+// 2 attempts per URL with a pause (DNS/connection usually fails
+// transiently), then tries the mirror. HTTP 4xx is not retried on the same URL.
 async function fetchRnnoiseModel() {
   let lastErr = null;
   for (const url of RNNOISE_MODEL_URLS) {
@@ -168,12 +175,12 @@ function readConfig() {
   } catch { return defaults; }
 }
 
-// Grava o config de forma GENÉRICA: o leitor (readConfig) aceita qualquer
-// chave `key = value`, então o escritor também precisa. O template fixo antigo
-// ENGOLIA tudo que não estava na lista — sound_config, sound_presets,
-// advanced_tools e recent_projects nunca chegavam ao disco. O merge do
-// save-config ({...readConfig(), ...novo}) já preserva o que está no arquivo;
-// só falta serializar. Header [settings] mantido (readConfig pula linhas '[').
+// Writes the config GENERICALLY: the reader (readConfig) accepts any
+// `key = value` key, so the writer must too. The old fixed template
+// SWALLOWED everything that was not on the list — sound_config, sound_presets,
+// advanced_tools and recent_projects never reached disk. The save-config merge
+// ({...readConfig(), ...novo}) already preserves what is in the file;
+// only serializing was missing. [settings] header kept (readConfig skips '[' lines).
 function writeConfig(config) {
   const lines = Object.entries(config)
     .filter(([, v]) => v !== undefined && v !== null)
@@ -186,9 +193,9 @@ let whisperCliProc = null;
 let whisperCliStopped = false;
 let whisperCliHandled = false;
 
-// Tamanho do estado atual (painel de legendas ligado/desligado). É o
-// TAMANHO MINIMO da janela: ela pode crescer (arrastar a borda / tela
-// cheia), mas nunca encolher abaixo do tamanho de hoje.
+// Size of the current state (subtitles panel on/off). It is the
+// MINIMUM SIZE of the window: it may grow (dragging the border / full
+// screen), but never shrink below today's size.
 let windowStateSize = { width: 0, height: 0 };
 
 function toggleFullScreen() {
@@ -205,14 +212,14 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: initialWidth,
     height: windowConfig.WINDOW_DEFAULT_HEIGHT,
-    // Mínimo = tamanho atual do estado (não pode ficar menor do que é hoje).
+    // Minimum = current state size (it cannot get smaller than it is today).
     minWidth: initialWidth,
     minHeight: windowConfig.WINDOW_DEFAULT_HEIGHT,
     resizable: windowConfig.WINDOW_OPTIONS.resizable,
     frame: windowConfig.WINDOW_OPTIONS.frame,
     transparent: windowConfig.WINDOW_OPTIONS.transparent,
-    // Cor de pre-paint do tema + tema inicial sincrono no renderer
-    // (aplicado antes do primeiro paint, sem flash).
+    // Theme pre-paint color + initial theme synced in the renderer
+    // (applied before the first paint, no flash).
     backgroundColor: config.theme === 'modern' ? '#17171c' : '#f5f0d0',
     ...(isDev ? { icon: path.join(devRoot, 'assets', 'novaLogo.ico') } : {}),
     webPreferences: {
@@ -224,16 +231,16 @@ function createWindow() {
     },
   });
 
-  // Sincroniza o estado do fullscreen com o renderer (botao da TitleBar).
+  // Syncs the fullscreen state with the renderer (TitleBar button).
   const sendFullScreenState = () => {
     if (mainWindow) mainWindow.webContents.send('fullscreen-changed', mainWindow.isFullScreen());
   };
   mainWindow.on('enter-full-screen', sendFullScreenState);
   mainWindow.on('leave-full-screen', () => {
     sendFullScreenState();
-    // Ao sair da tela cheia o Electron restaura o tamanho de antes; se por
-    // alguma motivo ficou ABAIXO do minimo do estado (troca de painel feita
-    // dentro do fullscreen), garante o minimo de volta.
+    // When leaving full screen Electron restores the previous size; if for
+    // some reason it ended UP BELOW the state minimum (panel switch made
+    // inside the fullscreen), ensure the minimum again.
     if (mainWindow) {
       const [w, h] = mainWindow.getSize();
       if (w < windowStateSize.width || h < windowStateSize.height) {
@@ -245,7 +252,7 @@ function createWindow() {
     }
   });
 
-  // F11 entra/sai da tela cheia — mesmo caminho do botao da TitleBar.
+  // F11 toggles full screen — same path as the TitleBar button.
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') {
       event.preventDefault();
@@ -272,8 +279,8 @@ app.on('before-quit', () => {
 ipcMain.handle('minimize', () => mainWindow?.minimize());
 ipcMain.handle('close', () => mainWindow?.close());
 ipcMain.handle('get-config', () => readConfig());
-// Merge com o config do disco antes de gravar: chaves ausentes no payload
-// (ex.: theme, language) nao sao apagadas.
+// Merges with the on-disk config before writing: keys missing from the payload
+// (e.g. theme, language) are not deleted.
 ipcMain.handle('save-config', (e, config) => writeConfig({ ...readConfig(), ...config }));
 ipcMain.handle('get-fonts-path', () => getFontsDir());
 ipcMain.handle('path-exists', (e, targetPath) => {
@@ -284,7 +291,7 @@ ipcMain.handle('get-file-size', (e, targetPath) => {
 });
 ipcMain.handle('get-whisper-dir', () => getWhisperDir());
 
-// Entra/sai da tela cheia (botao da TitleBar + atalho F11).
+// Toggles full screen (TitleBar button + F11 shortcut).
 ipcMain.handle('toggle-fullscreen', () => {
   toggleFullScreen();
   return mainWindow ? mainWindow.isFullScreen() : false;
@@ -292,12 +299,12 @@ ipcMain.handle('toggle-fullscreen', () => {
 
 ipcMain.handle('resize-window', (e, width, height) => {
   if (mainWindow) {
-    // O minimo SEMPRE acompanha o estado (640/900 x 566) — a janela não
-    // pode ficar menor do que é hoje, mesmo que o usuário estique.
+    // The minimum ALWAYS follows the state (640/900 x 566) — the window cannot
+    // be smaller than it is today, even if the user stretches it.
     windowStateSize = { width, height };
     mainWindow.setMinimumSize(width, height)
-    // Dentro do fullscreen não mexe no tamanho; o minimo vale e o tamanho
-    // do estado é resolvido ao sair (listener de leave-full-screen).
+    // Inside fullscreen the size is not touched; the minimum applies and the state
+    // size is resolved on exit (leave-full-screen listener).
     if (!mainWindow.isFullScreen()) mainWindow.setSize(width, height)
   }
 });
@@ -326,8 +333,8 @@ ipcMain.handle('select-output-dir', async () => {
   return r.canceled ? null : r.filePaths[0];
 });
 
-// v1.8.0 — projeto: diálogo "Salvar como" (padrão: pasta da mídia +
-// nome do arquivo de mídia como nome do projeto).
+// v1.8.0 — project: "Save as" dialog (default: media folder +
+// media file name as the project name).
 ipcMain.handle('select-project-save-path', async (e, opts) => {
   const defaultDir = opts?.defaultDir && fs.existsSync(opts.defaultDir) ? opts.defaultDir : undefined;
   const defaultName = String(opts?.defaultName || 'projeto').replace(/[\\/:*?"<>|]/g, '_');
@@ -342,8 +349,8 @@ ipcMain.handle('select-project-save-path', async (e, opts) => {
   return filePath;
 });
 
-// v1.8.0 — projeto: diálogo "Abrir" + leitura/parse do JSON e checagem da mídia
-// (se o arquivo foi movido/renomeado, o renderer avisa e reabre sem a mídia).
+// v1.8.0 — project: "Open" dialog + JSON read/parse and media check
+// (if the file was moved/renamed, the renderer warns and reopens without the media).
 ipcMain.handle('open-project', async () => {
   const r = await dialog.showOpenDialog(mainWindow, {
     title: 'Abrir projeto',
@@ -558,7 +565,7 @@ function parseJsonAndResolve(jsonFile, code, cudaDetected, resolve) {
     console.log(`[whisper-cli] word-level SRT written: ${words.length} words → ${srtFile}`);
 
     mainWindow?.webContents.send('whisper-cli-done', true);
-    // Idioma detectado pelo whisper (result.language do JSON -ojf)
+    // Language detected by whisper (result.language of the -ojf JSON)
     const detectedLanguage = jsonData.result?.language || null;
     resolve({ success: true, cuda: cudaDetected, code, detectedLanguage });
   } catch (err) {
@@ -607,9 +614,9 @@ ipcMain.handle('run-whisper-cli', async (event, { audioFile, model, output, lang
     console.log('[whisper-cli] WAV conversion done');
   }
 
-  // Idioma de saida da legenda (Settings > Saida): 'auto' (padrao) detecta o
-  // idioma falado; 'en' traduz qualquer audio para ingles (-tr so traduz PARA
-  // ingles); demais codigos forcam o idioma falado.
+  // Subtitle output language (Settings > Output): 'auto' (default) detects the
+  // spoken language; 'en' translates any audio to English (-tr only translates TO
+  // English); other codes force the spoken language.
   const whisperLang = language || readConfig().subtitle_language || 'auto';
   const langArgs = whisperLang === 'en' ? ['-l', 'auto', '-tr'] : ['-l', whisperLang];
 
@@ -776,6 +783,23 @@ ipcMain.handle('run-ffmpeg-analysis', async (event, args) => {
   });
 });
 
+// Duration of a media file in seconds (0 = unknown). The video export uses it
+// for the lavfi background length and the progress base: the old subtitle-end
+// / 3600 guess made the black canvas outlive the cut audio and -shortest let
+// seconds of black+silence slip into the end of the mp4.
+ipcMain.handle('get-media-duration', async (event, filePath) => {
+  const ffprobePath = getFfprobePath();
+  if (!fs.existsSync(ffprobePath)) return 0;
+  const cmd = `"${ffprobePath}" -v error -show_entries format=duration -of csv=p=0 "${filePath}"`;
+  return new Promise((resolve) => {
+    exec(cmd, { env: { ...process.env } }, (err, stdout) => {
+      if (err) return resolve(0);
+      const dur = parseFloat(String(stdout).trim());
+      resolve(Number.isFinite(dur) && dur > 0 ? dur : 0);
+    });
+  });
+});
+
 ipcMain.handle('run-ffmpeg', async (event, args, cwd) => {
   const ffmpegPath = getFfmpegPath();
   if (!fs.existsSync(ffmpegPath)) return { success: false, error: 'FFmpeg não encontrado' };
@@ -801,9 +825,9 @@ ipcMain.handle('run-ffmpeg', async (event, args, cwd) => {
 
     const proc = exec(cmd, execOpts);
 
-    // Guarda o rabo do stderr: sem ele o usuário só via "código X" e o
-    // console não mostrava POR QUE o ffmpeg morreu (era o famoso caso do
-    // afftdn nf fora de faixa, invisível aqui).
+    // Keeps the tail of stderr: without it the user only saw "code X" and the
+    // console did not show WHY ffmpeg died (it was the famous case of
+    // afftdn nf out of range, invisible here).
     let stderrTail = '';
 
     proc.stdout?.on('data', (d) => {
@@ -1026,16 +1050,16 @@ ipcMain.handle('download-cuda', async () => {
   }
 });
 
-// Status do modelo neural: instalado + path absoluto pro -af (o escaping do
-// path acontece no renderer, em escFilterPath, antes de montar a cadeia).
+// Status of the neural model: installed + absolute path for the -af (the path
+// escaping happens in the renderer, in escFilterPath, before building the chain).
 ipcMain.handle('get-rnnoise-status', () => {
   const modelPath = path.join(getRnnoiseDir(), RNNOISE_MODEL_FILE);
   return { installed: fs.existsSync(modelPath), path: modelPath, url: RNNOISE_MODEL_URL };
 });
 
-// Download do modelo (.rnnn, ~300 KB) — mesmo fluxo do download-cuda: fetch
-// segue os redirects sozinho, progresso por evento, arquivo .downloading
-// renomeado só no fim (nunca deixa modelo pela metade no lugar).
+// Model download (.rnnn, ~300 KB) — same flow as download-cuda: fetch
+// follows the redirects itself, progress per event, the .downloading file
+// renamed only at the end (never leaves a half-finished model in place).
 ipcMain.handle('download-rnnoise-model', async () => {
   const dir = getRnnoiseDir();
   const modelPath = path.join(dir, RNNOISE_MODEL_FILE);
@@ -1064,7 +1088,7 @@ ipcMain.handle('download-rnnoise-model', async () => {
     return { success: true };
   } catch (err) {
     console.error('[rnnoise] download error:', err);
-    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* limpeza */ }
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* cleanup */ }
     return {
       success: false,
       code: rnnoiseNetCode(err),

@@ -1,8 +1,8 @@
 import { useLang } from '../lib/i18n'
 
-// Modal ATALHOS DO TECLADO — botão da barra lateral esquerda (sempre o
-// último). Lista tudo que o App realmente escuta: Ctrl+*, espaço/setas,
-// I/O/Delete (marcas do export) e o F11 da tela cheia (main do Electron).
+// KEYBOARD SHORTCUTS modal — button on the left sidebar (always the
+// last one). Lists everything the App actually listens to: Ctrl+*, space/arrows,
+// I/O/Delete (export markers) and F11 for fullscreen (Electron main).
 function ShortcutsModal({ onClose }) {
   const { t } = useLang()
   const list = [

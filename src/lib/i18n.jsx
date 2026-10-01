@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { DICTS, DEFAULT_LANG, normalizeLang, checkLangParity } from '../global_config/languages'
 
-// No dev, avisa se os idiomas estiverem com chaves desalinhadas.!!!
+// In dev, warn if the languages have misaligned keys.!!!
 if (import.meta.env && import.meta.env.DEV) checkLangParity()
   
 function translate(dict, lang, key, vars) {
