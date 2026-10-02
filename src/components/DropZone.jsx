@@ -116,7 +116,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
   }
 
   return (
-    <div className="flex-1 p-4 flex flex-col min-h-0">
+    <div className="flex-1 p-4 flex flex-col min-h-0 overflow-hidden">
       <div
         onClick={!selectedFile ? handleClick : undefined}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
@@ -126,7 +126,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
           isDragOver
             ? 'drag-over'
             : selectedFile
-              ? 'border-green-600 bg-green-50'
+              ? `border-green-600 ${isVideo ? 'bg-black' : 'bg-green-50'}`
               : 'border-retro-black bg-retro-bg hover:bg-green-50'
         }`}
       >

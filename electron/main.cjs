@@ -302,8 +302,9 @@ ipcMain.handle('toggle-fullscreen', () => {
 
 ipcMain.handle('resize-window', (e, width, height) => {
   if (mainWindow) {
-    // The minimum ALWAYS follows the state (700/960 x 566) — the window cannot
-    // be smaller than it is today, even if the user stretches it.
+    // The minimum ALWAYS follows the state (700/960 x 566, +120 height
+    // while the ducking music row is on) — the window cannot be smaller
+    // than it is today, even if the user stretches it.
     windowStateSize = { width, height };
     mainWindow.setMinimumSize(width, height)
     // Inside fullscreen the size is not touched; the minimum applies and the state

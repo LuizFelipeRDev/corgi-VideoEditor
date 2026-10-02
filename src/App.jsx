@@ -19,13 +19,16 @@ import RecentProjectsModal from './components/RecentProjectsModal'
 import SoundConfigModal from './components/SoundConfigModal'
 import CutConfigModal from './components/CutConfigModal'
 import Waveform from './components/Waveform'
+import { DB_MIN, DB_MAX } from './components/DbGutter'
+import DuckingModal from './components/DuckingModal'
 import { generateAssContent, groupWordsIntoSegments, parsePremiereXml, remapSubtitleTimestamps, ensureExportFontLoaded } from './lib/subtitleRender'
 import { buildSoundChain, mergeSoundConfig, DEFAULT_SOUND_CONFIG, findPreset } from './lib/soundChain'
 import { parseRecents, touchRecent, evictRecent } from './lib/recentProjects'
 import { validateExportRange, shiftSubtitlesForRange } from './lib/exportRange'
 import { replaceInSubtitles } from './lib/wordReplace'
 import realtimeChain from './lib/realtimeChain'
-import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT } from './global_config/window'
+import musicPreview, { LOOP_SEAM_MS, MUSIC_FADE_SEC } from './lib/musicPreview'
+import { WINDOW_SUBTITLES_WIDTH, WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT, WINDOW_DUCKING_EXTRA_HEIGHT } from './global_config/window'
 import { SUBTITLE_DISPLAY_DEFAULTS } from './global_config/subtitleConfig'
 import { useLang } from './lib/i18n'
 import { LANGS } from './global_config/languages'
@@ -84,6 +87,29 @@ function App() {
   const [showAnalyze, setShowAnalyze] = useState(false)
   const [showRnnoise, setShowRnnoise] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false) // shortcuts modal (sidebar)
+  // --- Background music (ducking) — phase 1 ---------------------------------
+  // duckingEnabled: 2nd track visible (System tab checkbox OR sidebar button
+  // with confirmation). musicFile: { path, name } of the background audio.
+  const [showDuckingConfirm, setShowDuckingConfirm] = useState(false)
+  const [showDucking, setShowDucking] = useState(false)
+  const [duckingEnabled, setDuckingEnabled] = useState(false)
+  const [musicFile, setMusicFile] = useState(null)
+  // dB sliders for the tracks (wireframe 1.11.0): VOICE already counts (trim on
+  // the realtimeChain preview + post-chain volume= on export); MUSIC stores the
+  // value from now on — the mix effect arrives in phases 2/3 (duck + sidechain).
+  const [voiceDb, setVoiceDb] = useState(0)
+  const [musicDb, setMusicDb] = useState(0)
+  // Final fade (ducking): the BED alone falls to silence over the last
+  // MUSIC_FADE_SEC of the export — opt-in per project (checkbox on the music
+  // track), applied on both the preview (musicPreview) and the export (afade).
+  const [fadeOut, setFadeOut] = useState(false)
+  // Timeline length (from the Waveform's decoded media) — the preview's final
+  // fade measures against it
+  const [mediaDuration, setMediaDuration] = useState(0)
+  // Debounced persistence of the sliders: dragging fires a save per frame;
+  // pending accumulates both keys and the trailing timer writes the LAST value.
+  const dbPendingRef = useRef({})
+  const dbSaveTimerRef = useRef(null)
   // "OPEN" modal (recent projects): the list comes from config when opening
   const [showRecent, setShowRecent] = useState(false)
   const [recentProjects, setRecentProjects] = useState([])
@@ -160,6 +186,12 @@ function App() {
   // off => export falls back to the legacy 10px and the preview to maxWidth 85/90%.
   const hMarginPct = autoLineWrap ? subtitleHMargin : 0
 
+  // Converts a config string/number to dB clamped to the gutter's range
+  const parseDb = (v) => {
+    const n = Number(v)
+    return Number.isFinite(n) ? Math.min(DB_MAX, Math.max(DB_MIN, Math.round(n))) : 0
+  }
+
   // Applies config.ini (GLOBAL settings) to state — used on boot and by
   // NEW PROJECT, which needs to undo what an open project overwrote.
   const applyConfig = (c) => {
@@ -189,6 +221,15 @@ function App() {
     const hMargin = Number(c.subtitle_h_margin)
     setSubtitleHMargin(Number.isFinite(hMargin) ? Math.min(20, Math.max(0, hMargin)) : 0.5)
     setAdvancedTools(c.advanced_tools !== 'false')
+    setDuckingEnabled(c.ducking_enabled === 'true')
+    // The bed is NEVER restored on boot: a path left behind in config.ini by a
+    // previous session would silently re-attach a music the user didn't pick
+    // now. Opening the app is always clean; an explicit "OPEN PROJECT" still
+    // brings its own musicPath back (that one lives in the project file).
+    setMusicFile(null)
+    setVoiceDb(parseDb(c.voice_db))
+    setMusicDb(parseDb(c.ducking_music_db))
+    setFadeOut(c.ducking_fade_out === 'true')
     try { setSubtitleConfigs(JSON.parse(c.subtitle_configs || '{}')) } catch { setSubtitleConfigs({}) }
     setFavoriteFonts(String(c.favorite_fonts || '').split(',').map((id) => id.trim()).filter(Boolean))
     try { setSoundConfig(mergeSoundConfig(JSON.parse(c.sound_config || 'null'))) } catch { setSoundConfig(mergeSoundConfig(null)) }
@@ -341,13 +382,17 @@ function App() {
     })
   }, [])
 
+  // Window state size: width follows the subtitles panel, height follows
+  // the ducking track row. Activating ducking GROWS the window by
+  // WINDOW_DUCKING_EXTRA_HEIGHT (the music row's natural height) so the
+  // preview/controls row above keeps exactly its original height — never
+  // compressed; the extra space belongs to the soundwave. The main process
+  // mirrors the same size as the window's minimum.
   useEffect(() => {
-    if (subtitlesEnabled) {
-      window.api.resizeWindow(WINDOW_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT)
-    } else {
-      window.api.resizeWindow(WINDOW_NO_SUBTITLES_WIDTH, WINDOW_DEFAULT_HEIGHT)
-    }
-  }, [subtitlesEnabled])
+    const width = subtitlesEnabled ? WINDOW_SUBTITLES_WIDTH : WINDOW_NO_SUBTITLES_WIDTH
+    const height = WINDOW_DEFAULT_HEIGHT + (duckingEnabled ? WINDOW_DUCKING_EXTRA_HEIGHT : 0)
+    window.api.resizeWindow(width, height)
+  }, [subtitlesEnabled, duckingEnabled])
 
   // --- v1.8.0: preview in REAL TIME ("instant A/B") -------------------------
   // The 🎤 chain runs in Web Audio INSIDE the wavesurfer AudioContext
@@ -367,6 +412,31 @@ function App() {
     realtimeChain.setConfig(realtimeCfg)
     realtimeChain.setBypass(!realtimeActive)
   }, [realtimeCfg, realtimeActive])
+
+  // Voice dB slider: trim on the preview graph, outside the dry/wet split —
+  // counts on both A/B sides and with 🎤 on or off (track volume). Stores on
+  // the chain even without a player (attach applies it on the new ctx).
+  useEffect(() => {
+    realtimeChain.setTrim(voiceDb)
+  }, [voiceDb])
+
+  // Music preview (ducking phase 2): mirrors the ducking settings into the
+  // singleton — on/off, file, bed level (live dB), the timeline offset
+  // (a marked range collapses the export timeline while the preview plays on
+  // the file's, so the bed is shifted to match — validate = same condition
+  // the export uses for hasRange), the final fade switch and the timeline
+  // length the fade measures against.
+  useEffect(() => {
+    const offset = validateExportRange(exportRange) === 'ok' ? exportRange.start : 0
+    musicPreview.configure({
+      enabled: duckingEnabled,
+      file: musicFile,
+      db: musicDb,
+      offset,
+      fade: fadeOut,
+      total: mediaDuration,
+    })
+  }, [duckingEnabled, musicFile, musicDb, exportRange, fadeOut, mediaDuration])
 
   // Player (WebAudioPlayer) handed over by the Waveform on each creation/destruction
   const handlePlayerCreated = (player) => realtimeChain.attach(player)
@@ -596,6 +666,9 @@ function App() {
     generation: { model: subtitleModel, language: subtitleLanguage, persistence: subtitlePersistence, smart: smartSubtitle },
     edit: { threshold, margin: marginVal, marginAfter, smooth },
     export: { format: outputFormat, resolution: outputResolution },
+    ducking: { enabled: duckingEnabled, musicPath: musicFile?.path || null, musicDb, fadeOut },
+    // Volume da faixa de voz (dB) — fora do ducking por ser de uso geral
+    audio: { voiceDb },
   })
 
   // [💾]: first time opens "Save as" (media folder + its name);
@@ -710,6 +783,18 @@ function App() {
     const x = d.export || {}
     if (typeof x.format === 'string') setOutputFormat(x.format)
     if (typeof x.resolution === 'string') setOutputResolution(x.resolution)
+
+    // ducking section only when present (a pre-ducking project keeps whatever
+    // the globals' applyConfig already loaded).
+    if (d.ducking && typeof d.ducking === 'object') {
+      if (typeof d.ducking.enabled === 'boolean') setDuckingEnabled(d.ducking.enabled)
+      const mp = d.ducking.musicPath
+      setMusicFile(mp ? { path: mp, name: mp.split(/[/\\]/).pop() } : null)
+      if (typeof d.ducking.musicDb === 'number') setMusicDb(parseDb(d.ducking.musicDb))
+      if (typeof d.ducking.fadeOut === 'boolean') setFadeOut(d.ducking.fadeOut)
+    }
+    // Voice volume (dB) — new section; an old project keeps the global one
+    if (d.audio && typeof d.audio.voiceDb === 'number') setVoiceDb(parseDb(d.audio.voiceDb))
 
     setProjectFilePath(r.path)
     setAbMode(null)
@@ -848,6 +933,87 @@ function App() {
       ? buildSoundChain(soundConfig, { rnnoiseModel: rnnoiseStatus?.installed ? rnnoiseStatus.path : null })
       : ''
     if (soundChain) console.log('[export] som avançado (🎤 ligado):', soundChain)
+
+    // VOICE track gain (dB slider): applied AFTER the chain (post-loudnorm/AGC
+    // — before, AGC would cancel the adjustment). A boost (+dB) gets a safety
+    // limiter, because the chain's alimiter, when it exists, sat before.
+    // Never touches the music (advanced sound never touches it).
+    const afParts = []
+    if (soundChain) afParts.push(soundChain)
+    if (voiceDb !== 0) {
+      afParts.push(`volume=${voiceDb}dB`)
+      if (voiceDb > 0) afParts.push('alimiter=limit=0.95')
+    }
+    const afFilter = afParts.join(',')
+
+    // Background music (ducking — export): ffmpeg gets the music as a SECOND
+    // input and it NEVER goes through the sound chain (isolated track, the
+    // agreed design): it only gets its own dB, and sidechaincompress lets the
+    // VOICE duck the music; amix joins both and a safety limiter sits
+    // post-mix. A shorter bed covers the whole export (acrossfade-chained
+    // copies with a clean seam, or -stream_loop -1 as fallback); longer ones
+    // are cut by amix duration=first).
+    const duckMix = duckingEnabled && !!musicFile?.path
+    // Loop seam (phase A): the bed's duration and how many fresh copies of
+    // the file the acrossfade chain needs (1 = plain -stream_loop fallback).
+    // Both are resolved further down, once workDuration (the output length)
+    // is known.
+    let musicDur = 0
+    let musicCopies = 1
+    // The mix graph: the voice (plain pass-through when there's no chain)
+    // fans out via asplit — one copy drives sidechaincompress over the music
+    // bed, the other joins the ducked bed through amix.
+    const duckGraph = (voiceIdx, musicIdx) => {
+      const head = afFilter
+        ? `[${voiceIdx}:a]${afFilter}[voice];[voice]asplit=2[v1][v2]`
+        : `[${voiceIdx}:a]asplit=2[v1][v2]`
+      // Bed branch: N fresh copies of the file joined by acrossfade — a true
+      // crossfade at every seam (proven offline: baseline-level jumps at the
+      // seams vs 15x on the hard -stream_loop splice) — or the single looped
+      // input when musicCopies = 1 (no wrap, probe failed, degenerate case).
+      // Final fade (checkbox on the music track): the BED alone ramps to silence
+      // over the last MUSIC_FADE_SEC of the output — the voice keeps its level.
+      // The preview does the same on its own outGain, so they match.
+      // Anchored on workDuration (the PROBED real audio length of the export):
+      // `duration` in this scope is only a subtitle-based guess (last cue or
+      // 3600) and would start the fade before the file really ends.
+      const outLen = Math.max(0, workDuration)
+      const tailFade =
+        fadeOut && outLen > 0
+          ? `,afade=t=out:st=${Math.max(0, outLen - MUSIC_FADE_SEC).toFixed(3)}:d=${MUSIC_FADE_SEC}`
+          : ''
+      let music
+      if (musicCopies > 1) {
+        const seam = Math.min(LOOP_SEAM_MS / 1000, musicDur / 4)
+        const parts = []
+        let prev = `[${musicIdx}:a]`
+        for (let k = 1; k < musicCopies; k++) {
+          const out = k === musicCopies - 1 ? 'mloop' : `xf${k}`
+          parts.push(`${prev}[${musicIdx + k}:a]acrossfade=d=${seam.toFixed(3)}[${out}]`)
+          prev = `[${out}]`
+        }
+        music = `${parts.join(';')};[mloop]volume=${musicDb}dB${tailFade}[mus]`
+      } else {
+        music = `[${musicIdx}:a]volume=${musicDb}dB${tailFade}[mus]`
+      }
+      return (
+        `${head};` +
+        `${music};` +
+        '[mus][v2]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=500[duck];' +
+        '[v1][duck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mixed];' +
+        '[mixed]alimiter=limit=0.95[out]'
+      )
+    }
+    // Music inputs: one per acrossfade copy (each -i reopens the file from
+    // its own zero, so no boundary math between copies is needed), else the
+    // infinite loop that fed the old single-input graph.
+    const pushMusicInputs = (args) => {
+      if (musicCopies > 1) {
+        for (let k = 0; k < musicCopies; k++) args.push('-i', musicFile.path)
+      } else {
+        args.push('-stream_loop', '-1', '-i', musicFile.path)
+      }
+    }
 
     const base = selectedFile.name.replace(/\.[^.]+$/, '')
     const inputExt = selectedFile.name.split('.').pop().toLowerCase()
@@ -998,6 +1164,22 @@ function App() {
       // left seconds of black+silence past the audio (mp4 silent tail).
       const workDuration = (await window.api.getMediaDuration(exportAudioPath)) || duration
       videoDurationRef.current = Math.min(duration, workDuration)
+      // Loop seam (phase A): resolve the copy count once the output length is
+      // known. Chain length = n*D - (n-1)*seam, so n >= (workDuration - seam)
+      // / (D - seam), plus one copy of margin for a decoder that stops a few
+      // ms short of the probed duration. Anything degenerate (no probe, bed
+      // longer than the output, absurd copy count) keeps musicCopies = 1 and
+      // falls back to the plain -stream_loop path.
+      if (duckMix) {
+        musicDur = (await window.api.getMediaDuration(musicFile.path)) || 0
+        if (musicDur > 0 && musicDur < workDuration) {
+          const seam = Math.min(LOOP_SEAM_MS / 1000, musicDur / 4)
+          musicCopies = Math.ceil((workDuration - seam) / (musicDur - seam)) + 1
+          if (!Number.isFinite(musicCopies) || musicCopies < 2 || musicCopies > 80) {
+            musicCopies = 1
+          }
+        }
+      }
 
       if (needsVideo) {
         let ffmpegArgs
@@ -1099,8 +1281,25 @@ function App() {
         } else {
           ffmpegArgs.push('-c:v', 'libx264', '-c:a', 'aac')
         }
-        // Sound processing (v1.7.0): same chain heard in the preview
-        if (soundChain) ffmpegArgs.push('-af', soundChain)
+        if (duckMix) {
+          // Ducking mix: music as 2nd input → filter_complex. -map keeps the
+          // video (stream 0, the lavfi color when it exists), the mixed audio
+          // and the input's subtitles, like the default selection did.
+          const voiceIdx = isVideoInput ? 0 : 1 // lavfi color sits at 0
+          const musicIdx = voiceIdx + 1
+          pushMusicInputs(ffmpegArgs)
+          ffmpegArgs.push(
+            '-filter_complex',
+            duckGraph(voiceIdx, musicIdx),
+            '-map', '0:v',
+            '-map', '[out]',
+            '-map', `${voiceIdx}:s?`
+          )
+        } else if (afFilter) {
+          // Sound processing (v1.7.0): same chain heard in the preview + the
+          // post-chain voice gain
+          ffmpegArgs.push('-af', afFilter)
+        }
         ffmpegArgs.push('-shortest', outPath)
         const ffmpegResult = await window.api.runFfmpeg(ffmpegArgs, outputDir)
         if (!ffmpegResult.success) {
@@ -1113,10 +1312,19 @@ function App() {
         // Audio output: drops the video track and uses the chosen format's
         // codec (the old fixed '-c:a aac' was rejected by mp3/wav/flac/ogg).
         const audioCodecs = { mp3: 'libmp3lame', wav: 'pcm_s16le', flac: 'flac', ogg: 'libvorbis', aac: 'aac', m4a: 'aac' }
-        const ffmpegArgs = ['-y', '-i', exportAudioPath, '-vn']
-        if (soundChain) {
-          // Advanced sound on: -af requires re-encode (impossible with 'copy')
-          ffmpegArgs.push('-af', soundChain)
+        const ffmpegArgs = ['-y', '-i', exportAudioPath]
+        if (duckMix) pushMusicInputs(ffmpegArgs)
+        ffmpegArgs.push('-vn')
+        if (afFilter || duckMix) {
+          // Advanced sound chain and/or voice gain and/or the ducking mix:
+          // any filter requires re-encode (impossible with 'copy')
+          if (duckMix) {
+            // Ducking mix (same graph as the video branch, voice at input 0)
+            ffmpegArgs.push('-filter_complex', duckGraph(0, 1), '-map', '[out]')
+          } else if (afFilter) {
+            // -af path: chain + voice gain only
+            ffmpegArgs.push('-af', afFilter)
+          }
           ffmpegArgs.push('-c:a', audioCodecs[outputFormat] || 'aac')
         } else {
           // Same format as the input: cuts without re-encoding (zero loss)
@@ -1403,6 +1611,13 @@ function App() {
       if (Number.isFinite(hm)) setSubtitleHMargin(Math.min(20, Math.max(0, hm)))
     }
     if (newConfig.advanced_tools !== undefined) setAdvancedTools(newConfig.advanced_tools === true || newConfig.advanced_tools === 'true')
+    if (newConfig.ducking_enabled !== undefined) setDuckingEnabled(newConfig.ducking_enabled === true || newConfig.ducking_enabled === 'true')
+    if (newConfig.ducking_music !== undefined) {
+      setMusicFile(newConfig.ducking_music ? { path: newConfig.ducking_music, name: String(newConfig.ducking_music).split(/[/\\]/).pop() } : null)
+    }
+    if (newConfig.voice_db !== undefined) setVoiceDb(parseDb(newConfig.voice_db))
+    if (newConfig.ducking_music_db !== undefined) setMusicDb(parseDb(newConfig.ducking_music_db))
+    if (newConfig.ducking_fade_out !== undefined) setFadeOut(newConfig.ducking_fade_out === true || newConfig.ducking_fade_out === 'true')
     if (newConfig.subtitle_configs !== undefined) setSubtitleConfigs(newConfig.subtitle_configs)
     if (newConfig.sound_config !== undefined) setSoundConfig(newConfig.sound_config)
     if (newConfig.sound_presets !== undefined) setCustomPresets(newConfig.sound_presets)
@@ -1432,6 +1647,13 @@ function App() {
       auto_line_wrap: String(newConfig.auto_line_wrap ?? autoLineWrap),
       subtitle_h_margin: String(newConfig.subtitle_h_margin ?? subtitleHMargin),
       advanced_tools: String(newConfig.advanced_tools ?? advancedTools),
+      ducking_enabled: String(newConfig.ducking_enabled ?? duckingEnabled),
+      // Always empty on purpose: save-config MERGES, so writing '' wipes any stale
+  // path (the bed itself is session-only — see the boot loader above).
+  ducking_music: '',
+      voice_db: String(newConfig.voice_db ?? voiceDb),
+      ducking_music_db: String(newConfig.ducking_music_db ?? musicDb),
+      ducking_fade_out: String(newConfig.ducking_fade_out ?? fadeOut),
       subtitle_configs: JSON.stringify(newConfig.subtitle_configs ?? subtitleConfigs),
       sound_config: JSON.stringify(newConfig.sound_config ?? soundConfig),
       sound_presets: JSON.stringify(newConfig.sound_presets ?? customPresets),
@@ -1450,9 +1672,61 @@ function App() {
     if (wantImmediate && cutEnabled) generateCutPreview()
   }
 
+  // Background music (phase 1): native dialog (or path from the track's drag
+  // & drop) → handleSaveSettings writes ducking_music to config.ini and rebuilds
+  // {path,name}. Remove sends an empty string (the setter becomes null).
+  const handlePickMusic = async (explicitPath) => {
+    let path = explicitPath
+    if (!path) {
+      path = await window.api.selectFile()
+      if (!path) return
+    }
+    await handleSaveSettings({ ducking_music: path })
+  }
+
+  const handleRemoveMusic = async () => {
+    await handleSaveSettings({ ducking_music: '' })
+  }
+
+  // dB sliders (DbGutter): state right away, DEBOUNCED write — the drag fires
+  // a save per frame; pending accumulates the keys and the trailing timer
+  // writes only the final value (avoids interleaved/staggered saves).
+  const saveDbSliders = (patch) => {
+    Object.assign(dbPendingRef.current, patch)
+    clearTimeout(dbSaveTimerRef.current)
+    dbSaveTimerRef.current = setTimeout(async () => {
+      const pending = dbPendingRef.current
+      dbPendingRef.current = {}
+      await handleSaveSettings(pending)
+    }, 500)
+  }
+  const handleVoiceDbChange = (v) => {
+    setVoiceDb(v)
+    saveDbSliders({ voice_db: v })
+  }
+  const handleMusicDbChange = (v) => {
+    setMusicDb(v)
+    saveDbSliders({ ducking_music_db: v })
+  }
+  // Final fade switch (checkbox on the music track): same debounced config
+  // write as the dB gutters — it travels to the next export/preview at once.
+  const handleFadeOutChange = (v) => {
+    setFadeOut(v)
+    saveDbSliders({ ducking_fade_out: String(v) })
+  }
+
   // Click on the sidebar buttons. ANALYZE needs a loaded file;
-  // RNNOISE and config settings always open.
+  // RNNOISE and config settings always open. DUCKING: off asks for
+  // activation (confirmation modal → music picker), on opens the modal.
   const handleSidebarSelect = (id) => {
+    if (id === 'ducking') {
+      if (!duckingEnabled) {
+        setShowDuckingConfirm(true)
+        return
+      }
+      setShowDucking(true)
+      return
+    }
     if (id === 'rnnoise') {
       setShowRnnoise(true)
       return
@@ -1712,6 +1986,11 @@ function App() {
               onToggleCut={handleToggleCut}
             />
           </div>
+          {/* Waveforms panel: NATURAL height, shrink-0 (original v1.10.x
+              layout — the preview/controls row above takes the whole
+              leftover). With ducking on, App grows the window by the music
+              row's height, so this content grows WITHOUT touching the row
+              above (wireframe 1.11.0: the window grows proportionally). */}
           <div className="px-4 pb-2 shrink-0">
             <Waveform
               selectedFile={previewFile}
@@ -1730,6 +2009,18 @@ function App() {
               exportRange={cutEnabled ? null : exportRange}
               selectedMarker={selectedMarker}
               onSelectMarker={setSelectedMarker}
+              duckingEnabled={duckingEnabled}
+              musicFile={musicFile}
+              musicDb={musicDb}
+              onMusicDbChange={handleMusicDbChange}
+              onPickMusic={handlePickMusic}
+              onRemoveMusic={handleRemoveMusic}
+              fadeOut={fadeOut}
+              onFadeOutChange={handleFadeOutChange}
+              onDurationChange={setMediaDuration}
+              voiceDb={voiceDb}
+              onVoiceDbChange={handleVoiceDbChange}
+              trackDisabled={processing || generatingSubtitles}
             />
           </div>
         </div>
@@ -1799,6 +2090,7 @@ function App() {
           positionPercent={positionPercent}
           cudaInstalled={cudaInstalled}
           advancedTools={advancedTools}
+          duckingEnabled={duckingEnabled}
           rnnoiseInstalled={!!rnnoiseStatus?.installed}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
@@ -1822,6 +2114,14 @@ function App() {
         />
       )}
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {showDucking && (
+        <DuckingModal
+          musicFile={musicFile}
+          onPick={() => handlePickMusic()}
+          onRemove={handleRemoveMusic}
+          onClose={() => setShowDucking(false)}
+        />
+      )}
       {showRecent && (
         <RecentProjectsModal
           projects={recentProjects}
@@ -1897,6 +2197,21 @@ function App() {
             doNewProject()
           }}
           onCancel={() => setConfirmNewOpen(false)}
+        />
+      )}
+      {showDuckingConfirm && (
+        <ConfirmModal
+          title={t('ducking.confirmTitle')}
+          message={t('ducking.confirmAsk')}
+          primaryLabel={t('ducking.enable')}
+          cancelLabel={t('ducking.cancel')}
+          onPrimary={() => {
+            setShowDuckingConfirm(false)
+            // Enables the 2nd track and goes straight to the music picker (as agreed).
+            handleSaveSettings({ ducking_enabled: true })
+            handlePickMusic()
+          }}
+          onCancel={() => setShowDuckingConfirm(false)}
         />
       )}
       {showExportToast && (

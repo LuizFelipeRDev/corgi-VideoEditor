@@ -6,6 +6,7 @@ import ReplaceWordModal from './ReplaceWordModal'
 import { countInSubtitles } from '../lib/wordReplace'
 import { useLang } from '../lib/i18n'
 
+//Painel onde usuario pode visualizar legendas geradas,editar,exlcuir salvar e ate adicionar novo bloco
 function SubtitlesPanel({
   subtitles,
   onGenerate,

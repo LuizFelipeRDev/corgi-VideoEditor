@@ -22,6 +22,7 @@
 // window) per channel — wavesurfer redraws the peaks without touching the player.
 
 import approxWorkletSrc from './approx.processor.js?raw'
+import musicPreview from './musicPreview'
 
 const WORKLET = 'corgi-approx'
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
@@ -56,6 +57,10 @@ const chain = {
   nodes: null,
   cfg: null,
   bypassed: true,
+  // VOICE track gain (gutter dB slider) — applied BEFORE the dry/wet split:
+  // counts on both A/B sides and with 🎤 on/off (it's track volume, not an
+  // effect). Same clamp as DbGutter (-40..+10).
+  trimDb: 0,
   workletForCtx: null,
   workletPromise: null,
   workletOk: false,
@@ -239,6 +244,8 @@ const apply = () => {
   const active = !chain.bypassed
   setParam(n.dry.gain, active ? 0 : 1, n.ctx, 0.015)
   setParam(n.wet.gain, active ? 1 : 0, n.ctx, 0.015)
+  // Trim da faixa de voz: fora do crossfade A/B — sempre segue o slider
+  if (n.trim) setParam(n.trim.gain, dbToLin(chain.trimDb), n.ctx, 0.02)
   try {
     n.player.playbackRate = active ? speedOf(chain.cfg) : 1
   } catch {
@@ -380,6 +387,12 @@ const realtimeChain = {
     const ctx = tap.context
     chain.player = player
     chain.nodes = null
+    // Voice-track dB trim in the same ctx — born with the stored value
+    const trim = ctx.createGain()
+    trim.gain.value = dbToLin(chain.trimDb)
+    // Ducking preview: the music engine reads the VOICE level from this trim
+    // (pre A/B — speech is tracked even with the mic bypassed).
+    musicPreview.tapVoice(trim)
     ensureWorklet(ctx).then((ok) => {
       if (chain.player !== player) return // player changed while waiting
       const nodes = build(ctx, ok)
@@ -389,11 +402,13 @@ const realtimeChain = {
       } catch {
         // no old connections — ok
       }
-      tap.connect(nodes.dry)
+      // tap → trim → {dry, entry}: the trim sits OUTSIDE the A/B crossfade
+      tap.connect(trim)
+      trim.connect(nodes.dry)
       nodes.dry.connect(ctx.destination)
-      tap.connect(nodes.entry)
+      trim.connect(nodes.entry)
       nodes.wet.connect(ctx.destination)
-      chain.nodes = { ...nodes, tap, player }
+      chain.nodes = { ...nodes, tap, trim, player }
       apply()
     })
   },
@@ -406,6 +421,15 @@ const realtimeChain = {
   setBypass(b) {
     chain.bypassed = !!b
     apply()
+  },
+
+  // Voice-track dB slider (DbGutter): always stores (even without a
+  // player); ramps in place when the graph is up. Range -40..+10.
+  setTrim(db) {
+    const n = Number(db)
+    chain.trimDb = Number.isFinite(n) ? clamp(n, -40, 10) : 0
+    const nodes = chain.nodes
+    if (nodes && nodes.trim) setParam(nodes.trim.gain, dbToLin(chain.trimDb), nodes.ctx, 0.02)
   },
 
   // Envelope (max/window per channel) of the TREATED audio — to redraw the

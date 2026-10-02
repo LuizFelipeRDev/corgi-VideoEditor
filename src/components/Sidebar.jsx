@@ -1,4 +1,4 @@
-import { IconStethoscope, IconBrain, IconKeyboard } from '@tabler/icons-react'
+import { IconStethoscope, IconBrain, IconKeyboard, IconMusic } from '@tabler/icons-react'
 import { useLang } from '../lib/i18n'
 
 // Vertical sidebar (left side, under the TitleBar). Hosts the backlog
@@ -13,6 +13,8 @@ function Sidebar({ onSelect, disabled }) {
   const modules = [
     { id: 'analyze', Icon: IconStethoscope, label: t('sidebar.analyze') },
     { id: 'rnnoise', Icon: IconBrain, label: t('sidebar.rnnoise') },
+    // Ducking: backlog module that arrived (phase 1 — UI/track).
+    { id: 'ducking', Icon: IconMusic, label: t('sidebar.ducking') },
     // SHORTCUTS always goes at the END (push) — it is not a backlog module.
     { id: 'shortcuts', Icon: IconKeyboard, label: t('sidebar.shortcuts') },
   ]

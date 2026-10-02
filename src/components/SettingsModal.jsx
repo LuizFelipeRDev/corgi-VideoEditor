@@ -30,7 +30,7 @@ const WHISPER_MODELS = [
   { id: 'large-v3', name: 'large-v3', label: 'Large v3', size: '2.9 GB', vram: '~10 GB', descKey: 'settings.modelDesc.large-v3' },
 ]
 
-function SettingsModal({ outputFolder, outputFormat, outputResolution, cutImmediate, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, subtitleHMargin, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, cudaInstalled, advancedTools }) {
+function SettingsModal({ outputFolder, outputFormat, outputResolution, cutImmediate, subtitles, subtitleModel, subtitleLanguage, greenScreen, burnSubtitles, selectedFile, wordsPerLine, linesCount, subtitlePersistence, smartSubtitle, autoLineWrap, subtitleHMargin, positionMode, positionPercent, onClose, onSave, onRequestCudaDownload, cudaInstalled, advancedTools, duckingEnabled }) {
   const { lang, setLang, t } = useLang()
   const { theme, setTheme } = useTheme()
   const [tab, setTab] = useState('sistema')
@@ -54,6 +54,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, cutImmedi
   const [localPositionMode, setLocalPositionMode] = useState(positionMode || 'fixed')
   const [localPositionPercent, setLocalPositionPercent] = useState(positionPercent ?? 80)
   const [localAdvancedTools, setLocalAdvancedTools] = useState(advancedTools ?? true)
+  const [localDucking, setLocalDucking] = useState(duckingEnabled ?? false)
 
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [modelInstalled, setModelInstalled] = useState({})
@@ -150,6 +151,7 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, cutImmedi
       auto_line_wrap: localAutoLineWrap,
       subtitle_h_margin: localHMargin,
       advanced_tools: localAdvancedTools,
+      ducking_enabled: localDucking,
       subtitle_position_mode: localPositionMode,
       subtitle_position_percent: localPositionPercent,
     })
@@ -833,6 +835,26 @@ function SettingsModal({ outputFolder, outputFormat, outputResolution, cutImmedi
             </label>
             <p className="font-pixel text-[6px] text-retro-black/50 mt-1">
               {t('settings.advancedToolsHint')}
+            </p>
+          </div>
+
+          <div className="mt-5">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localDucking}
+                onChange={(e) => setLocalDucking(e.target.checked)}
+                className="w-4 h-4 accent-retro-black"
+              />
+              <span className="font-pixel text-[7px] text-retro-black uppercase">
+                {t('settings.ducking')}
+              </span>
+              <Tooltip text={t('settings.duckingTooltip')}>
+                <span className="font-pixel text-[7px] text-retro-black/50 cursor-help">[?]</span>
+              </Tooltip>
+            </label>
+            <p className="font-pixel text-[6px] text-retro-black/50 mt-1">
+              {t('settings.duckingHint')}
             </p>
           </div>
         </div>

@@ -215,6 +215,22 @@ html, body, #root { height: 100%; overflow: hidden; user-select: none; }
 .drag-over { background-color: #d4edda !important; border-color: #28a745 !important; }
 .progress-fill { transition: width 0.3s ease; }
 
+/* VERTICAL dB slider of the audio tracks (wireframe 1.11.0) —
+   writing-mode + direction:rtl puts the minimum at the bottom and the
+   maximum at the top (Chromium/Electron >= 122; without it the range
+   stays horizontal). accent-color follows the THEME via --c-ink: black on
+   retro (light background), light ink on modern (#101014 background) — a
+   fixed dark color disappears on modern. */
+input[type='range'].db-range {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 14px;
+  min-height: 0;
+  accent-color: rgb(var(--c-ink));
+  cursor: pointer;
+}
+input[type='range'].db-range:disabled { opacity: 0.35; cursor: not-allowed; }
+
 @keyframes subtitle-bounce {
   0%   { transform: scale(0.95); }
   55%  { transform: scale(1.05); }

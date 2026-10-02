@@ -4,6 +4,9 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js'
 import { useTheme } from '../lib/theme'
 import { useLang } from '../lib/i18n'
 import realtimeChain from '../lib/realtimeChain'
+import musicPreview from '../lib/musicPreview'
+import DbGutter from './DbGutter'
+import MusicTrack from './MusicTrack'
 
 // Rendered audio pixels per second. Keeps the MINIMUM density of
 // ~0.5s per bar (barWidth 2 + barGap 1 = 3px; 3px / 6px-s = 0.5s): files
@@ -57,7 +60,40 @@ const fmtHMS = (s) => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef, processing, generatingSubtitles, playRequest, onPlayer, shapeCfg, exportRange, selectedMarker, onSelectMarker }) {
+// Audio panel (wireframe 1.11.0): MAIN box with the SHARED ruler at the top
+// of the voice column + brother box for the music (ducking) right below — both
+// with a dB gutter, same px/s scale, locked scroll and a playhead crossing
+// the tracks (NLE style: Premiere/Vegas/CapCut). The music is only VISUAL at
+// this stage (scale + scroll + chip); the mix (preview duck, export sidechain)
+// arrives in phases 2/3.
+function Waveform({
+  selectedFile,
+  onTimeUpdate,
+  seekTo,
+  videoRef,
+  waveSurferRef,
+  processing,
+  generatingSubtitles,
+  playRequest,
+  onPlayer,
+  shapeCfg,
+  exportRange,
+  selectedMarker,
+  onSelectMarker,
+  onDurationChange,
+  // --- 1.11.0: music track + dB gutters ---
+  duckingEnabled,
+  musicFile,
+  musicDb,
+  onMusicDbChange,
+  onPickMusic,
+  onRemoveMusic,
+  fadeOut,
+  onFadeOutChange,
+  voiceDb,
+  onVoiceDbChange,
+  trackDisabled,
+}) {
   const containerRef = useRef(null)
   const wsRef = useRef(null)
   // Regions plugin (export I/O marks) — created together with the wavesurfer
@@ -73,6 +109,11 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   const [fadingOut, setFadingOut] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
+  // Timeline length up to the App (the music bed's final fade measures against
+  // it). Through refs: the parent setState must not re-fire on every render.
+  const onDurationChangeRef = useRef(onDurationChange)
+  onDurationChangeRef.current = onDurationChange
+  const sentDurRef = useRef(0)
   const [rulerW, setRulerW] = useState(0)
   const [curTime, setCurTime] = useState(0)
   const rulerInnerRef = useRef(null)
@@ -90,6 +131,21 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   const shapeTokenRef = useRef(0) // discards renders of old cfgs
   const shapeTimerRef = useRef(null) // debounce of the offline render
   const shapeDrawnRef = useRef(null) // { ws, key } already drawn (avoids redoing)
+  // --- 1.11.0: audio panel (main box + brother box for the music) ---
+  const panelRef = useRef(null) // panel root (the mouse wheel scrolls the waves)
+  const musicContainerRef = useRef(null) // music waveform area (WaveSurfer #2)
+  const musicWsRef = useRef(null)
+  const voicePlayheadRef = useRef(null) // vertical playhead line on the voice track
+  const musicPlayheadRef = useRef(null) // same on the music track (passed to MusicTrack)
+  const scrollLeftRef = useRef(0) // current horizontal scroll (updates the track playheads)
+  const rulerWRef = useRef(0) // ruler width in px (the state setter also feeds the ref)
+
+  // applyRulerW: single entry point for the ruler width — keeps the ref in
+  // sync so the track playheads can compute without waiting for a re-render.
+  const applyRulerW = (w) => {
+    rulerWRef.current = w
+    setRulerW(w)
+  }
 
   // Element with overflow-x that actually scrolls (inside the wavesurfer
   // Shadow DOM) — the ruler follows the scroll through it.
@@ -99,11 +155,40 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     return (shadow && shadow.querySelector('.scroll')) || null
   }
 
+  // Same .scroll as the music track (2nd wavesurfer's shadow) — its scroll is
+  // a MIRROR of the voice's (shared ruler: both move together).
+  const getMusicScroller = () => {
+    const host = musicContainerRef.current && musicContainerRef.current.firstElementChild
+    const shadow = host && host.shadowRoot
+    return (shadow && shadow.querySelector('.scroll')) || null
+  }
+
   // Position of the playhead line on the ruler (% of duration — no re-render)
   const updatePlayhead = (time) => {
     const d = durationRef.current
     if (playheadRef.current && d > 0) {
       playheadRef.current.style.left = `${Math.min(100, (time / d) * 100)}%`
+    }
+    updateRowsPlayhead(time)
+  }
+
+  // Playhead CONTINUOUS crossing the tracks (voice and music): the line lives
+  // inside each waveform area (time origin = waveform origin) and moves at
+  // px = time/duration × ruler width − scrollLeft (same math as the ruler,
+  // translated by the same scrollLeft). Hides when out of the area.
+  const updateRowsPlayhead = (time) => {
+    const d = durationRef.current
+    const w = rulerWRef.current
+    const x = d > 0 && w > 0 ? (time / d) * w - scrollLeftRef.current : null
+    for (const el of [voicePlayheadRef.current, musicPlayheadRef.current]) {
+      if (!el) continue
+      if (x === null) {
+        el.style.opacity = '0'
+        continue
+      }
+      const vw = el.parentElement ? el.parentElement.clientWidth : w
+      el.style.opacity = x >= 0 && x <= vw ? '1' : '0'
+      el.style.transform = `translateX(${x}px)`
     }
   }
 
@@ -122,10 +207,11 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       }
       durationRef.current = 0
       setDuration(0)
-      setRulerW(0)
+      applyRulerW(0)
       setCurTime(0)
       lastFileRef.current = null
       lastTimeRef.current = 0
+      scrollLeftRef.current = 0
       return
     }
 
@@ -136,6 +222,9 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     durationRef.current = 0
     setDuration(0)
     setCurTime(0)
+    // Ruler measurement resets too: the music track (shared scale) only
+    // recreates once the new width is measured on 'ready'.
+    applyRulerW(0)
     // Same file (e.g., theme change): the transport position survives
     // wavesurfer recreation; a new file starts at 0.
     const sameFile = lastFileRef.current === selectedFile.path
@@ -153,6 +242,12 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       barWidth: 2,
       barGap: 1,
       barRadius: 2,
+      // Fixed at the container's 80px floor — NOT 'auto': that mode reads
+      // parent.clientHeight back on every resize redraw, and on a long file
+      // the horizontal scrollbar (+8px inside .scroll) makes the container
+      // grow again on each cycle — an unbounded loop that crushes the boxes
+      // above (small files never scroll, hence they never grow).
+      // Width changes (window resize) still trigger the redraw as before.
       height: 80,
       minPxPerSec: MIN_PX_PER_SEC,
       normalize: true,
@@ -218,9 +313,14 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       const scroller = getScroller()
       if (scroller) {
         const onScroll = () => {
+          scrollLeftRef.current = scroller.scrollLeft
           if (rulerInnerRef.current) {
             rulerInnerRef.current.style.transform = `translateX(${-scroller.scrollLeft}px)`
           }
+          // Music track mirrors the SAME scroll (shared ruler)
+          const ms = getMusicScroller()
+          if (ms && ms.scrollLeft !== scroller.scrollLeft) ms.scrollLeft = scroller.scrollLeft
+          updateRowsPlayhead(lastTimeRef.current)
         }
         scroller.addEventListener('scroll', onScroll)
         onScroll()
@@ -231,14 +331,21 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       requestAnimationFrame(() => {
         if (wsRef.current !== ws) return
         const wrapper = ws.getWrapper()
-        if (wrapper) setRulerW(wrapper.offsetWidth)
+        if (wrapper) applyRulerW(wrapper.offsetWidth)
       })
     })
 
-    ws.on('play', () => setPlaying(true))
-    ws.on('pause', () => setPlaying(false))
+    ws.on('play', () => {
+      setPlaying(true)
+      musicPreview.play(ws.getCurrentTime())
+    })
+    ws.on('pause', () => {
+      setPlaying(false)
+      musicPreview.pause()
+    })
     ws.on('finish', () => {
       setPlaying(false)
+      musicPreview.pause()
       if (videoRef?.current) videoRef.current.pause()
     })
 
@@ -247,6 +354,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       if (onTimeUpdate) onTimeUpdate(time)
       updatePlayhead(time)
       syncClock(time)
+      musicPreview.sync(time)
     })
 
     ws.on('seeking', (time) => {
@@ -254,6 +362,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       if (videoRef?.current) videoRef.current.currentTime = time
       updatePlayhead(time)
       syncClock(time)
+      musicPreview.seek(time)
     })
 
     wsRef.current = ws
@@ -265,6 +374,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     return () => {
       detachScroll()
       ws.pause()
+      musicPreview.pause()
       ws.destroy()
       wsRef.current = null
       regionsRef.current = null
@@ -387,13 +497,177 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
     return () => clearTimeout(shapeTimerRef.current)
   }, [shapeCfg, ready])
 
+  // --- 1.11.0: music waveform (2nd track of ducking) ------------------------
+  // SHARED SCALE: the music is drawn on the VIDEO's timeline (ruler px/s),
+  // not on its own width — fillParent:false + minPxPerSec = the real scale.
+  // Music longer than the video cuts at the edge; shorter leaves empty space
+  // on the right (the export's -stream_loop fills that). Default backend
+  // (MediaElement): only decodes via fetch to draw, no extra AudioContext —
+  // playback + ducking live in musicPreview (phase 2).
+  const scaleReady = rulerW > 0 && duration > 0
+  const pxPerSec = scaleReady ? rulerW / duration : 0
+
+  // Extended bed strip (phase A): the audio loops for the WHOLE timeline, so
+  // the music row paints the bed REPEATED up to the end instead of stopping at
+  // the file's own length — which also left the row narrower than the voice
+  // strip, so the shared scroll clamped and the two tracks drifted apart.
+  // DISPLAY ONLY: the rendered wave is snapshotted into one bitmap and repeated
+  // with a CSS background (any number of copies, cheap), plus a thin tick at
+  // every loop seam — the wrap point the export joins with acrossfade. The
+  // nodes live inside wavesurfer's wrapper (shadow root), so they scroll with
+  // the strip for free.
+  const musicOverlayRef = useRef([])
+  const musicPaintTimerRef = useRef(0)
+  const clearMusicOverlay = () => {
+    musicOverlayRef.current.forEach((n) => n.remove())
+    musicOverlayRef.current = []
+  }
+  const paintMusicOverlay = () => {
+    clearMusicOverlay()
+    const mws = musicWsRef.current
+    if (!mws || !(duration > 0) || !(rulerW > 0)) return
+    const mdur = mws.getDuration()
+    if (!Number.isFinite(mdur) || mdur <= 0) return
+    const pxPerSec = rulerW / duration
+    const stripW = mdur * pxPerSec
+    if (!(stripW > 0)) return
+    const wrapper = mws.getWrapper()
+    if (!wrapper) return
+    // The row spans the voice strip's own width: same px/s, same scroll range
+    wrapper.style.width = `${duration * pxPerSec}px`
+    const root = wrapper.getRootNode ? wrapper.getRootNode() : null
+    const canvasesWrap = root && root.querySelector ? root.querySelector('.canvases') : null
+    if (!canvasesWrap) return
+    const sources = canvasesWrap.querySelectorAll('canvas')
+    if (!sources.length) return
+    const dpr = window.devicePixelRatio || 1
+    const base = canvasesWrap.getBoundingClientRect()
+    // Absolute boxes DON'T stretch: width/height must be explicit (an abs child
+    // with left:0 and no right/width is 0px wide, and height:100% against an
+    // auto-height parent collapses to 0 — the repeat would paint nothing).
+    const rowW = Math.max(1, Math.round(duration * pxPerSec))
+    const rowH = Math.max(1, Math.round(base.height))
+    const snap = document.createElement('canvas')
+    snap.width = Math.max(1, Math.round(stripW * dpr))
+    snap.height = Math.max(1, Math.round(rowH * dpr))
+    const sctx = snap.getContext('2d')
+    if (!sctx) return
+    sources.forEach((c) => {
+      const holder = c.parentElement || c
+      const r = holder.getBoundingClientRect()
+      sctx.drawImage(c, Math.round((r.left - base.left) * dpr), Math.round((r.top - base.top) * dpr))
+    })
+    const repeat = document.createElement('div')
+    repeat.style.cssText =
+      `position:absolute;top:0;left:0;width:${rowW}px;height:${rowH}px;pointer-events:none;` +
+      `background-repeat:repeat-x;background-size:${stripW.toFixed(2)}px ${rowH}px;`
+    repeat.style.backgroundImage = `url(${snap.toDataURL('image/png')})`
+    wrapper.appendChild(repeat)
+    musicOverlayRef.current.push(repeat)
+    const seams = Math.floor(duration / mdur)
+    for (let k = 1; k <= seams; k++) {
+      const seam = document.createElement('div')
+      seam.style.cssText = `position:absolute;top:0;left:${(k * stripW).toFixed(2)}px;width:1px;height:${rowH}px;background:rgba(0,0,0,0.4);pointer-events:none;`
+      wrapper.appendChild(seam)
+      musicOverlayRef.current.push(seam)
+    }
+  }
+
+  useEffect(() => {
+    const container = musicContainerRef.current
+    if (!duckingEnabled || !musicFile || !container || !scaleReady) {
+      if (musicWsRef.current) {
+        musicWsRef.current.destroy()
+        musicWsRef.current = null
+      }
+      return
+    }
+    const scale = rulerW / duration
+    const mws = WaveSurfer.create({
+      container,
+      waveColor: theme === 'modern' ? '#3f3f46' : '#4a5568',
+      progressColor: theme === 'modern' ? '#9B30FF' : '#22c55e',
+      cursorWidth: 0,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 2,
+      // 'auto' = the row height (min-h 96px floor): the container is
+      // absolutely positioned (inset-0), so its content can never feed back
+      // into the parent's height — no scrollbar growth loop here, unlike the
+      // in-flow voice container above.
+      height: 'auto',
+      minPxPerSec: scale,
+      fillParent: false,
+      hideScrollbar: true,
+      interact: false,
+      normalize: true,
+    })
+    musicWsRef.current = mws
+    // The renderer rebuilds the canvases and the wrapper width on every render
+    // (zoom on window resize included) — repaint the repeated strip after each.
+    mws.on('render', () => {
+      clearTimeout(musicPaintTimerRef.current)
+      musicPaintTimerRef.current = setTimeout(paintMusicOverlay, 0)
+    })
+    mws.load(`file:///${musicFile.path.replace(/\\/g, '/')}`).catch((e) =>
+      console.warn('[music] failed to load:', e)
+    )
+    mws.on('ready', () => {
+      if (musicWsRef.current !== mws) return
+      // born already at the voice track's current scroll
+      const vs = getScroller()
+      const ms = getMusicScroller()
+      if (vs && ms) ms.scrollLeft = vs.scrollLeft
+      updateRowsPlayhead(lastTimeRef.current)
+      paintMusicOverlay()
+    })
+    return () => {
+      clearTimeout(musicPaintTimerRef.current)
+      clearMusicOverlay()
+      mws.destroy()
+      if (musicWsRef.current === mws) musicWsRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [musicFile, theme, duckingEnabled, scaleReady])
+
+  // Window resize: the music re-renders on the SAME new voice scale
+  // (zoom swaps minPxPerSec without recreating the instance).
+  useEffect(() => {
+    const mws = musicWsRef.current
+    if (!mws || pxPerSec <= 0 || mws.options?.minPxPerSec === pxPerSec) return
+    mws.zoom(pxPerSec)
+    // the reRender touches the internal scroll — reconnect to the voice scroll
+    requestAnimationFrame(() => {
+      const vs = getScroller()
+      const ms = getMusicScroller()
+      if (vs && ms) ms.scrollLeft = vs.scrollLeft
+      updateRowsPlayhead(lastTimeRef.current)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pxPerSec])
+
+  // Positions the track lines when the ruler/scale (or the music track)
+  // show up — without waiting for the next timeupdate/scroll.
+  useEffect(() => {
+    updateRowsPlayhead(lastTimeRef.current)
+    paintMusicOverlay() // the repeated strip follows the new px/s
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rulerW, duration, musicFile, duckingEnabled])
+
+  // Timeline length up to the App (music bed's final fade reference)
+  useEffect(() => {
+    if (duration === sentDurRef.current) return
+    sentDurRef.current = duration
+    if (onDurationChangeRef.current) onDurationChangeRef.current(duration)
+  }, [duration])
+
   // Horizontal scroll with the mouse wheel: wavesurfer's inner strip only
   // scrolls horizontally via Shift+wheel or the scrollbar; here the normal
-  // vertical wheel also moves the strip. Attached to the PANEL (not the strip)
-  // so it also responds over the time ruler above.
+  // vertical wheel also moves the strip. Attached to the PANEL ROOT (main box
+  // + brother music box) so it also responds over the ruler, the gutters and
+  // BOTH tracks.
   useEffect(() => {
-    const container = containerRef.current
-    const panel = container && container.parentElement
+    const panel = panelRef.current
     if (!panel) return
     const onWheel = (e) => {
       const ws = wsRef.current
@@ -402,7 +676,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
       const wrapper = ws.getWrapper()
       // No scroll when the strip fits in the container (short audio)
-      if (!wrapper || wrapper.offsetWidth <= container.clientWidth) return
+      if (!wrapper || wrapper.offsetWidth <= containerRef.current.clientWidth) return
       e.preventDefault()
       ws.setScroll(ws.getScroll() + e.deltaY)
     }
@@ -420,7 +694,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
       requestAnimationFrame(() => {
         const ws = wsRef.current
         const wrapper = ws && ws.getWrapper()
-        if (wrapper) setRulerW(wrapper.offsetWidth)
+        if (wrapper) applyRulerW(wrapper.offsetWidth)
       })
     })
     ro.observe(container)
@@ -511,73 +785,118 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   }
 
   return (
-    <div className="space-y-1">
+    <div ref={panelRef} className="space-y-1">
+      {/* MAIN box (brother of the music box below): the SHARED ruler is born
+          inside the waveform column — the dB gutter takes the full height, no
+          empty cell in the corner. Both tracks use the SAME px/s scale and
+          the SAME scroll. Block layout with natural height (original v1.10.x
+          spacings): the window itself grows for the music row (see
+          WINDOW_DUCKING_EXTRA_HEIGHT), so nothing here ever compresses. */}
       <div className="w-full border-2 border-retro-black rounded bg-retro-bg shadow-retro p-2">
-        {/* Time ruler Premiere style (v1.6.0): labels every 10s,
-            10s/5s ticks and the playhead line — follows the strip's scroll */}
-        <div className="relative w-full h-[16px] overflow-hidden select-none pointer-events-none">
-          {duration > 0 && rulerW > 0 && (
-            <div
-              ref={rulerInnerRef}
-              className="absolute top-0 left-0 h-full"
-              style={{ width: `${rulerW}px` }}
-            >
-              {rulerMinors.map((s) => (
+        {/* Track 1 — VOICE: dB gutter + waveform column with the ruler on top.
+            The playhead is a SIBLING of the container — the container must stay
+            free of React children, because wavesurfer is the firstElementChild
+            of the Shadow DOM queries; the line's x origin is the waveform's */}
+        <div className="flex">
+          <DbGutter
+            db={voiceDb}
+            onChange={onVoiceDbChange}
+            label={t('ducking.voiceDb')}
+            disabled={trackDisabled}
+          />
+          <div className="relative flex-1 min-w-0 flex flex-col">
+            {/* SHARED ruler (the brother music track uses the same scale and
+                the same scroll — the time origin is this column's left edge,
+                same on the music's dB column) */}
+            <div className="relative w-full h-[16px] shrink-0 overflow-hidden select-none pointer-events-none">
+              {duration > 0 && rulerW > 0 && (
                 <div
-                  key={`m${s}`}
-                  className="absolute bottom-0 w-[1px] h-[3px] bg-retro-black/30"
-                  style={{ left: `${(s / duration) * 100}%` }}
-                />
-              ))}
-              {rulerMajors.map((s) => (
-                <div
-                  key={`M${s}`}
-                  className="absolute top-0 bottom-0"
-                  style={{ left: `${(s / duration) * 100}%` }}
+                  ref={rulerInnerRef}
+                  className="absolute top-0 left-0 h-full"
+                  style={{ width: `${rulerW}px` }}
                 >
-                  <span className="absolute top-1 left-[2px] font-pixel text-[6px] leading-none text-retro-black/70 whitespace-nowrap">
-                    {fmtTime(s)}
-                  </span>
-                  <span className="absolute bottom-0 left-0 w-[1px] h-[5px] bg-retro-black/50" />
-                </div>
-              ))}
-              {/* Export I/O marks: chip I = start, O = end (the dark
-                  background marks which one is selected for Delete) */}
-              {exportRange?.start != null && (
-                <div
-                  className="absolute top-0"
-                  style={{ left: `${(exportRange.start / duration) * 100}%` }}
-                >
-                  <span className={`font-pixel text-[6px] leading-none px-[2px] rounded-[2px] ${selectedMarker === 'start' ? 'bg-retro-black text-white' : 'bg-green-600 text-white'}`}>
-                    I
-                  </span>
+                  {rulerMinors.map((s) => (
+                    <div
+                      key={`m${s}`}
+                      className="absolute bottom-0 w-[1px] h-[3px] bg-retro-black/30"
+                      style={{ left: `${(s / duration) * 100}%` }}
+                    />
+                  ))}
+                  {rulerMajors.map((s) => (
+                    <div
+                      key={`M${s}`}
+                      className="absolute top-0 bottom-0"
+                      style={{ left: `${(s / duration) * 100}%` }}
+                    >
+                      <span className="absolute top-0 left-[2px] font-pixel text-[6px] leading-none text-retro-black/70 whitespace-nowrap">
+                        {fmtTime(s)}
+                      </span>
+                      <span className="absolute bottom-0 left-0 w-[1px] h-[5px] bg-retro-black/50" />
+                    </div>
+                  ))}
+                  {/* Export I/O marks: chip I = start, O = end (the dark
+                      background marks which one is selected for Delete) */}
+                  {exportRange?.start != null && (
+                    <div
+                      className="absolute top-0"
+                      style={{ left: `${(exportRange.start / duration) * 100}%` }}
+                    >
+                      <span className={`font-pixel text-[6px] leading-none px-[2px] rounded-[2px] ${selectedMarker === 'start' ? 'bg-retro-black text-white' : 'bg-green-600 text-white'}`}>
+                        I
+                      </span>
+                    </div>
+                  )}
+                  {exportRange?.end != null && (
+                    <div
+                      className="absolute top-0"
+                      style={{ left: `${(exportRange.end / duration) * 100}%`, transform: 'translateX(-100%)' }}
+                    >
+                      <span className={`font-pixel text-[6px] leading-none px-[2px] rounded-[2px] ${selectedMarker === 'end' ? 'bg-retro-black text-white' : 'bg-red-600 text-white'}`}>
+                        O
+                      </span>
+                    </div>
+                  )}
+                  <div
+                    ref={playheadRef}
+                    className="absolute top-0 bottom-0 w-[2px] bg-retro-black/80"
+                    style={{ left: '0%' }}
+                  />
                 </div>
               )}
-              {exportRange?.end != null && (
-                <div
-                  className="absolute top-0"
-                  style={{ left: `${(exportRange.end / duration) * 100}%`, transform: 'translateX(-100%)' }}
-                >
-                  <span className={`font-pixel text-[6px] leading-none px-[2px] rounded-[2px] ${selectedMarker === 'end' ? 'bg-retro-black text-white' : 'bg-red-600 text-white'}`}>
-                    O
-                  </span>
-                </div>
-              )}
-              <div
-                ref={playheadRef}
-                className="absolute top-0 bottom-0 w-[2px] bg-retro-black/80"
-                style={{ left: '0%' }}
-              />
             </div>
-          )}
+            <div ref={containerRef} className="w-full min-h-[80px] rounded overflow-hidden" />
+            {/* Playhead line: starts BELOW the ruler (which has its own) */}
+            <div
+              ref={voicePlayheadRef}
+              className="absolute top-[16px] bottom-0 left-0 w-[2px] bg-retro-black/80 pointer-events-none z-20"
+              style={{ opacity: 0 }}
+            />
+          </div>
         </div>
-        <div ref={containerRef} className="w-full min-h-[80px] rounded overflow-hidden" />
       </div>
+
+      {/* Box 2 — MUSIC (ducking): BROTHER box of the main one (not its child)
+          — shows only with ducking on */}
+      {duckingEnabled && (
+        <MusicTrack
+          musicFile={musicFile}
+          musicDb={musicDb}
+          onMusicDbChange={onMusicDbChange}
+          onPick={onPickMusic}
+          onRemove={onRemoveMusic}
+          waveContainerRef={musicContainerRef}
+          playheadRef={musicPlayheadRef}
+          disabled={trackDisabled}
+          gutterLabel={t('ducking.musicDb')}
+          fadeOut={fadeOut}
+          onFadeOutChange={onFadeOutChange}
+        />
+      )}
 
       {/* Dedicated transport container (wireframe v1.5.0): clock
           hh:mm:ss on the left, centered buttons + Loading/Ready status
           aligned to the right */}
-      <div className="relative w-full border-2 border-retro-black rounded bg-retro-bg shadow-retro p-2 flex items-center justify-center">
+      <div className="relative w-full shrink-0 border-2 border-retro-black rounded bg-retro-bg shadow-retro p-2 flex items-center justify-center">
         <span className="absolute left-2 font-pixel text-[6px] text-retro-black/70 tabular-nums">
           {fmtHMS(curTime)}/{fmtHMS(duration)}
         </span>
