@@ -1,6 +1,6 @@
 {
   "name": "corgi-editor",
-  "version": "1.10.3",
+  "version": "1.11.0",
   "description": "CORGI-EDITOR - Edição automática de vídeo/áudio",
   "main": "dist/electron/main.js",
   "scripts": {
@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "author": "Luiz",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@tabler/icons-react": "^3.47.0",
     "adm-zip": "^0.6.1",

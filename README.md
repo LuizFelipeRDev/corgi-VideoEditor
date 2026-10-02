@@ -4,7 +4,7 @@ Automatic video/audio editing with AI-powered subtitles.
 
 ![Version](https://img.shields.io/badge/version-1.10.3-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-green)
 
 <p align="center">
   <img src="assets/image1.webp" alt="image1" width="80%">
@@ -249,7 +249,7 @@ The 26 bundled fonts come from [Google Fonts](https://fonts.google.com/), all fr
 
 ## License
 
-MIT License
+MIT License + Commons Clause — free to use, study, modify and share the source; **selling the Software itself (or a product/service whose value derives, entirely or substantially, from it) is prohibited**. The full text is in [`LICENSE`](LICENSE).
 
 ---
 
@@ -483,4 +483,4 @@ As 26 fontes embutidas vêm do [Google Fonts](https://fonts.google.com/), todas 
 
 ## Licença
 
-Licença MIT
+MIT License + Commons Clause — livre para usar, estudar, modificar e compartilhar o código; **é proibida a venda do Software em si (ou de um produto/serviço cujo valor derive, integralmente ou em substância, dele)**. O texto completo está em [`LICENSE`](LICENSE).
