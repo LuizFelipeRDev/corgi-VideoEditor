@@ -17,6 +17,21 @@ const formatFileSize = (bytes) => {
   return `${rounded} ${units[unit]}`
 }
 
+// The stage is the area the frame must fit into; `container-type: size` turns
+// it into a query container so the frame can be sized in CSS against BOTH axes.
+const STAGE_STYLE = { containerType: 'size' }
+
+// Frame of a FIXED ratio inside the stage, sized in pure CSS: `min()` picks the
+// width that fits both axes and `aspect-ratio` derives the height, so the ratio
+// is invariant at any window size (fullscreen included) and the frame is always
+// exactly the video/canvas rect -> the overlay lands where the export puts it.
+// A plain `aspect-ratio` + `max-height` does NOT work: Chromium clamps the
+// height and the box silently loses the ratio (video letterboxed, overlay off).
+const frameStyle = (ratioW, ratioH) => ({
+  aspectRatio: `${ratioW} / ${ratioH}`,
+  width: `min(100cqw, calc(100cqh * ${(ratioW / ratioH).toFixed(4)}))`,
+})
+
 function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp, wordsPerLine, linesCount, hMarginPct = 0 }) {
   const { t } = useLang()
   const [isDragOver, setIsDragOver] = useState(false)
@@ -27,6 +42,27 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
   const isVideo = selectedFile && /\.(mp4|mkv|mov|webm|avi)$/i.test(selectedFile.name)
   const isAudio = selectedFile && /\.(mp3|wav|flac|ogg|aac|m4a)$/i.test(selectedFile.name)
   const effectiveTime = currentTimeProp !== undefined ? currentTimeProp : videoTime
+
+  // Intrinsic size of the loaded video, used as the frame ratio when the output
+  // resolution is 'original' (the export then keeps the input resolution).
+  const [videoDims, setVideoDims] = useState(null)
+  useEffect(() => { setVideoDims(null) }, [selectedFile?.path])
+  const handleLoadedMetadata = (e) => {
+    const v = e.currentTarget
+    if (v && v.videoWidth > 0 && v.videoHeight > 0) setVideoDims({ w: v.videoWidth, h: v.videoHeight })
+  }
+
+  // Video frame ratio: the OUTPUT frame when a resolution is picked (the very
+  // rect the export burns), otherwise the source's own ratio.
+  const videoRatio = outputResolution === 'portrait'
+    ? [9, 16]
+    : outputResolution === 'original'
+      ? (videoDims ? [videoDims.w, videoDims.h] : [16, 9])
+      : [16, 9]
+  // Audio + subtitles canvas (green screen): always 16:9 / 9:16.
+  const canvasRatio = outputResolution === 'portrait' ? [9, 16] : [16, 9]
+  const videoFrameStyle = frameStyle(videoRatio[0], videoRatio[1])
+  const canvasFrameStyle = { ...frameStyle(canvasRatio[0], canvasRatio[1]), backgroundColor: greenScreen ? '#00a800' : '#000' }
 
   useEffect(() => {
     if (videoRef.current && seekTo !== null) {
@@ -115,95 +151,102 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
             </p>
           </div>
         ) : isVideo && !videoFullscreen ? (
-          <div className={`min-h-0 flex flex-col items-center justify-center overflow-hidden relative h-full ${outputResolution === 'portrait' ? 'bg-black' : 'w-full'}`} style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
-            <video
-              ref={videoRef}
-              src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
-              onTimeUpdate={handleTimeUpdate}
-              muted
-              className="max-w-full max-h-full object-contain rounded"
-            />
-            {subtitles && subtitles.length > 0 && (
-              <SubtitleOverlay
-                subtitles={subtitles}
-                subtitleStyle={subtitleStyle}
-                subtitlePosition={subtitlePosition}
-                subtitleConfigs={subtitleConfigs}
-                currentTime={effectiveTime}
-                positionMode={positionMode}
-                positionPercent={positionPercent}
-                outputResolution={outputResolution}
-                wordsPerLine={wordsPerLine}
-                linesCount={linesCount}
-                hMarginPct={hMarginPct}
+          <div
+            style={STAGE_STYLE}
+            className={`min-h-0 w-full h-full flex items-center justify-center overflow-hidden relative ${outputResolution === 'portrait' ? 'bg-black' : ''}`}
+          >
+            {/* The frame IS the video rect (ratio fixed in CSS at every window
+                size), so the overlay lands where the export puts it. */}
+            <div className="relative" style={videoFrameStyle}>
+              <video
+                ref={videoRef}
+                src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                muted
+                className="w-full h-full object-contain rounded"
               />
-            )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                if (videoRef.current) {
-                  savedTimeRef.current = videoRef.current.currentTime
-                  const wasPlaying = !videoRef.current.paused
-                  setVideoFullscreen(true)
-                  setTimeout(() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = savedTimeRef.current
-                      if (wasPlaying) {
-                        videoRef.current.play()
-                      } else {
-                        if (waveSurferRef?.current) waveSurferRef.current.play()
-                        videoRef.current.play()
+              {subtitles && subtitles.length > 0 && (
+                <SubtitleOverlay
+                  subtitles={subtitles}
+                  subtitleStyle={subtitleStyle}
+                  subtitlePosition={subtitlePosition}
+                  subtitleConfigs={subtitleConfigs}
+                  currentTime={effectiveTime}
+                  positionMode={positionMode}
+                  positionPercent={positionPercent}
+                  outputResolution={outputResolution}
+                  wordsPerLine={wordsPerLine}
+                  linesCount={linesCount}
+                  hMarginPct={hMarginPct}
+                />
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (videoRef.current) {
+                    savedTimeRef.current = videoRef.current.currentTime
+                    const wasPlaying = !videoRef.current.paused
+                    setVideoFullscreen(true)
+                    setTimeout(() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = savedTimeRef.current
+                        if (wasPlaying) {
+                          videoRef.current.play()
+                        } else {
+                          if (waveSurferRef?.current) waveSurferRef.current.play()
+                          videoRef.current.play()
+                        }
                       }
-                    }
-                  }, 100)
-                }
-              }}
-              className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
-              title={t('dropzone.fullscreen')}
-            >
-              <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
-              </svg>
-            </button>
+                    }, 100)
+                  }
+                }}
+                className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
+                title={t('dropzone.fullscreen')}
+              >
+                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
+                </svg>
+              </button>
+            </div>
           </div>
         ) : isAudio && subtitlesEnabled ? (
           <div
-            className={`min-h-0 flex flex-col items-center justify-center overflow-hidden relative h-full ${outputResolution === 'portrait' ? '' : 'w-full'}`}
-            style={{
-              backgroundColor: greenScreen ? '#00a800' : '#000',
-              aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9',
-            }}
+            style={STAGE_STYLE}
+            className="min-h-0 w-full h-full flex items-center justify-center overflow-hidden relative"
           >
+            <div className="relative" style={canvasFrameStyle}>
             {subtitles && subtitles.length > 0 && (
-              <SubtitleOverlay
-                subtitles={subtitles}
-                subtitleStyle={subtitleStyle}
-                subtitlePosition={subtitlePosition}
-                subtitleConfigs={subtitleConfigs}
-                currentTime={effectiveTime}
-                positionMode={positionMode}
-                positionPercent={positionPercent}
-                outputResolution={outputResolution}
-                wordsPerLine={wordsPerLine}
-                linesCount={linesCount}
-                hMarginPct={hMarginPct}
-              />
-            )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setVideoFullscreen(true)
-                setTimeout(() => {
-                  if (waveSurferRef?.current) waveSurferRef.current.play()
-                }, 100)
-              }}
-              className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
-              title={t('dropzone.fullscreen')}
-            >
-              <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
-              </svg>
-            </button>
+                <SubtitleOverlay
+                  subtitles={subtitles}
+                  subtitleStyle={subtitleStyle}
+                  subtitlePosition={subtitlePosition}
+                  subtitleConfigs={subtitleConfigs}
+                  currentTime={effectiveTime}
+                  positionMode={positionMode}
+                  positionPercent={positionPercent}
+                  outputResolution={outputResolution}
+                  wordsPerLine={wordsPerLine}
+                  linesCount={linesCount}
+                  hMarginPct={hMarginPct}
+                />
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setVideoFullscreen(true)
+                  setTimeout(() => {
+                    if (waveSurferRef?.current) waveSurferRef.current.play()
+                  }, 100)
+                }}
+                className="absolute bottom-2 right-2 w-6 h-6 bg-black/50 hover:bg-black/70 border border-white/20 rounded flex items-center justify-center text-white text-[10px] transition-colors z-10"
+                title={t('dropzone.fullscreen')}
+              >
+                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M1 4V1h3M8 1h3v3M11 8v3H8M4 11H1V8" />
+                </svg>
+              </button>
+            </div>
           </div>
         ) : isAudio ? (
           <div className="w-full h-full flex flex-col items-center justify-center gap-2">
@@ -251,41 +294,38 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
           }}
         >
           {isVideo ? (
-            <div className="relative max-w-full max-h-full flex items-center justify-center" style={outputResolution !== 'original' ? { aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9' } : {}}>
-              <video
-                ref={videoRef}
-                src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
-                onTimeUpdate={handleTimeUpdate}
-                muted
-                autoPlay
-                className="max-w-full max-h-full object-contain"
-              />
-              {subtitles && subtitles.length > 0 && (
-                <SubtitleOverlay
-                  subtitles={subtitles}
-                  subtitleStyle={subtitleStyle}
-                  subtitlePosition={subtitlePosition}
-                  subtitleConfigs={subtitleConfigs}
-                  currentTime={effectiveTime}
-                  fullscreen
-                  positionMode={positionMode}
-                  positionPercent={positionPercent}
-                outputResolution={outputResolution}
-                wordsPerLine={wordsPerLine}
-                linesCount={linesCount}
-                hMarginPct={hMarginPct}              />
-              )}
+            <div style={STAGE_STYLE} className="w-full h-full flex items-center justify-center">
+              <div className="relative" style={videoFrameStyle}>
+                <video
+                  ref={videoRef}
+                  src={`file:///${selectedFile.path.replace(/\\/g, '/')}`}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  muted
+                  autoPlay
+                  className="w-full h-full object-contain"
+                />
+                {subtitles && subtitles.length > 0 && (
+                  <SubtitleOverlay
+                    subtitles={subtitles}
+                    subtitleStyle={subtitleStyle}
+                    subtitlePosition={subtitlePosition}
+                    subtitleConfigs={subtitleConfigs}
+                    currentTime={effectiveTime}
+                    fullscreen
+                    positionMode={positionMode}
+                    positionPercent={positionPercent}
+                    outputResolution={outputResolution}
+                    wordsPerLine={wordsPerLine}
+                    linesCount={linesCount}
+                    hMarginPct={hMarginPct}
+                  />
+                )}
+              </div>
             </div>
           ) : (
-            <div
-              className="flex items-center justify-center"
-              style={{
-                width: outputResolution === 'portrait' ? '56.25vh' : '100%',
-                height: outputResolution === 'portrait' ? '100vh' : '100%',
-                backgroundColor: greenScreen ? '#00a800' : '#000',
-                aspectRatio: outputResolution === 'portrait' ? '9/16' : '16/9',
-              }}
-            >
+            <div style={STAGE_STYLE} className="w-full h-full flex items-center justify-center">
+              <div className="relative" style={canvasFrameStyle}>
               <div className="relative w-full h-full">
                 {subtitles && subtitles.length > 0 && (
                   <SubtitleOverlay
@@ -296,12 +336,14 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
                     currentTime={effectiveTime}
                     fullscreen
                     positionMode={positionMode}
-                positionPercent={positionPercent}
-                outputResolution={outputResolution}
-                wordsPerLine={wordsPerLine}
-                linesCount={linesCount}
-                hMarginPct={hMarginPct}              />
+                    positionPercent={positionPercent}
+                    outputResolution={outputResolution}
+                    wordsPerLine={wordsPerLine}
+                    linesCount={linesCount}
+                    hMarginPct={hMarginPct}
+                  />
                 )}
+              </div>
               </div>
             </div>
           )}

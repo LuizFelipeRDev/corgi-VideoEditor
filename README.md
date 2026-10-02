@@ -2,7 +2,7 @@
 
 Automatic video/audio editing with AI-powered subtitles.
 
-![Version](https://img.shields.io/badge/version-1.10.2-blue)
+![Version](https://img.shields.io/badge/version-1.10.3-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -22,7 +22,7 @@ CORGI-EDITOR is a desktop application for automatic video and audio editing. It 
 ### Key Features
 
 ---
-- **Auto-silence removal** — Automatically cuts silences from video/audio using auto-editor (Settings > Output)
+- **Auto-silence removal** — Automatically cuts silences from video/audio using auto-editor
 ![alt text](assets/image2.webp)
 
 - **AI subtitle generation** — Word-level transcription via whisper.cpp with CUDA GPU support
@@ -44,7 +44,7 @@ CORGI-EDITOR is a desktop application for automatic video and audio editing. It 
 - **Output resolution** — Original, Landscape (16:9) 1080p/720p or Portrait (9:16), letterbox keeps the source aspect ratio
 - **Green screen mode** — Generate subtitle videos with a green background for chroma key to export to your favorite video editor.
 - **Multiple formats** — MP3, WAV, FLAC, OGG, AAC, M4A, MP4, MKV, MOV, WEBM, AVI
-- **Bilingual UI** — English and Portuguese (Settings > Sistema)
+- **Bilingual UI** — English and Portuguese (Settings > System)
 - **Two Themes** — Select between _Modern_ or _Retro_ style.
 <p align="center">
   <img src="assets/image3.webp" alt="image1" width="80%">
@@ -75,7 +75,7 @@ Download the latest installer from [GitHub Releases](https://github.com/LuizFeli
 
 1. Run the `.exe` installer (NSIS — allows custom install directory)
 2. Launch CORGI-EDITOR
-3. (Optional) Go to **Settings > General** and click **BAIXAR GPU** for faster subtitle generation
+3. (Optional) Go to **Settings > General** and click **Download GPU** for faster subtitle generation
 4. (Optional) Download larger whisper models (base, small, medium, large-v3) from Settings
 
 ### First Launch
@@ -101,10 +101,10 @@ Click the gear icon to open Settings:
 
 | Tab | Options |
 |-----|---------|
-| **Sistema** | Language (English / Português) |
-| **Geral** | Output folder, GPU download, whisper model |
-| **Saida** | Output format, resolution (Original / Landscape 1080p / Landscape 720p / Portrait), subtitle language, instant cut |
-| **Legendas** | Enable subtitles, position, words per line & lines, persistence, smart mode, auto line wrap, burn-in, green screen, horizontal margin |
+| **System** | Language (English / Português) |
+| **General** | Output folder, GPU download, whisper model |
+| **Output** | Output format, resolution (Original / Landscape 1080p / Landscape 720p / Portrait), subtitle language, instant cut |
+| **Subtitles** | Enable subtitles, position, words per line & lines, persistence, smart mode, auto line wrap, burn-in, green screen, horizontal margin |
 
 ### 3. Adjust Audio Processing
 
@@ -114,14 +114,14 @@ The Controls panel holds the AUTO CUT row, the sound row and the export button:
 
 ### 4. Generate Subtitles
 
-1. Enable subtitles in Settings > Legendas
+1. Enable subtitles in Settings > Subtitles
 2. Choose a subtitle style from the Subtitles panel
-3. Click **GERAR LEGENDAS** — whisper.cpp transcribes with word-level timestamps
+3. Click **Generate Subtitle** — whisper.cpp transcribes with word-level timestamps
 4. Preview the subtitles on the video in real-time
 
 ### 5. Export
 
-Click **EXPORTAR** to process the file:
+Click **EXPORT** to process the file:
 1. auto-editor removes silences (when AUTO CUT is on)
 2. Subtitles are remapped to the edited timeline
 3. FFmpeg encodes the final output in the format chosen in Settings (audio formats export audio only)
@@ -153,16 +153,16 @@ Click the gear icon next to any style to customize:
 
 ## Smart Subtitle Mode
 
-When enabled in Settings > Legendas:
+When enabled in Settings > Subtitles:
 - Detects sentence-ending punctuation (`.`, `!`, `?`)
 - Removes trailing periods from displayed text
 - `!` and `?` remain visible
 - Automatically breaks subtitle blocks at sentence boundaries
 
 **Example:**
-- Input: `"Oi ricardo, voce conhece Samantha? Ela"`
+- Input: `"Hi Ricardo, do you know Samantha? She"`
 - Without smart: One block with all 6 words
-- With smart: `"Oi ricardo, voce conhece Samantha?"` → `"Ela é minha amiga da escola"`
+- With smart: `"Hi Ricardo, do you know Samantha?" → "She's my friend from school."`
 
 ---
 
@@ -183,7 +183,7 @@ Controls how long subtitles remain visible during silence gaps — a slider from
 GPU acceleration is available for NVIDIA GPUs:
 
 1. Go to **Settings > General**
-2. Click **BAIXAR GPU (NVIDIA)** (~422 MB download)
+2. Click **DOWNLOAD GPU (NVIDIA)** (~422 MB download)
 3. The app downloads `whisper-cuda.zip` from GitHub Releases
 4. Files are extracted to `%APPDATA%/corgi-editor/bin/whisper/`
 

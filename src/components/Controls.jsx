@@ -9,8 +9,10 @@ function Controls({ processing, generatingSubtitles, onExport, progress, soundEn
       ? t('sound.micTipOn')
       : t('sound.micTipOff')
   const cutTitle = cutEnabled ? t('cut.tipOn') : t('cut.tipOff')
+  // Fixed-width column (260px): window.js keeps the window widths in sync
+  // (+60 -> 700/960), so the preview keeps its space at the minimum size.
   return (
-    <div className="w-[45%] min-w-[180px] p-4 flex flex-col justify-center  border-retro-black">
+    <div className="w-[260px] shrink-0 p-4 flex flex-col justify-center  border-retro-black">
       {/* AUTO CUT (modal) + ⏻ master toggle (v1.10.1) — mirrors the
           advanced sound row: one button configures (MIN VOLUME + MARGIN
           in the modal), the other switches on/off. OFF = preview and export

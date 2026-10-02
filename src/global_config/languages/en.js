@@ -16,6 +16,19 @@ export default {
   'common.close': 'CLOSE',
   'common.error': 'ERROR',
 
+  // --- About modal (manual update flow) ---
+  'about.update': 'UPDATE',
+  'about.updateCheck': 'CHECK FOR UPDATES',
+  'about.updateChecking': 'CHECKING...',
+  'about.updateRetry': 'TRY AGAIN',
+  'about.updateUpToDate': 'You are on the latest version ({version}).',
+  'about.updateAvailableMsg': 'New version {version} available. Download and install now?',
+  'about.updateDownloading': 'Downloading update...',
+  'about.updateLeft': '{left} MB left',
+  'about.updateInstalling': 'Downloaded — installing and restarting ({version})...',
+  'about.updateDevOnly': 'Only available in the installed version.',
+  'about.updateError': 'Update error',
+
   // --- SettingsModal tabs ---
   'tabs.system': 'System',
   'tabs.general': 'General',

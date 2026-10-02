@@ -27,6 +27,14 @@ let _ffmpegErrorCb = null;
 
 let _fullscreenCb = null;
 
+// UPDATE (electron-updater): status pushed by electron/main.cjs —
+// checking / not-available / available / downloading / downloaded / error.
+let _updaterStatusCb = null;
+
+ipcRenderer.on('updater-status', (event, status) => {
+  if (_updaterStatusCb) _updaterStatusCb(status);
+});
+
 ipcRenderer.on('fullscreen-changed', (event, isFullScreen) => {
   if (_fullscreenCb) _fullscreenCb(isFullScreen);
 });
@@ -144,5 +152,9 @@ contextBridge.exposeInMainWorld('api', {
   rnnoiseStatus: () => ipcRenderer.invoke('get-rnnoise-status'),
   downloadRnnoise: () => ipcRenderer.invoke('download-rnnoise-model'),
   onRnnoiseDownloadProgress: (cb) => { _rnnoiseProgressCb = cb; },
+  // UPDATE: manual flow (About modal). check → user confirms → download.
+  updateCheck: () => ipcRenderer.invoke('updater-check'),
+  updateDownload: () => ipcRenderer.invoke('updater-download'),
+  onUpdaterStatus: (cb) => { _updaterStatusCb = cb; },
   getPathForFile: (file) => webUtils.getPathForFile(file),
 });

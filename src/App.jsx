@@ -1665,9 +1665,11 @@ function App() {
         {advancedTools && (
           <Sidebar onSelect={handleSidebarSelect} disabled={processing || generatingSubtitles || cutBusy} />
         )}
-        <div className={`flex flex-col min-w-0 ${subtitlesEnabled ? 'w-[75%]' : 'w-full'}`}>
+        {/* flex-1 (not a fixed %): the panel keeps its own width and this column
+            takes the rest, so nothing is left empty on the right in fullscreen. */}
+        <div className="flex-1 flex flex-col min-w-0">
           <div className="flex flex-1 min-h-0">
-            <div className="flex flex-col w-[66.6%] min-w-0 border-r-2 border-retro-black">
+            <div className="flex-1 flex flex-col min-w-0 border-r-2 border-retro-black">
               <DropZone
                 selectedFile={previewFile}
                 setSelectedFile={setSelectedFile}

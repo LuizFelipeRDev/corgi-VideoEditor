@@ -1,11 +1,11 @@
 {
   "name": "corgi-editor",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "description": "CORGI-EDITOR - Edição automática de vídeo/áudio",
   "main": "dist/electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && electron-builder --win",
+    "build": "vite build && electron-builder --win --publish never",
     "preview": "vite preview"
   },
   "author": "Luiz",
@@ -13,6 +13,7 @@
   "dependencies": {
     "@tabler/icons-react": "^3.47.0",
     "adm-zip": "^0.6.1",
+    "electron-updater": "^6.8.9",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "wavesurfer.js": "^7.12.12"
@@ -74,10 +75,18 @@
       "signExecutable": false
     },
     "nsis": {
+      "artifactName": "CORGI-EDITOR-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/novaLogo.ico",
       "uninstallerIcon": "assets/novaLogo.ico"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "LuizFelipeRDev",
+        "repo": "corgi-VideoEditor"
+      }
+    ]
   }
 }

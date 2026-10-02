@@ -229,7 +229,7 @@ function SubtitlesPanel({
   }
 
   return (
-    <div className="w-64 border-l-2 border-retro-black bg-retro-bg flex flex-col">
+    <div className="w-64 shrink-0 border-l-2 border-retro-black bg-retro-bg flex flex-col">
       <div className="p-3 border-b-2 border-retro-black">
         <h3 className="font-pixel text-[8px] text-retro-black uppercase">{t('panel.title')}</h3>
       </div>

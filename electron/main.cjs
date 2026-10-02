@@ -7,6 +7,9 @@ const windowConfig = require('../src/global_config/window.js');
 // First-install defaults centralized (see src/global_config/configDefaults.js)
 const { CONFIG_DEFAULTS } = require('../src/global_config/configDefaults.js');
 const { syncFontsDir } = require('./fontSync.cjs');
+// UPDATE: manual flow driven from the About modal (see the updater block
+// below). Declared here so the whole update surface lives in one place.
+const { autoUpdater } = require('electron-updater');
 
 const isDev = !app.isPackaged;
 const devRoot = app.getAppPath();
@@ -299,13 +302,83 @@ ipcMain.handle('toggle-fullscreen', () => {
 
 ipcMain.handle('resize-window', (e, width, height) => {
   if (mainWindow) {
-    // The minimum ALWAYS follows the state (640/900 x 566) — the window cannot
+    // The minimum ALWAYS follows the state (700/960 x 566) — the window cannot
     // be smaller than it is today, even if the user stretches it.
     windowStateSize = { width, height };
     mainWindow.setMinimumSize(width, height)
     // Inside fullscreen the size is not touched; the minimum applies and the state
     // size is resolved on exit (leave-full-screen listener).
     if (!mainWindow.isFullScreen()) mainWindow.setSize(width, height)
+  }
+});
+
+// ---------------------------------------------------------------------------
+// UPDATE (electron-updater)
+// ---------------------------------------------------------------------------
+// Manual flow only: the check runs when the user clicks the button in
+// About modal — nothing runs on startup. autoDownload is OFF so the
+// update is only fetched AFTER the user confirms it, and after the download
+// reaches 100% the app installs itself (silent NSIS) and relaunches.
+let updaterInited = false;
+
+function sendUpdaterStatus(status) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('updater-status', status);
+  }
+}
+
+function initUpdater() {
+  if (updaterInited) return;
+  updaterInited = true;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  autoUpdater.on('checking-for-update', () => sendUpdaterStatus({ state: 'checking' }));
+  autoUpdater.on('update-not-available', () => sendUpdaterStatus({ state: 'not-available', current: app.getVersion() }));
+  autoUpdater.on('update-available', (info) => sendUpdaterStatus({ state: 'available', version: info.version }));
+  autoUpdater.on('download-progress', (p) => sendUpdaterStatus({
+    state: 'downloading',
+    percent: Math.round(p.percent || 0),
+    transferred: p.transferred || 0,
+    total: p.total || 0,
+  }));
+  autoUpdater.on('update-downloaded', (info) => {
+    sendUpdaterStatus({ state: 'downloaded', version: info.version });
+    // Short pause so the renderer shows "installing..." before the app goes
+    // away, then silent install + relaunch (isSilent, isForceRunAfter).
+    setTimeout(() => {
+      try {
+        autoUpdater.quitAndInstall(true, true);
+      } catch (err) {
+        sendUpdaterStatus({ state: 'error', message: String((err && err.message) || err) });
+      }
+    }, 800);
+  });
+  autoUpdater.on('error', (err) => sendUpdaterStatus({ state: 'error', message: String((err && err.message) || err) }));
+}
+
+// INSTALLED app only: in dev there is no app-update.yml (electron-builder
+// writes it into the package), so the renderer gets a 'dev' result and shows
+// the "installed version only" note instead of a broken check.
+ipcMain.handle('updater-check', async () => {
+  if (!app.isPackaged) return { ok: false, reason: 'dev' };
+  initUpdater();
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: String((err && err.message) || err) };
+  }
+});
+
+ipcMain.handle('updater-download', async () => {
+  if (!app.isPackaged) return { ok: false, reason: 'dev' };
+  initUpdater();
+  try {
+    await autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: String((err && err.message) || err) };
   }
 });
 

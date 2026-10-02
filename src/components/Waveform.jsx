@@ -411,7 +411,7 @@ function Waveform({ selectedFile, onTimeUpdate, seekTo, videoRef, waveSurferRef,
   }, [])
 
   // The ruler width follows the strip's width: when the window changes
-  // (640 <-> 900 with subtitles) wavesurfer re-lays-out and the wrapper changes.
+  // (700 <-> 960 with subtitles) wavesurfer re-lays-out and the wrapper changes.
   // The rAF guarantees the measurement AFTER wavesurfer itself processes the resize.
   useEffect(() => {
     const container = containerRef.current

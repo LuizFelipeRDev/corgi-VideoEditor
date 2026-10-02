@@ -11,6 +11,19 @@ export default {
   'common.close': 'FECHAR',
   'common.error': 'ERRO',
 
+  // --- About modal (manual update flow) ---
+  'about.update': 'ATUALIZAÇÃO',
+  'about.updateCheck': 'BUSCAR ATUALIZAÇÕES',
+  'about.updateChecking': 'VERIFICANDO...',
+  'about.updateRetry': 'TENTAR NOVAMENTE',
+  'about.updateUpToDate': 'Você já está na última versão ({version}).',
+  'about.updateAvailableMsg': 'Nova versão {version} disponível. Baixar e instalar agora?',
+  'about.updateDownloading': 'Baixando atualização...',
+  'about.updateLeft': 'Falta {left} MB',
+  'about.updateInstalling': 'Baixado — instalando e reiniciando ({version})...',
+  'about.updateDevOnly': 'Disponível apenas na versão instalada.',
+  'about.updateError': 'Erro na atualização',
+
   // --- SettingsModal tabs ---
   'tabs.system': 'Sistema',
   'tabs.general': 'Geral',

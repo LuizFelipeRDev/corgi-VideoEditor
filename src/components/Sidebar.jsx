@@ -5,7 +5,7 @@ import { useLang } from '../lib/i18n'
 // modules as they arrive (ANALYZE AND SUGGEST, Ducking, arnndn...).
 // The gate is advancedTools (ADVANCED OPTIONS) — when enabled, the bar
 // shows at ANY width. (It used hidden md:flex, hiding it below 768px:
-// with subtitles off the window shrank to 640 and the bar disappeared
+// with subtitles off the window shrank to 700 and the bar disappeared
 // even with advanced options enabled.)
 function Sidebar({ onSelect, disabled }) {
   const { t } = useLang()
