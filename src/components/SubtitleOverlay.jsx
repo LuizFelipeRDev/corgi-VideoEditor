@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { SUBTITLE_STYLES, SUBTITLE_POSITIONS, hasPopEffect } from '../lib/subtitleStyles'
 import { parseSrtTimeToSecondsExport, measureTextMetrics } from '../lib/subtitleRender'
 import {
   SUBTITLE_DISPLAY_DEFAULTS,
   getPreviewFontSize,
   SUBTITLE_PREVIEW_PORTRAIT_FACTOR,
+  SUBTITLE_DISPLAY_EXPORT_RATIO,
+  SUBTITLE_EXPORT_PORTRAIT_FACTOR,
   SUBTITLE_EXPORT_NOMINAL,
   SUBTITLE_EXPORT_MARGINS,
   SUBTITLE_POP_PEAK_RATIO,
@@ -24,6 +26,26 @@ function hashString(str) {
 }
 
 function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, currentTime, fullscreen, positionMode, positionPercent, outputResolution, wordsPerLine, linesCount, hMarginPct = 0 }) {
+  // Width of the frame the overlay is painted on: the overlay root fills that
+  // frame (position absolute + inset 0), so its clientWidth IS the output rect
+  // width. Measured through a CALLBACK ref (not an effect) because this
+  // component returns null when there is no active subtitle: the element only
+  // exists while something is painted, and the observer has to follow it.
+  const [frameW, setFrameW] = useState(0)
+  const frameObserverRef = useRef(null)
+  const measureFrame = useCallback((el) => {
+    frameObserverRef.current?.disconnect()
+    frameObserverRef.current = null
+    if (!el) {
+      setFrameW(0)
+      return
+    }
+    setFrameW(el.clientWidth)
+    const ro = new ResizeObserver(() => setFrameW(el.clientWidth))
+    ro.observe(el)
+    frameObserverRef.current = ro
+  }, [])
+
   if (!subtitles || subtitles.length === 0) return null
 
   const isPortrait = outputResolution === 'portrait'
@@ -108,13 +130,30 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     ),
   }
 
-  // Size: SUBTITLE_DISPLAY_DEFAULTS.preview.fontSize (14px) / fullscreen (32px),
-  // via getPreviewFontSize — the size the maintainer tuned for the LANDSCAPE
-  // editor, kept untouched. In PORTRAIT the frame is the 9:16 output rect, ~3x
-  // NARROWER than the landscape one, so 14px wrapped the line before the words
-  // fit; portrait runs smaller by SUBTITLE_PREVIEW_PORTRAIT_FACTOR (subtitleConfig.js).
-  const previewFontSize = isPortrait
-    ? Math.round(getPreviewFontSize(configFontSize, fullscreen) * SUBTITLE_PREVIEW_PORTRAIT_FACTOR)
+  // Size: PROPORTIONAL to the frame, with the export's own formula
+  // (generateAssContent scales the font by PlayResX / 1920), so the preview and
+  // the fullscreen show the subtitle at the same proportion of the picture as the
+  // exported file, at any window size. It used to be a fixed px per context
+  // (SUBTITLE_DISPLAY_DEFAULTS: 14 preview / 60 fullscreen), so the subtitle kept
+  // its pixels while the frame grew — at 1920 wide the fullscreen showed it at
+  // half the export's proportion. SUBTITLE_DISPLAY_EXPORT_RATIO tunes the preview
+  // against the file (1 = identical); before the frame is measured (first paint)
+  // the old fixed px is used, so nothing jumps.
+  // Portrait: the preview follows the EXPORT's portrait size — the SAME multiplier
+  // the file uses — so both orientations show the subtitles at the proportion of
+  // the exported video, and the maintainer only has to tune the size in one
+  // place. Without it the portrait caption came out 3x smaller than the file
+  // (reported as "too small in preview/fullscreen"). SUBTITLE_PREVIEW_PORTRAIT_FACTOR
+  // stays as a preview-only trim on top (1 = the preview follows the file).
+  // Landscape is never touched by either factor.
+  const portraitTuning = isPortrait ? SUBTITLE_EXPORT_PORTRAIT_FACTOR * SUBTITLE_PREVIEW_PORTRAIT_FACTOR : 1
+  const previewFontSize = frameW > 0
+    ? Math.round(
+      configFontSize
+      * (frameW / SUBTITLE_EXPORT_NOMINAL.landscape.width)
+      * SUBTITLE_DISPLAY_EXPORT_RATIO
+      * portraitTuning,
+    )
     : getPreviewFontSize(configFontSize, fullscreen)
 
   // Outline/shadow and letter spacing used to be px on top of the fixed
@@ -382,7 +421,7 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
   }
 
   return (
-    <div style={containerStyle}>
+    <div style={containerStyle} ref={measureFrame}>
       <div style={{ ...blockStyle, ...textStyle }}>
         {(() => {
           const wpl = wordsPerLine || 4

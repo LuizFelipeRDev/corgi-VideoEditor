@@ -61,12 +61,12 @@ export function getExportFontSize(baseFontSize, videoHeight) {
   return Math.round(baseFontSize * dimensionScale)
 }
 
-// Preview-only size factor for the PORTRAIT frame (1 = same size as landscape).
-// The portrait frame is the 9:16 OUTPUT rect, about a third of the landscape
-// width, so the landscape display size (SUBTITLE_DISPLAY_DEFAULTS.preview.fontSize)
-// no longer fits a 4-word line there. Landscape is untouched; this is the single
-// knob for the portrait preview size (0.59 = 14px -> 8px, tuned on the app).
-export const SUBTITLE_PREVIEW_PORTRAIT_FACTOR = 0.59
+// Preview-only trim on top of the portrait size (1 = the preview follows the
+// file, which is the default). The preview size is proportional to the frame (see
+// SUBTITLE_DISPLAY_EXPORT_RATIO) and already carries SUBTITLE_EXPORT_PORTRAIT_FACTOR;
+// this only exists to shrink the portrait preview ALONE, without touching the
+// export. Landscape is never touched by this factor.
+export const SUBTITLE_PREVIEW_PORTRAIT_FACTOR = 1
 
 // Base size the styles are authored against: getPreviewFontSize scales the
 // display size from it, so a style with fontSize 105 renders at the display px.
@@ -100,9 +100,19 @@ export const SUBTITLE_POP_PEAK_RATIO = 0.4
 // word width) — preview and export share the same factor.
 export const WORDPOP_PUSH_FACTOR = 0.4
 
-// Export-only size factor for the PORTRAIT frame (1 = the width-based scale,
-// which already matches the landscape proportion). The maintainer tunes this
-// one by eye: measured at 1 on a 1080x1920 output, the Headline comes out at
-// 68px / a line 29.5% of the frame width (landscape is 27.6%) — lower it to
-// shrink the portrait subtitles further (0.8 -> ~54px), raise it to grow them.
-export const SUBTITLE_EXPORT_PORTRAIT_FACTOR = 3
+// Size factor for the PORTRAIT frame (export AND preview/fullscreen): the font
+// follows the frame's width and then this multiplier, so the portrait captions
+// keep the size the maintainer tuned in the file and the preview follows it
+// automatically (SubtitleOverlay multiplies it in too — one place to tune, the
+// preview can't drift from the export). Landscape is never touched.
+export const SUBTITLE_EXPORT_PORTRAIT_FACTOR = 2
+
+// Preview/fullscreen font size as a fraction of the EXPORT's own size for the
+// frame on screen: the preview multiplies the export's font by
+// (frameWidth / 1920) and then by this factor, so 1 = the subtitle occupies
+// exactly the same proportion of the frame in the preview, in the fullscreen and
+// in the exported file, at any window size. Before, the size was a fixed px per
+// context (SUBTITLE_DISPLAY_DEFAULTS preview 14 / fullscreen 60), so the subtitle
+// kept its pixels while the frame grew — at 1920 wide the fullscreen showed it at
+// half the export's proportion. Lower it to shrink the preview against the file.
+export const SUBTITLE_DISPLAY_EXPORT_RATIO = 1
