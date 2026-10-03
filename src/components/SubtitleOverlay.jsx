@@ -1,6 +1,17 @@
+import { useState } from 'react'
 import { SUBTITLE_STYLES, SUBTITLE_POSITIONS, hasPopEffect } from '../lib/subtitleStyles'
-import { parseSrtTimeToSecondsExport, measureTextMetrics, WORDPOP_PUSH_FACTOR } from '../lib/subtitleRender'
-import { SUBTITLE_DISPLAY_DEFAULTS, getPreviewFontSize, SUBTITLE_HIGHLIGHT_BOX, SUBTITLE_POPLINE_BOX } from '../global_config/subtitleConfig'
+import { parseSrtTimeToSecondsExport, measureTextMetrics } from '../lib/subtitleRender'
+import {
+  SUBTITLE_DISPLAY_DEFAULTS,
+  getPreviewFontSize,
+  SUBTITLE_PREVIEW_PORTRAIT_FACTOR,
+  SUBTITLE_EXPORT_NOMINAL,
+  SUBTITLE_EXPORT_MARGINS,
+  SUBTITLE_POP_PEAK_RATIO,
+  WORDPOP_PUSH_FACTOR,
+  SUBTITLE_HIGHLIGHT_BOX,
+  SUBTITLE_POPLINE_BOX,
+} from '../global_config/subtitleConfig'
 import { FONTS } from '../global_config/fonts'
 
 function hashString(str) {
@@ -54,8 +65,19 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
   const posPresetEffective = SUBTITLE_POSITIONS[effectivePositionFixed] || SUBTITLE_POSITIONS.bottom
   const isPercentage = effectivePositionMode === 'percentage'
 
-  const previewMax = fullscreen ? 75 : 70
-  const clampedPercent = Math.min(previewMax, Math.max(5, isPercentage ? (effectivePositionPercent ?? 80) : 80))
+  const clampedPercent = Math.min(90, Math.max(5, isPercentage ? (effectivePositionPercent ?? 80) : 80))
+
+  // Vertical placement mirrors the EXPORT (generateAssContent): its marginV is
+  // in PlayRes units, so the same spot is marginV / playResY of the frame. A
+  // fixed px drifted with the window size — worst in portrait, where the frame
+  // is short and the preview sat much higher than the file. playResYNominal is
+  // the standard height of the chosen aspect (1080 landscape / 1920 portrait).
+  const playResYNominal = (isPortrait ? SUBTITLE_EXPORT_NOMINAL.portrait : SUBTITLE_EXPORT_NOMINAL.landscape).height
+  const marginAsPct = (units) => `${((units / playResYNominal) * 100).toFixed(3)}%`
+  const bottomMarginUnits = isPercentage
+    // percentage: the export's own formula for marginV
+    ? Math.round((clampedPercent / 100) * (playResYNominal - SUBTITLE_EXPORT_MARGINS.percentHeadroom) + SUBTITLE_EXPORT_MARGINS.bottom)
+    : SUBTITLE_EXPORT_MARGINS.bottom
 
   const containerStyle = {
     position: 'absolute',
@@ -75,30 +97,46 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     width: 'fit-content',
     margin: '0 auto',
     ...(isPercentage
-      ? { bottom: `${clampedPercent}%` }
+      ? { bottom: marginAsPct(bottomMarginUnits) }
       : posPresetEffective.justifyContent === 'center'
         ? { top: '50%', transform: 'translateY(-50%)' }
         : posPresetEffective.justifyContent === 'flex-start'
-          ? { top: fullscreen ? (posPresetEffective.paddingTop || '0') : (posPresetEffective.paddingTop ? '16px' : '10px') }
-          : { bottom: fullscreen ? (posPresetEffective.paddingBottom || '40px') : (posPresetEffective.paddingBottom ? '24px' : '40px') }
+          // export marginV for "top"
+          ? { top: marginAsPct(SUBTITLE_EXPORT_MARGINS.top) }
+          // export marginV for "bottom"
+          : { bottom: marginAsPct(SUBTITLE_EXPORT_MARGINS.bottom) }
     ),
   }
 
-  const previewFontSize = getPreviewFontSize(configFontSize, fullscreen)
+  // Size: SUBTITLE_DISPLAY_DEFAULTS.preview.fontSize (14px) / fullscreen (32px),
+  // via getPreviewFontSize — the size the maintainer tuned for the LANDSCAPE
+  // editor, kept untouched. In PORTRAIT the frame is the 9:16 output rect, ~3x
+  // NARROWER than the landscape one, so 14px wrapped the line before the words
+  // fit; portrait runs smaller by SUBTITLE_PREVIEW_PORTRAIT_FACTOR (subtitleConfig.js).
+  const previewFontSize = isPortrait
+    ? Math.round(getPreviewFontSize(configFontSize, fullscreen) * SUBTITLE_PREVIEW_PORTRAIT_FACTOR)
+    : getPreviewFontSize(configFontSize, fullscreen)
+
+  // Outline/shadow and letter spacing used to be px on top of the fixed
+  // display font size. The font is now proportional to the frame, so they
+  // scale with it (em against the OLD display size) — same visual weight as
+  // before, just bigger.
+  const refDisplayPx = getPreviewFontSize(configFontSize, fullscreen)
+  const asEm = (px) => `${(px / Math.max(1, refDisplayPx)).toFixed(4)}em`
 
   // POPLINE asks for a "border a little thick" on the letters: the preview
   // outline follows the style's outlineSize (5.0) instead of the fixed (2,4)
   // the other styles use - in the export the \\bord already comes from the style.
   const outlineShadow = animType === 'popline'
-    ? `0 0 ${stylePreset.outlineSize * 0.5}px ${stylePreset.outlineColor}, 0 0 ${stylePreset.outlineSize}px ${stylePreset.outlineColor}`
-    : `0 0 2px ${stylePreset.outlineColor}, 0 0 4px ${stylePreset.outlineColor}`
+    ? `0 0 ${asEm(stylePreset.outlineSize * 0.5)} ${stylePreset.outlineColor}, 0 0 ${asEm(stylePreset.outlineSize)} ${stylePreset.outlineColor}`
+    : `0 0 ${asEm(2)} ${stylePreset.outlineColor}, 0 0 ${asEm(4)} ${stylePreset.outlineColor}`
 
   const blockStyle = {
     fontFamily,
     fontSize: `${previewFontSize}px`,
     fontWeight: stylePreset.bold ? 'bold' : 'normal',
     fontStyle: stylePreset.italic ? 'italic' : 'normal',
-    letterSpacing: `${stylePreset.letterSpacing * 0.2}px`,
+    letterSpacing: asEm(stylePreset.letterSpacing * 0.2),
     // preset's wordSpacing: the export uses spaceWidth x wordSpacing/100,
     // so here we apply the SAME proportion to the browser's natural
     // space (negative closes, positive opens - and in previewFontSize px,
@@ -161,12 +199,11 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     return s !== null && e !== null && now >= s && now < e
   }
 
-  // POPLINE: geometry of the thin band at the base of the word (reference
-  // popline.png/md). The baseline inside the line box (the block's
-  // lineHeight 1.3) comes from the font's own metric on the canvas: half the
-  // leading + ascent - the same result as the browser's CSS layout.
-  const popBand = (() => {
-    if (animType !== 'popline') return null
+  // Font metrics on the canvas: the baseline inside the word span's own line
+  // box (the block's lineHeight 1.3) comes from the font's own metric: half
+  // the leading + ascent - the same result as the browser's CSS layout. Feeds
+  // the popline band and the scale pop's transform-origin.
+  const fontMetrics = (() => {
     const fs = previewFontSize
     const lineH = fs * 1.3
     let asc = fs * 1.0
@@ -180,7 +217,14 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
         desc = m.fontBoundingBoxDescent
       }
     } catch (e) { /* no canvas: approximation above */ }
-    const baseline = (lineH - (asc + desc)) / 2 + asc
+    return { fs, lineH, asc, desc, baseline: (lineH - (asc + desc)) / 2 + asc }
+  })()
+
+  // POPLINE: geometry of the thin band at the base of the word (reference
+  // popline.png/md).
+  const popBand = (() => {
+    if (animType !== 'popline') return null
+    const { fs, baseline } = fontMetrics
     // fractional top/height: without rounding the band matches the baseline
     // exactly like the export (which rounds only in the ASS, +-0.5px at fs105).
     return {
@@ -235,10 +279,36 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
       case 'scale': {
         const isActive = wordStart !== null && wordEnd !== null && now >= wordStart && now < wordEnd
         const scaleVal = 1 + (popSz / 100)
+        // VERTICAL ONLY, like the export: a horizontal scale would need a width
+        // compensation the browser has no notion of (the export's \fsp), and
+        // scaleY needs none — the word grows in place and nobody moves.
+        // Anchor on the BASELINE: the export scales around the baseline and
+        // popLineComp restores the line, so growing from the box center made
+        // the preview word float where the file did not.
+        const originPct = ((fontMetrics.baseline / fontMetrics.lineH) * 100).toFixed(2)
         return {
           ...base,
           color: isActive ? highlightColor : primaryColor,
-          transform: isActive ? `scale(${scaleVal})` : 'scale(1)',
+          transformOrigin: `50% ${originPct}%`,
+          transform: isActive ? `scaleY(${scaleVal})` : 'scaleY(1)',
+          transition: `color 0.05s, transform ${popDur || 0.12}s linear`,
+        }
+      }
+
+      case 'scalesnap': {
+        const isActive = wordStart !== null && wordEnd !== null && now >= wordStart && now < wordEnd
+        const scaleVal = 1 + (popSz / 100)
+        // Anchor on the BASELINE, like the export's per-line slice (the pop
+        // lifts the baseline by 0.1 x desc and popLineComp puts it back).
+        const originPct = ((fontMetrics.baseline / fontMetrics.lineH) * 100).toFixed(2)
+        return {
+          ...base,
+          color: isActive ? highlightColor : primaryColor,
+          transformOrigin: `50% ${originPct}%`,
+          // Instant on both axes (the export's static \fscx\fscy)
+          scale: isActive ? `${scaleVal} ${scaleVal}` : '1 1',
+          transform: 'none',
+          transition: 'color 0.05s, scale 0s, transform 0s',
         }
       }
 

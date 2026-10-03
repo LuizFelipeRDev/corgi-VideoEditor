@@ -48,7 +48,7 @@ export const WORDS_PER_LINE = '4'            // words per subtitle line
 export const LINES_COUNT = '2'               // max number of lines
 export const SUBTITLE_PERSISTENCE = '1'      // 1 = generated subtitles stay saved in the project
 export const SMART_SUBTITLE = 'false'        // 'true' = smart subtitles (automatic line breaking)
-export const AUTO_LINE_WRAP = 'false'        // 'true' = automatic line wrapping
+export const AUTO_LINE_WRAP = 'true'        // 'true' = automatic line wrapping
 export const SUBTITLE_H_MARGIN = '0.5'       // horizontal box margin (0–20)
 export const GREEN_SCREEN = 'false'          // 'true' = green screen behind subtitles
 export const BURN_SUBTITLES = 'true'         // 'true' = burn subtitles into the exported video

@@ -61,11 +61,14 @@ function RnnoiseModal({ config, rnnoiseInstalled, onStatusChange, onApply, onClo
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+      {/* Fixed box: the height NEVER follows the content (model status, download
+          progress, mode slider) nor the window size — the middle area scrolls
+          while the header and the buttons stay pinned. */}
       <div
-        className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro w-[460px] p-4"
+        className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro w-[460px] h-[520px] p-4 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
           <h2 className="font-pixel text-[9px] text-retro-black uppercase flex items-center gap-1.5">
             <IconBrain size={14} />
             {t('rnnoise.title')}
@@ -78,91 +81,93 @@ function RnnoiseModal({ config, rnnoiseInstalled, onStatusChange, onApply, onClo
           </button>
         </div>
 
-        <p className="font-pixel text-[6px] text-retro-black/70 leading-relaxed mb-3">{t('rnnoise.desc')}</p>
+        <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+          <p className="font-pixel text-[6px] text-retro-black/70 leading-relaxed mb-3">{t('rnnoise.desc')}</p>
 
-        {/* Neural model (status + download) */}
-        <div className="bg-retro-bg border-2 border-retro-black rounded p-3 mb-3">
-          <div className="flex items-center justify-between mb-1 gap-2">
-            <span className="font-pixel text-[6px] text-retro-black/60 uppercase">{t('rnnoise.model')}</span>
-            <span
-              className={`font-pixel text-[6px] uppercase flex items-center gap-1 ${
-                installed ? 'text-green-700' : 'text-retro-black/50'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${installed ? 'bg-green-600' : 'bg-retro-black/30'}`} />
-              {installed ? t('rnnoise.modelReady') : t('rnnoise.modelMissing')}
+          {/* Neural model (status + download) */}
+          <div className="bg-retro-bg border-2 border-retro-black rounded p-3 mb-3">
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <span className="font-pixel text-[6px] text-retro-black/60 uppercase">{t('rnnoise.model')}</span>
+              <span
+                className={`font-pixel text-[6px] uppercase flex items-center gap-1 ${
+                  installed ? 'text-green-700' : 'text-retro-black/50'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${installed ? 'bg-green-600' : 'bg-retro-black/30'}`} />
+                {installed ? t('rnnoise.modelReady') : t('rnnoise.modelMissing')}
+              </span>
+            </div>
+            <p className="font-pixel text-[6px] text-retro-black/50 leading-relaxed mb-2">{t('rnnoise.source')}</p>
+            {!installed && !downloading && (
+              <button
+                onClick={handleDownload}
+                className="btn-retro w-full h-8 bg-retro-black text-retro-bg border-2 border-retro-black rounded shadow-retro font-pixel text-[7px] uppercase hover:bg-gray-800 flex items-center justify-center gap-1"
+              >
+                <IconDownload size={13} />
+                {t('rnnoise.download')}
+              </button>
+            )}
+            {downloading && (
+              <div>
+                <p className="font-pixel text-[6px] text-retro-black uppercase mb-1">{t('rnnoise.downloading', { pct })}</p>
+                <div className="w-full h-2 bg-retro-box border border-retro-black rounded overflow-hidden">
+                  <div className="h-full bg-retro-black transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            )}
+            {err && <p className="font-pixel text-[6px] text-red-700 mt-1">{err}</p>}
+          </div>
+
+          {/* Noise engine: off / classic (afftdn) / neural (arnndn) */}
+          <div className="bg-retro-bg border-2 border-retro-black rounded p-3 mb-3">
+            <span className="font-pixel text-[6px] text-retro-black/60 uppercase block mb-1.5">{t('rnnoise.mode')}</span>
+            <div className="flex gap-1.5 flex-wrap">
+              <button className={pillCls(mode === 'off')} onClick={() => setMode('off')}>
+                {t('rnnoise.modeOff')}
+              </button>
+              <button className={pillCls(mode === 'classic')} onClick={() => setMode('classic')}>
+                {t('rnnoise.modeClassic')}
+              </button>
+              <button className={pillCls(mode === 'rnnoise')} disabled={!installed} onClick={() => setMode('rnnoise')}>
+                {t('rnnoise.modeNeural')}
+              </button>
+            </div>
+            {!installed && (
+              <p className={`font-pixel text-[6px] mt-1.5 ${mode === 'rnnoise' ? 'text-red-700' : 'text-retro-black/50'}`}>
+                {t('rnnoise.needModel')}
+              </p>
+            )}
+            {mode === 'classic' && (
+              <div className="mt-2">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-pixel text-[6px] text-retro-black/70 uppercase">{t('sound.strength')}</span>
+                  <span className="font-pixel text-[7px] text-retro-black">{draft.denoiseDb} dB</span>
+                </div>
+                <input
+                  type="range"
+                  min={-80}
+                  max={-20}
+                  step={1}
+                  value={draft.denoiseDb}
+                  onChange={(e) => setNoise({ denoiseDb: Number(e.target.value) })}
+                  className="w-full h-2 bg-retro-box border border-retro-black rounded appearance-none cursor-pointer accent-retro-black"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Chain that goes to the export */}
+          <div className="border-2 border-retro-black rounded bg-retro-bg px-2 py-1.5 mb-3">
+            <span className="font-pixel text-[6px] text-retro-black/60 uppercase block mb-0.5">{t('sound.chainLabel')}</span>
+            <span className="font-pixel text-[7px] text-retro-black break-all">
+              {chain.length ? chain.join(' → ') : t('sound.chainEmpty')}
             </span>
           </div>
-          <p className="font-pixel text-[6px] text-retro-black/50 leading-relaxed mb-2">{t('rnnoise.source')}</p>
-          {!installed && !downloading && (
-            <button
-              onClick={handleDownload}
-              className="btn-retro w-full h-8 bg-retro-black text-retro-bg border-2 border-retro-black rounded shadow-retro font-pixel text-[7px] uppercase hover:bg-gray-800 flex items-center justify-center gap-1"
-            >
-              <IconDownload size={13} />
-              {t('rnnoise.download')}
-            </button>
-          )}
-          {downloading && (
-            <div>
-              <p className="font-pixel text-[6px] text-retro-black uppercase mb-1">{t('rnnoise.downloading', { pct })}</p>
-              <div className="w-full h-2 bg-retro-box border border-retro-black rounded overflow-hidden">
-                <div className="h-full bg-retro-black transition-all" style={{ width: `${pct}%` }} />
-              </div>
-            </div>
-          )}
-          {err && <p className="font-pixel text-[6px] text-red-700 mt-1">{err}</p>}
+
+          <p className="font-pixel text-[6px] text-retro-black/50 leading-relaxed">{t('rnnoise.previewNote')}</p>
         </div>
 
-        {/* Noise engine: off / classic (afftdn) / neural (arnndn) */}
-        <div className="bg-retro-bg border-2 border-retro-black rounded p-3 mb-3">
-          <span className="font-pixel text-[6px] text-retro-black/60 uppercase block mb-1.5">{t('rnnoise.mode')}</span>
-          <div className="flex gap-1.5 flex-wrap">
-            <button className={pillCls(mode === 'off')} onClick={() => setMode('off')}>
-              {t('rnnoise.modeOff')}
-            </button>
-            <button className={pillCls(mode === 'classic')} onClick={() => setMode('classic')}>
-              {t('rnnoise.modeClassic')}
-            </button>
-            <button className={pillCls(mode === 'rnnoise')} disabled={!installed} onClick={() => setMode('rnnoise')}>
-              {t('rnnoise.modeNeural')}
-            </button>
-          </div>
-          {!installed && (
-            <p className={`font-pixel text-[6px] mt-1.5 ${mode === 'rnnoise' ? 'text-red-700' : 'text-retro-black/50'}`}>
-              {t('rnnoise.needModel')}
-            </p>
-          )}
-          {mode === 'classic' && (
-            <div className="mt-2">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-pixel text-[6px] text-retro-black/70 uppercase">{t('sound.strength')}</span>
-                <span className="font-pixel text-[7px] text-retro-black">{draft.denoiseDb} dB</span>
-              </div>
-              <input
-                type="range"
-                min={-80}
-                max={-20}
-                step={1}
-                value={draft.denoiseDb}
-                onChange={(e) => setNoise({ denoiseDb: Number(e.target.value) })}
-                className="w-full h-2 bg-retro-box border border-retro-black rounded appearance-none cursor-pointer accent-retro-black"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Chain that goes to the export */}
-        <div className="border-2 border-retro-black rounded bg-retro-bg px-2 py-1.5 mb-3">
-          <span className="font-pixel text-[6px] text-retro-black/60 uppercase block mb-0.5">{t('sound.chainLabel')}</span>
-          <span className="font-pixel text-[7px] text-retro-black break-all">
-            {chain.length ? chain.join(' → ') : t('sound.chainEmpty')}
-          </span>
-        </div>
-
-        <p className="font-pixel text-[6px] text-retro-black/50 leading-relaxed mb-3">{t('rnnoise.previewNote')}</p>
-
-        <div className="flex gap-2">
+        <div className="flex gap-2 mt-3 flex-shrink-0">
           <button
             onClick={onClose}
             className="btn-retro flex-1 h-9 bg-retro-bg border-2 border-retro-black rounded shadow-retro font-pixel text-[7px] text-retro-black uppercase hover:bg-gray-200"

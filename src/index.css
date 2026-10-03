@@ -239,6 +239,9 @@ input[type='range'].db-range:disabled { opacity: 0.35; cursor: not-allowed; }
 /* POPLINE: pop only upward (no "shrink" before), peak at 40% of the
    duration - same shape as the export's \\t (subtitleRender.js). The
    transform scales the box AND the word together (both are the same span). */
+/* POPLINE keyframes — the 40% peak mirrors the export's \t pair
+   (SUBTITLE_POP_PEAK_RATIO in global_config/subtitleConfig.js). CSS can't read
+   the JS constant, so both sides must be changed together. */
 @keyframes subtitle-popline {
   0%   { transform: scale(1.00); }
   40%  { transform: scale(1.15); }
@@ -310,6 +313,12 @@ input[type='range'].db-range:disabled { opacity: 0.35; cursor: not-allowed; }
 /* Window/document background follows the theme (sits behind the root, only appears
    in pre-paint and on scroll edges). */
 body { background-color: rgb(var(--c-box)); }
+
+/* Portrait letterbox: the bands above/below the 9:16 frame follow the THEME's
+   panel color (--c-box, the same behind the borders). A hardcoded black stage
+   vanished against the modern dark chrome (#101014), so the frame's edge could
+   not be seen at all. */
+.dropzone-letterbox { background-color: rgb(var(--c-box)); }
 
 /* ====== MODERN: default text ======
    Without a color class the browser inherits black; in the dark theme that becomes

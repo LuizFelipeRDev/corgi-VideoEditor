@@ -1,13 +1,11 @@
 import { SUBTITLE_STYLES, hasPopEffect } from './subtitleStyles'
-import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize, SUBTITLE_HIGHLIGHT_BOX, SUBTITLE_POPLINE_BOX } from '../global_config/subtitleConfig'
+import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize, SUBTITLE_HIGHLIGHT_BOX, SUBTITLE_POPLINE_BOX, SUBTITLE_EXPORT_NOMINAL, SUBTITLE_EXPORT_MARGINS, SUBTITLE_EXPORT_PORTRAIT_FACTOR, SUBTITLE_POP_PEAK_RATIO, WORDPOP_PUSH_FACTOR } from '../global_config/subtitleConfig'
 import { FONTS } from '../global_config/fonts'
 import { getFontRenderScale, getFontWinAscent } from '../global_config/fontMetrics'
 
-// WORDPOP: push-x force. When a word gets the highlight, the words on the
-// SAME line yield this percentage of the half-width the active word
-// grows (0.4 = "slight": the active word opens space and the neighbors
-// give a small retreat, no collision). Shared with the preview (SubtitleOverlay).
-export const WORDPOP_PUSH_FACTOR = 0.4
+// WORDPOP's push-x force now lives with the other subtitle/export numbers, in
+// src/global_config/subtitleConfig.js (WORDPOP_PUSH_FACTOR) and is imported
+// above — preview (SubtitleOverlay) and export read the same value.
 
 const resolveAssFontName = (fontId, styleFontFamily) => {
   const picked = FONTS.find(f => f.id === fontId)
@@ -105,8 +103,8 @@ function stripEmojis(text) {
 export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, positionMode, positionPercent, autoLineWrap = false, hMarginPct = 0) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
 
-  const playResX = videoWidth || 1920
-  const playResY = videoHeight || 1080
+  const playResX = videoWidth || SUBTITLE_EXPORT_NOMINAL.landscape.width
+  const playResY = videoHeight || SUBTITLE_EXPORT_NOMINAL.landscape.height
 
   // Horizontal margin (% of width) to the video edge/wall: reduces the
   // usable width and FORCES the line break. Only applies with autoLineWrap on
@@ -122,7 +120,19 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
   // No italic size shrink: the preview and fullscreen render the style at its
   // full size (the browser only skews synthetic italic), so the export must
   // use the same base size to match them (italic styles were 10% smaller).
-  const scaledFontSize = getExportFontSize(baseFontSize, playResY)
+  // The font follows the frame's WIDTH, not its height: scaling by height made
+  // a 9:16 output (1920 tall) blow the subtitles up to 50% of the frame width
+  // against 27% in landscape — the words stopped fitting the line and the
+  // export looked nothing like the preview. Both orientations now keep the same
+  // proportion of the frame (for 16:9 the two formulas agree), and the width
+  // is converted into the equivalent "height" so getExportFontSize keeps being
+  // the single place with the scale floor.
+  const widthAsHeight = (playResX * SUBTITLE_EXPORT_NOMINAL.landscape.height) / SUBTITLE_EXPORT_NOMINAL.landscape.width
+  // Portrait knob (subtitleConfig.js): the width-based scale already matches
+  // the landscape proportion, so it starts at 1 and only the maintainer tunes
+  // it — landscape is never touched by this factor.
+  const portraitTuning = playResY > playResX ? SUBTITLE_EXPORT_PORTRAIT_FACTOR : 1
+  const scaledFontSize = Math.round(getExportFontSize(baseFontSize, widthAsHeight) * portraitTuning)
 
   const exportCtx = SUBTITLE_DISPLAY_DEFAULTS.export
   const effectivePositionMode = positionMode || exportCtx.positionMode || 'fixed'
@@ -130,18 +140,18 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
   const effectivePositionPercent = positionPercent ?? exportCtx.positionPercent ?? 80
 
   let alignment = 2
-  let marginV = 40
+  let marginV = SUBTITLE_EXPORT_MARGINS.bottom
 
   if (effectivePositionMode === 'percentage') {
     alignment = 2
     const percent = Math.min(90, Math.max(5, effectivePositionPercent))
-    marginV = Math.round((percent / 100) * (playResY - 60) + 40)
+    marginV = Math.round((percent / 100) * (playResY - SUBTITLE_EXPORT_MARGINS.percentHeadroom) + SUBTITLE_EXPORT_MARGINS.bottom)
   } else if (effectivePositionFixed === 'top') {
     alignment = 8
-    marginV = 20
+    marginV = SUBTITLE_EXPORT_MARGINS.top
   } else if (effectivePositionFixed === 'middle') {
     alignment = 5
-    marginV = 0
+    marginV = SUBTITLE_EXPORT_MARGINS.middle
   }
 
   const effectivePrimary = primaryColorOverride || styleConfig.primaryColor
@@ -425,7 +435,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       const popTagFor = (w, t1Ms) => {
         const wordMs = Math.max(8, Math.round((w.end - w.start) * 1000))
         const durMs = Math.max(8, Math.min(Math.round((styleConfig.popDuration || 0.10) * 1000), wordMs))
-        const growMs = Math.max(3, Math.round(durMs * 0.4))
+        const growMs = Math.max(3, Math.round(durMs * SUBTITLE_POP_PEAK_RATIO))
         return `\\t(${t1Ms},${t1Ms + growMs},\\fscx${popPeak}\\fscy${popPeak})\\t(${t1Ms + growMs},${t1Ms + durMs},\\fscx100\\fscy100)`
       }
 
@@ -480,7 +490,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       continue
     }
 
-    // SCALE (Headline): one Dialogue PER LINE per active-word slice, each
+    // SCALE (Headline) and SCALE SNAP (Simple Pop): one Dialogue PER LINE per
+    // active-word slice, each
     // line pinned with \an2\pos at its fixed line bottom (layout computed
     // once per block). The legacy single multi-line Dialogue let the inline
     // \fscy of the pop scale the LINE BOX (+0.1 x fontSize), so the \an2
@@ -492,7 +503,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     // line holding the active word adds (popPeak-100)/100 x desc to pos.y:
     // the scaled box anchors its baseline at cy - 1.1 x desc (probe: +3px
     // rise), so the compensation restores the exact natural baseline.
-    if (styleConfig.animationType === 'scale') {
+    //
+    // Headline's pop is VERTICAL ONLY (see getAnimationTag): \fscx changes the
+    // glyph advance, so a horizontal pop re-flows the line and the centered
+    // block jumps sideways at every word change (probe: 6px). With \fscy
+    // alone the line's layout is identical to a no-pop render — same as the
+    // preview's transform, which never reflows.
+    if (styleConfig.animationType === 'scale' || styleConfig.animationType === 'scalesnap') {
       const layout = computeHighlightBoxLayout(
         blockWords, playResX, playResY, scaledFontSize, alignment, marginV,
         cssFontFamily, styleConfig.bold, styleConfig.wordSpacing, assFontName, SUBTITLE_HIGHLIGHT_BOX, hMarginPx
@@ -919,6 +936,20 @@ function getAnimationTag(styleConfig, highlightAss, word, eventDuration, measure
       return `{\\kf${durationCs}}`
     }
     case 'scale': {
+      // SMOOTH + VERTICAL ONLY (Headline). \fscx changes the glyph ADVANCE, so
+      // a horizontal pop re-flows the line and the centered block jumps
+      // sideways at every word change (probe: 6px, and the \fsp compensation
+      // that should prevent it is not interpolated by libass inside a \t).
+      // \fscy alone leaves the line's layout identical to a no-pop render,
+      // matching the preview's scaleY (a CSS transform never reflows).
+      const durationMs = Math.max(0, Math.round((word.end - word.start) * 1000))
+      const growMs = Math.max(1, Math.min(Math.round(popDur * 1000), Math.floor(durationMs / 2)))
+      const shrinkMs = Math.max(growMs, Math.min(durationMs, growMs + Math.round(popDur * 1000)))
+      return `{\\fscy100\\t(0,${growMs},\\fscy${popPeak})\\t(${growMs},${shrinkMs},\\fscy100)\\c${highlightAss}}`
+    }
+    case 'scalesnap': {
+      // SNAP (Simple Pop): instantly at the peak on BOTH axes for the whole
+      // word — no \t at all.
       return `{\\fscx${popPeak}\\fscy${popPeak}${fspTag(fspAt(popPeak))}\\c${highlightAss}}`
     }
     case 'wordpop': {

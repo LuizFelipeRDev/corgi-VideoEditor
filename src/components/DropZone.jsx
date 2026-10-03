@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
+import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconPlayerStopFilled } from '@tabler/icons-react'
 import { useLang } from '../lib/i18n'
 import SubtitleOverlay from './SubtitleOverlay'
+
+// Fullscreen transport: idle time before the play/stop buttons fade out.
+const FS_CONTROLS_HIDE_MS = 2000
+
+// Glass button of the fullscreen control stack (same family as the close X, one
+// step more transparent so the stack reads as a group).
+const FS_BTN_CLASS = 'w-7 h-7 bg-white/10 hover:bg-white/30 backdrop-blur-md border border-white/30 rounded flex items-center justify-center text-white transition-colors'
 
 // Bytes -> "20 MB" / "1.5 GB" (one decimal place only when it adds info)
 const formatFileSize = (bytes) => {
@@ -30,6 +38,11 @@ const STAGE_STYLE = { containerType: 'size' }
 const frameStyle = (ratioW, ratioH) => ({
   aspectRatio: `${ratioW} / ${ratioH}`,
   width: `min(100cqw, calc(100cqh * ${(ratioW / ratioH).toFixed(4)}))`,
+  // The frame is the OUTPUT rect: black, like the export's pad=...:color=black.
+  // object-contain leaves the video's leftover area transparent, so without
+  // this the "phone" bars of a portrait 9:16 frame showed whatever the stage
+  // was painted with (and with a dark stage they vanished completely).
+  backgroundColor: '#000',
 })
 
 function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, seekTo, onClear, videoRef, waveSurferRef, subtitles, subtitleStyle, subtitlePosition, subtitleConfigs, positionMode, positionPercent, outputResolution, greenScreen, subtitlesEnabled, currentTime: currentTimeProp, wordsPerLine, linesCount, hMarginPct = 0 }) {
@@ -39,9 +52,78 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
   const [videoTime, setVideoTime] = useState(0)
   const savedTimeRef = useRef(0)
 
+  // Fullscreen transport (play/pause + stop). The state lives here because the
+  // fullscreen player is mounted in this component, outside the Waveform.
+  const [fsPlaying, setFsPlaying] = useState(false)
+  const [fsControlsVisible, setFsControlsVisible] = useState(true)
+  const fsHideTimerRef = useRef(null)
+
   const isVideo = selectedFile && /\.(mp4|mkv|mov|webm|avi)$/i.test(selectedFile.name)
   const isAudio = selectedFile && /\.(mp3|wav|flac|ogg|aac|m4a)$/i.test(selectedFile.name)
   const effectiveTime = currentTimeProp !== undefined ? currentTimeProp : videoTime
+
+  // The SOUND always comes from the WaveSurfer: it decodes the audio of the very
+  // same file (Waveform.jsx loads it), while the <video> elements are muted and
+  // only draw the picture. So the fullscreen transport drives that same pair —
+  // exactly like the Waveform buttons and the space key — and never unmutes the
+  // video (that would double the audio).
+  const fsIsPlayingNow = () => {
+    const ws = waveSurferRef?.current
+    if (ws) return ws.isPlaying()
+    const v = videoRef?.current
+    return !!v && !v.paused && !v.ended
+  }
+
+  // Any mouse movement brings the buttons back; they only fade out while the
+  // media is playing — paused, they stay put (otherwise there would be no way to
+  // press play again without moving the mouse).
+  const showFsControls = () => {
+    setFsControlsVisible(true)
+    if (fsHideTimerRef.current) clearTimeout(fsHideTimerRef.current)
+    fsHideTimerRef.current = setTimeout(() => {
+      if (fsIsPlayingNow()) setFsControlsVisible(false)
+    }, FS_CONTROLS_HIDE_MS)
+  }
+
+  const fsPause = () => {
+    waveSurferRef?.current?.pause()
+    videoRef?.current?.pause()
+  }
+
+  const fsTogglePlay = (e) => {
+    e.stopPropagation()
+    if (fsIsPlayingNow()) {
+      fsPause()
+    } else {
+      waveSurferRef?.current?.play()
+      videoRef?.current?.play()
+    }
+    showFsControls()
+  }
+
+  // Stop = pause and rewind to the beginning (the transport's restart button).
+  const fsStop = (e) => {
+    e.stopPropagation()
+    fsPause()
+    waveSurferRef?.current?.setTime(0)
+    if (videoRef?.current) videoRef.current.currentTime = 0
+    setFsPlaying(false)
+    showFsControls()
+  }
+
+  // On entry the buttons show for FS_CONTROLS_HIDE_MS; while the fullscreen is
+  // open the icon follows the real media state (it can change from the keyboard,
+  // from the transport panel, or when the media ends on its own).
+  useEffect(() => {
+    if (!videoFullscreen) return undefined
+    setFsPlaying(fsIsPlayingNow())
+    showFsControls()
+    const id = setInterval(() => setFsPlaying(fsIsPlayingNow()), 200)
+    return () => {
+      clearInterval(id)
+      if (fsHideTimerRef.current) clearTimeout(fsHideTimerRef.current)
+    }
+  }, [videoFullscreen])
 
   // Intrinsic size of the loaded video, used as the frame ratio when the output
   // resolution is 'original' (the export then keeps the input resolution).
@@ -153,7 +235,7 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
         ) : isVideo && !videoFullscreen ? (
           <div
             style={STAGE_STYLE}
-            className={`min-h-0 w-full h-full flex items-center justify-center overflow-hidden relative ${outputResolution === 'portrait' ? 'bg-black' : ''}`}
+            className={`min-h-0 w-full h-full flex items-center justify-center overflow-hidden relative ${outputResolution === 'portrait' ? 'dropzone-letterbox' : ''}`}
           >
             {/* The frame IS the video rect (ratio fixed in CSS at every window
                 size), so the overlay lands where the export puts it. */}
@@ -280,7 +362,8 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
       {videoFullscreen && selectedFile && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: outputResolution === 'portrait' ? '#1a1a1a' : '#000' }}
+          style={{ backgroundColor: outputResolution === 'portrait' ? 'rgb(var(--c-box))' : '#000' }}
+          onMouseMove={showFsControls}
           onClick={() => {
             if (videoRef.current) {
               savedTimeRef.current = videoRef.current.currentTime
@@ -347,24 +430,49 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
               </div>
             </div>
           )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              if (videoRef.current) {
-                savedTimeRef.current = videoRef.current.currentTime
-                videoRef.current.pause()
-              }
-              if (waveSurferRef?.current) waveSurferRef.current.pause()
-              setVideoFullscreen(false)
-              setTimeout(() => {
-                if (videoRef.current) videoRef.current.currentTime = savedTimeRef.current
-              }, 100)
-            }}
-            className="absolute top-2 right-2 w-7 h-7 bg-white/20 hover:bg-white/40 border border-white/30 rounded flex items-center justify-center text-white text-[12px] transition-colors"
-            title={t('dropzone.exitFullscreen')}
-          >
-            ✕
-          </button>
+          {/* Control stack: close X on top (always visible) and, under it, the
+              play/pause + stop pair — they appear on any mouse move and fade out
+              after FS_CONTROLS_HIDE_MS while the media plays. */}
+          <div className="absolute top-2 right-2 flex flex-col items-center gap-1.5 z-10">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (videoRef.current) {
+                  savedTimeRef.current = videoRef.current.currentTime
+                  videoRef.current.pause()
+                }
+                if (waveSurferRef?.current) waveSurferRef.current.pause()
+                setVideoFullscreen(false)
+                setTimeout(() => {
+                  if (videoRef.current) videoRef.current.currentTime = savedTimeRef.current
+                }, 100)
+              }}
+              className="w-7 h-7 bg-white/20 hover:bg-white/40 border border-white/30 rounded flex items-center justify-center text-white text-[12px] transition-colors"
+              title={t('dropzone.exitFullscreen')}
+            >
+              ✕
+            </button>
+            {fsControlsVisible && (
+              <>
+                <button
+                  onClick={fsTogglePlay}
+                  className={FS_BTN_CLASS}
+                  title={t('shortcuts.playPause')}
+                >
+                  {fsPlaying
+                    ? <IconPlayerPauseFilled className="w-4 h-4" />
+                    : <IconPlayerPlayFilled className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={fsStop}
+                  className={FS_BTN_CLASS}
+                  title={t('panel.stop')}
+                >
+                  <IconPlayerStopFilled className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

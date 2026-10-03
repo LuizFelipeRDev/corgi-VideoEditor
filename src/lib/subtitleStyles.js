@@ -22,7 +22,10 @@
  *   'simple'       = static color, no animation
  *   'bounce'       = animation on the whole BLOCK (pop on the block)
  *   'karaoke'      = words become highlighted after spoken
- *   'scale'        = scale on the active WORD (pop per word)
+ *   'scale'        = scale on the active WORD, SMOOTH (grows to the peak over
+ *                    popDuration and returns by the end of the word) - Headline
+ *   'scalesnap'    = same pop with NO smoothing: the active word jumps straight
+ *                    to the peak on both axes - Simple Pop
  *   'wordpop'      = pop animation on the active WORD
  *   'highlightbox' = background box on the active WORD (no pop)
  *   'popline'      = thin band on the BASE of the active WORD + pop (band and
@@ -34,9 +37,11 @@
  * SUBTITLE_POPLINE_BOX (height/top relative to the line's baseline),
  * applying to preview, fullscreen and export.
  *
- * To add a new style with pop, just define:
+ * To add a new style reusing an existing animationType, just define:
  *   animationType + popIntensity + popDuration + popSize
- * No need to change SubtitleOverlay.jsx or subtitleRender.js.
+ * No need to change SubtitleOverlay.jsx or subtitleRender.js. A NEW
+ * animationType also needs a case in SubtitleOverlay.jsx (preview/fullscreen)
+ * and in subtitleRender.js (export).
  */
 
 export const SUBTITLE_STYLES = {
@@ -128,9 +133,38 @@ export const SUBTITLE_STYLES = {
     wordSpacing: 110,
     animationType: 'scale',
     popIntensity: 1,
-    popDuration: 0,
+    // SMOOTH pop: grows to +10% over 120ms and returns by the end of the word.
+    // Export (\t grow + \t shrink) and preview (transform transition) run the
+    // SAME window, so the file matches what the preview/fullscreen shows.
+    popDuration: 0.12,
     popSize: 10,
     bestFor: 'Professional & clean',
+  },
+  simplepop: {
+    id: 'simplepop',
+    name: 'Simple Pop',
+    fontFamily: 'Bebas Neue, sans-serif',
+    fontNameFallback: 'IBM Plex Sans, sans-serif',
+    fontSize: 120,
+    primaryColor: '#FFFFFF',
+    highlightColor: '#F5F5F5',
+    outlineColor: '#000000',
+    shadowColor: '#000000',
+    shadowAlpha: 128,
+    outlineSize: 4.0,
+    shadowDepth: 3.0,
+    bold: true,
+    italic: false,
+    letterSpacing: 3.0,
+    wordSpacing: 110,
+    // Headline's geometry with the pop INSTANT on both sides (no \t on the
+    // export, no transition on the preview) - the legacy Headline look, kept
+    // as its own style now that Headline eases.
+    animationType: 'scalesnap',
+    popIntensity: 1,
+    popDuration: 0, // unused by 'scalesnap' (the pop has no time curve)
+    popSize: 10,
+    bestFor: 'Headlines with a hard pop',
   },
   /* WORD POP COMMENTED OUT (v1.9.0): hidden from the style selection until the
      preview problem is fixed. Outside SUBTITLE_STYLES it disappears
