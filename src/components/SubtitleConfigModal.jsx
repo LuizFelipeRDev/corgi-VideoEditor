@@ -2,7 +2,14 @@ import { useState } from 'react'
 import { useLang } from '../lib/i18n'
 import { SUBTITLE_STYLES } from '../lib/subtitleStyles'
 import { FONTS } from '../global_config/fonts'
-import { IconStar, IconStarFilled } from '@tabler/icons-react'
+import { IconStar, IconStarFilled, IconX } from '@tabler/icons-react'
+
+// Range of the outline slider: the unit is the ASS \bord (PlayRes units, scaled
+// by libass together with the font), so 0 removes the border and the styles
+// themselves live between 4 and 8.
+const OUTLINE_MIN = 0
+const OUTLINE_MAX = 12
+const OUTLINE_STEP = 0.5
 
 function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defaultLinesCount, favoriteFonts = [], onToggleFavoriteFont, onSave, onClose }) {
   const { t } = useLang()
@@ -14,6 +21,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
   const [localLinesCount, setLocalLinesCount] = useState(config.linesCount || defaultLinesCount)
   const [localFont, setLocalFont] = useState(config.fontId || defaultFont)
   const [localFontSize, setLocalFontSize] = useState(config.fontSize || styleConfig.fontSize)
+  const [localOutline, setLocalOutline] = useState(config.outlineSize ?? styleConfig.outlineSize)
   const [useGlobalConfig, setUseGlobalConfig] = useState(config.useGlobalConfig ?? true)
   const [fontsOpen, setFontsOpen] = useState(false)
 
@@ -32,6 +40,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
     setLocalLinesCount(defaultLinesCount)
     setLocalFont(defaultFont)
     setLocalFontSize(styleConfig.fontSize)
+    setLocalOutline(styleConfig.outlineSize)
   }
 
   const handleSave = () => {
@@ -42,20 +51,35 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
       linesCount: useGlobalConfig ? undefined : localLinesCount,
       fontId: localFont,
       fontSize: localFontSize,
+      outlineSize: localOutline,
       useGlobalConfig,
     })
   }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+      {/* Locked box: the height NEVER follows the content (the outline slider,
+          the styled labels, a longer translation) nor the window size. Header,
+          font picker and buttons stay pinned; only the settings in between
+          scroll. Same model as the sound config and rnnoise modals. */}
       <div
-        className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro h-auto w-80 p-4"
+        className="bg-retro-box border-2 border-retro-black rounded-lg shadow-retro w-80 h-[500px] p-4 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-pixel text-[8px] text-retro-black uppercase mb-4">{t('subConfig.title', { name: styleConfig.name })}</h3>
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
+          <h3 className="font-pixel text-[8px] text-retro-black uppercase">{t('subConfig.title', { name: styleConfig.name })}</h3>
+          <button
+            onClick={onClose}
+            title={t('common.close')}
+            className="w-6 h-6 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm flex items-center justify-center hover:bg-red-200 shrink-0"
+          >
+            <IconX size={12} stroke={2.5} />
+          </button>
+        </div>
 
-        <div className="flex flex-col gap-3">
-          <div className="relative">
+        {/* Font picker PINNED above the scroll area on purpose: its list is an
+            absolute dropdown, and the scroll container below would clip it. */}
+        <div className="relative flex-shrink-0 mb-3">
             <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.font')}</label>
             <button
               type="button"
@@ -98,6 +122,8 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
             )}
           </div>
 
+        {/* Everything else scrolls inside the locked height */}
+        <div className="flex-1 overflow-y-auto min-h-0 pr-1 flex flex-col gap-3">
           <div>
             <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.fontSize', { size: localFontSize })}</label>
             <input
@@ -111,6 +137,23 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
             <div className="flex justify-between mt-0.5">
               <span className="font-pixel text-[5px] text-retro-black/50">50</span>
               <span className="font-pixel text-[5px] text-retro-black/50">200</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="font-pixel text-[6px] text-retro-black/70 uppercase block mb-1">{t('subConfig.outline', { size: localOutline })}</label>
+            <input
+              type="range"
+              min={OUTLINE_MIN}
+              max={OUTLINE_MAX}
+              step={OUTLINE_STEP}
+              value={localOutline}
+              onChange={(e) => setLocalOutline(Number(e.target.value))}
+              className="w-full h-2 bg-retro-bg border border-retro-black rounded appearance-none cursor-pointer accent-retro-black"
+            />
+            <div className="flex justify-between mt-0.5">
+              <span className="font-pixel text-[5px] text-retro-black/50">{OUTLINE_MIN}</span>
+              <span className="font-pixel text-[5px] text-retro-black/50">{OUTLINE_MAX}</span>
             </div>
           </div>
 
@@ -176,7 +219,7 @@ function SubtitleConfigModal({ subtitleStyle, config, defaultWordsPerLine, defau
           </div>
         </div>
 
-        <div className="flex gap-2 mt-4">
+        <div className="flex gap-2 mt-4 flex-shrink-0">
           <button
             onClick={handleReset}
             className="flex-1 h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm font-pixel text-[6px] text-retro-black uppercase hover:bg-gray-200"

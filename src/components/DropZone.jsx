@@ -60,7 +60,35 @@ function DropZone({ selectedFile, setSelectedFile, processing, onTimeUpdate, see
 
   const isVideo = selectedFile && /\.(mp4|mkv|mov|webm|avi)$/i.test(selectedFile.name)
   const isAudio = selectedFile && /\.(mp3|wav|flac|ogg|aac|m4a)$/i.test(selectedFile.name)
-  const effectiveTime = currentTimeProp !== undefined ? currentTimeProp : videoTime
+
+  // Frame-accurate clock for the subtitle overlay. The App pushes currentTime at
+  // 20 Hz (that state re-renders its whole tree), which would step the word pops;
+  // here the preview listens to the PLAYER directly, so the overlay animates at
+  // frame rate while only this component re-renders — never the whole app. Falls
+  // back to the video element's own timeupdate and, without a player, to the
+  // App's value.
+  const [playerTime, setPlayerTime] = useState(null)
+  const playerWsRef = useRef(null)
+  useEffect(() => {
+    const ws = waveSurferRef?.current
+    if (!ws || ws === playerWsRef.current) return undefined
+    playerWsRef.current = ws
+    const onTick = (t) => setPlayerTime(t)
+    // wavesurfer's on() RETURNS its own unsubscribe (the API has no off(): the
+    // EventEmitter exposes on/un/once), so the cleanup uses that instead of guessing
+    // a method name.
+    const unsubscribe = ws.on('timeupdate', onTick)
+    return () => {
+      unsubscribe()
+      playerWsRef.current = null
+    }
+  })
+  // New file → the old player's time is meaningless.
+  useEffect(() => { setPlayerTime(null) }, [selectedFile?.path])
+
+  const effectiveTime = playerTime !== null
+    ? playerTime
+    : (currentTimeProp !== undefined ? currentTimeProp : videoTime)
 
   // The SOUND always comes from the WaveSurfer: it decodes the audio of the very
   // same file (Waveform.jsx loads it), while the <video> elements are muted and

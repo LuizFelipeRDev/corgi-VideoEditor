@@ -409,4 +409,5 @@ export default {
   'ducking.musicDb': 'Music track volume (dB)',
   'ducking.fadeOut': 'FADE OUT',
   'ducking.fadeOutHint': 'Music fades out at the end (last 1.5 s)',
+  'subConfig.outline': 'Font outline - {size}',
 }

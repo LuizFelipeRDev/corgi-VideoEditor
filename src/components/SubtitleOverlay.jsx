@@ -6,6 +6,7 @@ import {
   getPreviewFontSize,
   SUBTITLE_PREVIEW_PORTRAIT_FACTOR,
   SUBTITLE_DISPLAY_EXPORT_RATIO,
+  SUBTITLE_OUTLINE_FACTORS,
   SUBTITLE_EXPORT_PORTRAIT_FACTOR,
   SUBTITLE_EXPORT_NOMINAL,
   SUBTITLE_EXPORT_MARGINS,
@@ -15,6 +16,40 @@ import {
   SUBTITLE_POPLINE_BOX,
 } from '../global_config/subtitleConfig'
 import { FONTS } from '../global_config/fonts'
+
+// Measuring canvas + cache for the font box (fontBoundingBox*), reused across
+// renders: the block below runs in the render body and was creating a canvas
+// element + a 2d context on EVERY render (60x/s while media plays). NOTE this is
+// deliberately NOT measureTextMetrics() from subtitleRender: that one reports
+// the INK box (actualBoundingBox*), and the popline band and the scale pop's
+// transform-origin are anchored to the FONT box.
+let fontBoxCanvas = null
+let fontBoxCache = {}
+const FONT_BOX_CACHE_MAX = 200
+
+function measureFontBox(fs, fontFamily, bold, italic) {
+  const key = `${Math.round(fs * 100)}|${fontFamily}|${bold}|${italic}`
+  const hit = fontBoxCache[key]
+  if (hit) return hit
+  let asc = fs * 1.0
+  let desc = fs * 0.3
+  try {
+    if (!fontBoxCanvas) fontBoxCanvas = document.createElement('canvas')
+    const ctx = fontBoxCanvas.getContext('2d')
+    ctx.font = `${italic ? 'italic ' : ''}${bold ? '700' : '400'} ${fs}px ${fontFamily}`
+    const m = ctx.measureText('H')
+    if (m.fontBoundingBoxAscent) {
+      asc = m.fontBoundingBoxAscent
+      desc = m.fontBoundingBoxDescent
+    }
+  } catch (e) { /* no canvas: approximation */ }
+  const box = { asc, desc }
+  // The size is frame-proportional, so a window drag walks through many sizes:
+  // keep the cache bounded.
+  if (Object.keys(fontBoxCache).length > FONT_BOX_CACHE_MAX) fontBoxCache = {}
+  fontBoxCache[key] = box
+  return box
+}
 
 function hashString(str) {
   let hash = 0
@@ -33,6 +68,11 @@ function SubtitleOverlay({ subtitles, subtitleStyle, subtitlePosition, subtitleC
   // exists while something is painted, and the observer has to follow it.
   const [frameW, setFrameW] = useState(0)
   const frameObserverRef = useRef(null)
+  // Index of the last subtitle found active. Playback is sequential and the list
+  // is ordered, so probing it (and the next one) first turns the O(N) scan — 2
+  // SRT regex parses per subtitle, on EVERY render — into O(1); the full scan
+  // stays as the fallback for a seek/jump or an edit that shifts the times.
+  const activeIndexRef = useRef(-1)
   const measureFrame = useCallback((el) => {
     frameObserverRef.current?.disconnect()
     frameObserverRef.current = null
@@ -64,11 +104,28 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
   const popDur = stylePreset.popDuration
   const popSz = stylePreset.popSize
 
-  const activeSub = subtitles.find((sub) => {
-    const start = parseSrtTimeToSecondsExport(sub.start)
-    const end = parseSrtTimeToSecondsExport(sub.end)
-    return currentTime >= start && currentTime <= end
-  })
+  const inWindow = (sub, from, to) => (
+    parseSrtTimeToSecondsExport(sub.start) <= to
+    && parseSrtTimeToSecondsExport(sub.end) >= from
+  )
+  const activeSub = (() => {
+    const hint = activeIndexRef.current
+    if (hint >= 0 && hint < subtitles.length) {
+      if (inWindow(subtitles[hint], currentTime, currentTime)) return subtitles[hint]
+      const next = hint + 1
+      if (next < subtitles.length && inWindow(subtitles[next], currentTime, currentTime)) {
+        activeIndexRef.current = next
+        return subtitles[next]
+      }
+    }
+    let found = null
+    let foundIndex = -1
+    for (let i = 0; i < subtitles.length; i++) {
+      if (inWindow(subtitles[i], currentTime, currentTime)) { found = subtitles[i]; foundIndex = i; break }
+    }
+    activeIndexRef.current = foundIndex
+    return found
+  })()
 
   if (!activeSub) return null
 
@@ -163,12 +220,17 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
   const refDisplayPx = getPreviewFontSize(configFontSize, fullscreen)
   const asEm = (px) => `${(px / Math.max(1, refDisplayPx)).toFixed(4)}em`
 
-  // POPLINE asks for a "border a little thick" on the letters: the preview
-  // outline follows the style's outlineSize (5.0) instead of the fixed (2,4)
-  // the other styles use - in the export the \\bord already comes from the style.
-  const outlineShadow = animType === 'popline'
-    ? `0 0 ${asEm(stylePreset.outlineSize * 0.5)} ${stylePreset.outlineColor}, 0 0 ${asEm(stylePreset.outlineSize)} ${stylePreset.outlineColor}`
-    : `0 0 ${asEm(2)} ${stylePreset.outlineColor}, 0 0 ${asEm(4)} ${stylePreset.outlineColor}`
+  // Outline: the ASS \bord is in PlayRes units and libass scales it together with
+  // the font (ScaledBorderAndShadow: yes), so the preview's em is bord / fontSize
+  // — the SAME ratio the export gets, at any frame size. The old fixed 2/4px was
+  // relative to the DISPLAY size, so the border drifted from the file (and every
+  // style showed the same thin border, ignoring its own outlineSize). The value
+  // can be overridden per style by the outline slider in the subtitle config.
+  const outlineUnits = Number.isFinite(cfg.outlineSize) ? cfg.outlineSize : stylePreset.outlineSize
+  // Per-context dial (subtitleConfig.js): 1 = the same proportion as the file.
+  const outlineCtx = fullscreen ? SUBTITLE_OUTLINE_FACTORS.fullscreen : SUBTITLE_OUTLINE_FACTORS.preview
+  const outlineEm = (Math.max(0, outlineUnits) * outlineCtx) / Math.max(1, configFontSize)
+  const outlineShadow = `0 0 ${(outlineEm * 0.5).toFixed(4)}em ${stylePreset.outlineColor}, 0 0 ${outlineEm.toFixed(4)}em ${stylePreset.outlineColor}`
 
   const blockStyle = {
     fontFamily,
@@ -185,6 +247,14 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
     lineHeight: 1.3,
     whiteSpace: 'pre-line',
     textTransform: 'uppercase',
+    // Borda dura: o \bord do libass é um TRAÇO, não um blur — no preview ele
+    // vira -webkit-text-stroke, e o paint-order 'stroke fill' deixa o traço
+    // ATRÁS da letra (como o export, que só engrossa para fora). Sem isso a
+    // borda do preview era um text-shadow de 1px, invisível no tamanho do painel.
+    WebkitTextStroke: `${outlineEm.toFixed(4)}em ${stylePreset.outlineColor}`,
+    paintOrder: 'stroke fill',
+    // O text-shadow continua sendo a SOMBRA suave (\shad), que também existe no
+    // export — por isso outline=0 ainda deixa sombra, igual ao arquivo.
     textShadow: outlineShadow,
     maxWidth: hMarginPct > 0 ? `${100 - 2 * hMarginPct}%` : (isPortrait ? '90%' : '85%'),
     wordBreak: 'break-word',
@@ -245,17 +315,7 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
   const fontMetrics = (() => {
     const fs = previewFontSize
     const lineH = fs * 1.3
-    let asc = fs * 1.0
-    let desc = fs * 0.3
-    try {
-      const ctx = document.createElement('canvas').getContext('2d')
-      ctx.font = `${stylePreset.italic ? 'italic ' : ''}${stylePreset.bold ? '700' : '400'} ${fs}px ${fontFamily}`
-      const m = ctx.measureText('H')
-      if (m.fontBoundingBoxAscent) {
-        asc = m.fontBoundingBoxAscent
-        desc = m.fontBoundingBoxDescent
-      }
-    } catch (e) { /* no canvas: approximation above */ }
+    const { asc, desc } = measureFontBox(fs, fontFamily, stylePreset.bold, stylePreset.italic)
     return { fs, lineH, asc, desc, baseline: (lineH - (asc + desc)) / 2 + asc }
   })()
 

@@ -404,4 +404,5 @@ export default {
   'ducking.musicDb': 'Volume da faixa de música (dB)',
   'ducking.fadeOut': 'FADE OUT',
   'ducking.fadeOutHint': 'A música some no final (últimos 1,5 s)',
+  'subConfig.outline': 'Borda da Fonte - {size}',
 }

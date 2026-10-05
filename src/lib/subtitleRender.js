@@ -1,5 +1,5 @@
 import { SUBTITLE_STYLES, hasPopEffect } from './subtitleStyles'
-import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize, SUBTITLE_HIGHLIGHT_BOX, SUBTITLE_POPLINE_BOX, SUBTITLE_EXPORT_NOMINAL, SUBTITLE_EXPORT_MARGINS, SUBTITLE_EXPORT_PORTRAIT_FACTOR, SUBTITLE_POP_PEAK_RATIO, WORDPOP_PUSH_FACTOR } from '../global_config/subtitleConfig'
+import { SUBTITLE_DISPLAY_DEFAULTS, getExportFontSize, SUBTITLE_HIGHLIGHT_BOX, SUBTITLE_POPLINE_BOX, SUBTITLE_EXPORT_NOMINAL, SUBTITLE_EXPORT_MARGINS, SUBTITLE_EXPORT_PORTRAIT_FACTOR, SUBTITLE_OUTLINE_FACTORS, SUBTITLE_POP_PEAK_RATIO, WORDPOP_PUSH_FACTOR } from '../global_config/subtitleConfig'
 import { FONTS } from '../global_config/fonts'
 import { getFontRenderScale, getFontWinAscent } from '../global_config/fontMetrics'
 
@@ -100,8 +100,12 @@ function stripEmojis(text) {
     .trim()
 }
 
-export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, positionMode, positionPercent, autoLineWrap = false, hMarginPct = 0) {
+export function generateAssContent(subtitles, styleId, position, videoWidth, videoHeight, wordsPerLine = 4, linesCount = 2, primaryColorOverride, highlightColorOverride, fontId, fontSizeOverride, positionMode, positionPercent, autoLineWrap = false, hMarginPct = 0, outlineSizeOverride) {
   const styleConfig = SUBTITLE_STYLES[styleId] || SUBTITLE_STYLES['corgi-bold']
+  // Per-style outline override (outline slider in the subtitle config modal).
+  // Nullish, not ||, so 0 really removes the border. Multiplied by the export's
+  // own dial (subtitleConfig.js); 1 = the style's outlineSize as authored.
+  const outlineUnits = (outlineSizeOverride ?? styleConfig.outlineSize) * SUBTITLE_OUTLINE_FACTORS.export
 
   const playResX = videoWidth || SUBTITLE_EXPORT_NOMINAL.landscape.width
   const playResY = videoHeight || SUBTITLE_EXPORT_NOMINAL.landscape.height
@@ -171,7 +175,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${assFontName},${scaledFontSize},${primaryAss},${highlightAss},${outlineAss},${shadowAss},${styleConfig.bold ? -1 : 0},${styleConfig.italic ? -1 : 0},0,0,100,100,${styleConfig.letterSpacing},0,1,${styleConfig.outlineSize},${styleConfig.shadowDepth},${alignment},${hMarginPx},${hMarginPx},${marginV},1
+Style: Default,${assFontName},${scaledFontSize},${primaryAss},${highlightAss},${outlineAss},${shadowAss},${styleConfig.bold ? -1 : 0},${styleConfig.italic ? -1 : 0},0,0,100,100,${styleConfig.letterSpacing},0,1,${outlineUnits},${styleConfig.shadowDepth},${alignment},${hMarginPx},${hMarginPx},${marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

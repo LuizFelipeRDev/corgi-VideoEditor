@@ -116,3 +116,19 @@ export const SUBTITLE_EXPORT_PORTRAIT_FACTOR = 2
 // kept its pixels while the frame grew — at 1920 wide the fullscreen showed it at
 // half the export's proportion. Lower it to shrink the preview against the file.
 export const SUBTITLE_DISPLAY_EXPORT_RATIO = 1
+
+// Border (outline) tuning per context — ONE dial per place the subtitle is
+// drawn. All three multiply the style's `outlineSize` (the ASS \bord unit, in
+// PlayRes of the nominal 1920 width), so 1 = every context shows the border at
+// the same proportion as the exported file:
+//   export     -> subtitleRender.js writes it into the ASS `Outline` column
+//   fullscreen  -> SubtitleOverlay with `fullscreen`
+//   preview    -> SubtitleOverlay in the editor panel
+// Raise a factor to make the border thicker ONLY in that place (e.g. preview 1.4
+// to read it better on the small panel) without touching the file, or lower the
+// export one to thin the border everywhere.
+export const SUBTITLE_OUTLINE_FACTORS = {
+  export: 1,
+  fullscreen: 1,
+  preview: 1,
+}
