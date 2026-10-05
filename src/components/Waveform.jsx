@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import WaveSurfer from 'wavesurfer.js'
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js'
 import { useTheme } from '../lib/theme'
@@ -13,6 +13,74 @@ import MusicTrack from './MusicTrack'
 // longer than ~3min become a strip with horizontal scroll instead of being
 // squeezed. Short ones (<= ~3min) keep filling the container as before.
 const MIN_PX_PER_SEC = 6
+
+// Upper bound for the waveform canvases' device pixel ratio. wavesurfer uses
+// max(1, window.devicePixelRatio) with no cap, so a 2x/3x screen costs 4-9x the
+// fill rate on every redraw; for a bar graph 1.5x is indistinguishable.
+const MAX_WAVE_PIXEL_RATIO = 1.5
+const capPixelRatio = (ws) => {
+  const renderer = ws && ws.renderer
+  if (!renderer || typeof renderer.getPixelRatio !== 'function') return
+  renderer.getPixelRatio = () => Math.min(
+    Math.max(1, window.devicePixelRatio || 1),
+    MAX_WAVE_PIXEL_RATIO,
+  )
+}
+
+// normalize:true without maxPeak makes wavesurfer rescan the slice looking for
+// the maximum on EVERY redraw (calculateVerticalScale in renderer-utils.js) —
+// and redraws happen on every scroll boundary and every lazy canvas. The decoded
+// buffer is available once, at 'ready': measure it there and hand the peak over,
+// which turns the scale into O(1) per redraw.
+//
+// Two details, both measured in the browser against wavesurfer 7.12.12:
+//   - the render buffer is 8 kHz (AudioContext at that rate), so a 1h file is
+//     ~28.8M samples per channel;
+//   - calculateVerticalScale only looks at channelData[0], so scanning that
+//     channel alone reproduces exactly what wavesurfer would compute.
+// The scan runs in slices through setTimeout: a synchronous pass froze the UI
+// for ~1.7s on a 1h file, and the load itself is async (the UI stays alive).
+const MAXPEAK_SLICE = 2000000
+const maxPeakTokenRef = { current: 0 }
+
+const applyMaxPeak = (ws) => {
+  const token = ++maxPeakTokenRef.current
+  let decoded
+  try {
+    decoded = ws.getDecodedData && ws.getDecodedData()
+  } catch (e) {
+    return
+  }
+  if (!decoded || !decoded.length || !decoded.numberOfChannels) return
+  let data
+  try {
+    data = decoded.getChannelData(0)
+  } catch (e) {
+    return
+  }
+  let max = 0
+  let i = 0
+  const step = () => {
+    if (token !== maxPeakTokenRef.current) return // a newer scan (or a dead instance) won
+    const end = Math.min(data.length, i + MAXPEAK_SLICE)
+    for (; i < end; i++) {
+      const v = data[i] < 0 ? -data[i] : data[i]
+      if (v > max) max = v
+    }
+    if (i < data.length) {
+      setTimeout(step, 0)
+      return
+    }
+    if (max > 0) {
+      try {
+        ws.setOptions({ maxPeak: max })
+      } catch (e) {
+        console.warn('[wave] maxPeak nao aplicado:', e)
+      }
+    }
+  }
+  step()
+}
 
 // Thin scrollbar INSIDE the wavesurfer Shadow DOM — the document's
 // ::-webkit-scrollbar does not reach the shadow root. It only appears when the
@@ -127,6 +195,11 @@ function Waveform({
   const restoreTimeRef = useRef(0) // position to restore on the next 'ready'
   const pendingPlayRef = useRef(false) // play requested before wavesurfer becomes ready
   const appliedSeekRef = useRef(null) // last seekTo already applied (avoids reapplying on 'ready')
+  const followAfterRef = useRef(0) // earliest moment a follow may run (throttle + suspension)
+  const lastClockPushRef = useRef(0) // last time currentTime was pushed to the App (20 Hz)
+  const followSelfUntilRef = useRef(0) // window in which a scroll is the follow's own
+  const FOLLOW_INTERVAL_MS = 250 // the follow runs at most 4x/s while playing
+  const FOLLOW_SUSPEND_MS = 3000 // after the user scrolls by hand, the follow stays quiet
   // v1.8.0: SHAPE of the waveform following the treatment (offline render → envelope)
   const shapeTokenRef = useRef(0) // discards renders of old cfgs
   const shapeTimerRef = useRef(null) // debounce of the offline render
@@ -252,7 +325,21 @@ function Waveform({
       minPxPerSec: MIN_PX_PER_SEC,
       normalize: true,
       backend: 'WebAudio',
+      // The app draws its own playhead lines (updateRowsPlayhead), so wavesurfer
+      // chasing the view on every frame was pure cost: autoScroll/autoCenter
+      // rewrite the canvas layer's clipPath AND scroll the strip every
+      // animation frame, which makes the renderer draw up to 3 new canvases at
+      // each canvas boundary (and wipe the cache after 10). The view now stays
+      // where the user left it; scrolling is manual, like the editor panels.
+      autoScroll: false,
+      autoCenter: false,
     })
+    // wavesurfer sizes EVERY canvas at window.devicePixelRatio with no ceiling
+    // (utils.getPixelRatio = max(1, dpr)), so a 2x/3x screen pays 4-9x the fill
+    // rate per redraw — and redraws happen on every scroll boundary. The wave is
+    // a bar graph, where 1.5x is visually indistinguishable, so cap it. Private
+    // method (TS-private, present at runtime); re-check on a wavesurfer upgrade.
+    capPixelRatio(ws)
 
     // Styles the native scrollbar of .scroll (wavesurfer's shadow root)
     const host = containerRef.current && containerRef.current.firstElementChild
@@ -292,6 +379,7 @@ function Waveform({
     ws.on('ready', () => {
       setReady(true)
       setShowReady(true)
+      applyMaxPeak(ws)
       const d = ws.getDuration() || 0
       durationRef.current = d
       setDuration(d)
@@ -321,6 +409,12 @@ function Waveform({
           const ms = getMusicScroller()
           if (ms && ms.scrollLeft !== scroller.scrollLeft) ms.scrollLeft = scroller.scrollLeft
           updateRowsPlayhead(lastTimeRef.current)
+          // A scroll the USER made (wheel, scrollbar) suspends the playhead
+          // follow, so it never fights them. The follow's own jump is excluded
+          // by its own short window.
+          if (performance.now() >= followSelfUntilRef.current) {
+            followAfterRef.current = performance.now() + FOLLOW_SUSPEND_MS
+          }
         }
         scroller.addEventListener('scroll', onScroll)
         onScroll()
@@ -349,10 +443,52 @@ function Waveform({
       if (videoRef?.current) videoRef.current.pause()
     })
 
-    ws.on('timeupdate', (time) => {
+      // Follows the playhead while playing, at 4 Hz and ONLY when it approaches the
+  // edge of the view. wavesurfer's own autoCenter scrolled on every animation
+  // frame, which made the renderer draw new canvases at every boundary (and wipe
+  // its cache after 10); doing it here cuts that cost by ~15x and still keeps the
+  // playhead visible. Scrolling by hand is never fought: inside the view nothing
+  // moves, and one jump only happens when the playhead would leave the screen.
+  const followPlayhead = (time, ws) => {
+    const d = durationRef.current
+    const scroller = getScroller()
+    if (!ws || !scroller || !(d > 0) || !ws.isPlaying()) return
+    const now = performance.now()
+    // Throttle (4 Hz) and the suspension after a manual scroll share this gate.
+    if (now < followAfterRef.current) return
+    const totalW = ws.getWrapper() ? ws.getWrapper().offsetWidth : 0
+    const viewW = scroller.clientWidth
+    if (!(totalW > viewW)) return // fits entirely: nothing to follow
+    const x = (time / d) * totalW
+    const left = scroller.scrollLeft
+    const margin = viewW * 0.15
+    if (x > left + margin && x < left + viewW - margin) return // still comfortably visible
+    followAfterRef.current = now + FOLLOW_INTERVAL_MS
+    const target = Math.min(
+      Math.max(0, x - viewW / 2),
+      Math.max(0, totalW - viewW),
+    )
+    if (Math.abs(target - left) > 2) {
+      followSelfUntilRef.current = now + 200
+      ws.setScroll(target)
+    }
+  }
+
+  ws.on('timeupdate', (time) => {
       lastTimeRef.current = time
-      if (onTimeUpdate) onTimeUpdate(time)
+      // The App re-renders its WHOLE tree on currentTime, and timeupdate fires
+      // every animation frame: 60 full reconciliations per second while media
+      // plays. The subtitle overlay keeps a frame-accurate clock of its own
+      // (DropZone listens to this same instance), so the panels can live with
+      // 20 Hz — the word switch still lands within 50ms, imperceptible, and the
+      // panels/controls do a third of the work.
+      const nowMs = performance.now()
+      if (nowMs - lastClockPushRef.current >= 50) {
+        lastClockPushRef.current = nowMs
+        if (onTimeUpdate) onTimeUpdate(time)
+      }
       updatePlayhead(time)
+      followPlayhead(time, ws)
       syncClock(time)
       musicPreview.sync(time)
     })
@@ -518,9 +654,17 @@ function Waveform({
   // the strip for free.
   const musicOverlayRef = useRef([])
   const musicPaintTimerRef = useRef(0)
+  const musicBlobUrlRef = useRef('')
+  const musicPaintGenRef = useRef(0)
   const clearMusicOverlay = () => {
+    // Bumps the generation: a toBlob still in flight must not append its node.
+    musicPaintGenRef.current++
     musicOverlayRef.current.forEach((n) => n.remove())
     musicOverlayRef.current = []
+    if (musicBlobUrlRef.current) {
+      URL.revokeObjectURL(musicBlobUrlRef.current)
+      musicBlobUrlRef.current = ''
+    }
   }
   const paintMusicOverlay = () => {
     clearMusicOverlay()
@@ -561,9 +705,21 @@ function Waveform({
     repeat.style.cssText =
       `position:absolute;top:0;left:0;width:${rowW}px;height:${rowH}px;pointer-events:none;` +
       `background-repeat:repeat-x;background-size:${stripW.toFixed(2)}px ${rowH}px;`
-    repeat.style.backgroundImage = `url(${snap.toDataURL('image/png')})`
-    wrapper.appendChild(repeat)
-    musicOverlayRef.current.push(repeat)
+    const gen = ++musicPaintGenRef.current
+    // toDataURL encodes the PNG synchronously on the main thread and then stores
+    // a base64 string in the style attribute; toBlob encodes off the render path
+    // and the object URL keeps that giant string out of the DOM. The generation
+    // guard drops the result when the overlay was cleared meanwhile (fast resize).
+    snap.toBlob((blob) => {
+      if (!blob || gen !== musicPaintGenRef.current) return
+      const url = URL.createObjectURL(blob)
+      if (gen !== musicPaintGenRef.current) { URL.revokeObjectURL(url); return }
+      repeat.style.backgroundImage = `url(${url})`
+      if (musicBlobUrlRef.current) URL.revokeObjectURL(musicBlobUrlRef.current)
+      musicBlobUrlRef.current = url
+      wrapper.appendChild(repeat)
+      musicOverlayRef.current.push(repeat)
+    }, 'image/png')
     const seams = Math.floor(duration / mdur)
     for (let k = 1; k <= seams; k++) {
       const seam = document.createElement('div')
@@ -602,6 +758,7 @@ function Waveform({
       interact: false,
       normalize: true,
     })
+    capPixelRatio(mws)
     musicWsRef.current = mws
     // The renderer rebuilds the canvases and the wrapper width on every render
     // (zoom on window resize included) — repaint the repeated strip after each.
@@ -614,6 +771,7 @@ function Waveform({
     )
     mws.on('ready', () => {
       if (musicWsRef.current !== mws) return
+      applyMaxPeak(mws)
       // born already at the voice track's current scroll
       const vs = getScroller()
       const ms = getMusicScroller()
@@ -690,15 +848,29 @@ function Waveform({
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
+    // Debounced: a window drag fires the observer on every frame, and each tick
+    // cascaded into setRulerW -> music zoom -> strip repaint (a PNG encode
+    // before). wavesurfer re-lays-out on its own schedule, so the ruler only has
+    // to catch up once the size settles.
+    let timer = 0
+    let raf = 0
     const ro = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        const ws = wsRef.current
-        const wrapper = ws && ws.getWrapper()
-        if (wrapper) applyRulerW(wrapper.offsetWidth)
-      })
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        cancelAnimationFrame(raf)
+        raf = requestAnimationFrame(() => {
+          const ws = wsRef.current
+          const wrapper = ws && ws.getWrapper()
+          if (wrapper) applyRulerW(wrapper.offsetWidth)
+        })
+      }, 120)
     })
     ro.observe(container)
-    return () => ro.disconnect()
+    return () => {
+      clearTimeout(timer)
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
   }, [])
 
   useEffect(() => {
@@ -776,13 +948,19 @@ function Waveform({
     }
   }
 
-  // Ruler positions: label/big tick every 10s, smaller tick every 5s
-  const rulerMajors = []
-  const rulerMinors = []
-  if (duration > 0) {
-    for (let s = 0; s <= duration + 1e-6; s += 10) rulerMajors.push(s)
-    for (let s = 5; s <= duration + 1e-6; s += 10) rulerMinors.push(s)
-  }
+  // Ruler positions: label/big tick every 10s, smaller tick every 5s. Memoized on
+  // the duration: they were rebuilt inside the render body, and with a 1h file
+  // that is ~1,000 tick nodes rebuilt on EVERY render (the App re-renders at
+  // frame rate while media plays).
+  const { rulerMajors, rulerMinors } = useMemo(() => {
+    const majors = []
+    const minors = []
+    if (duration > 0) {
+      for (let s = 0; s <= duration + 1e-6; s += 10) majors.push(s)
+      for (let s = 5; s <= duration + 1e-6; s += 10) minors.push(s)
+    }
+    return { rulerMajors: majors, rulerMinors: minors }
+  }, [duration])
 
   return (
     <div ref={panelRef} className="space-y-1">

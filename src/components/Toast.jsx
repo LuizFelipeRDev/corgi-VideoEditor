@@ -1,8 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
-function Toast({ message, linkLabel, onLinkClick, duration = 5000, onClose }) {
+// Every toast closes on its own: after `duration` it fades out and calls onClose
+// (400ms later). The progress bar at the bottom runs on the SAME duration, so
+// the time left is always visible. 3s keeps the message on screen long enough to
+// be read without piling up when several actions fire in a row.
+const TOAST_DURATION_MS = 3000
+
+function Toast({ message, linkLabel, onLinkClick, duration = TOAST_DURATION_MS, onClose }) {
   const [visible, setVisible] = useState(false)
   const [closing, setClosing] = useState(false)
+  // onClose arrives as a NEW arrow function on every App render (the App
+  // re-renders ~60x/s while media plays). Listing it in the effect deps below
+  // cleared and re-armed the auto-dismiss timer on every one of those renders,
+  // so the toast never closed during playback. Holding it in a ref keeps the
+  // timer running while still calling the freshest callback when it fires.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose })
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50)
@@ -13,14 +26,14 @@ function Toast({ message, linkLabel, onLinkClick, duration = 5000, onClose }) {
     if (!visible || closing) return
     const t = setTimeout(() => {
       setClosing(true)
-      setTimeout(onClose, 400)
+      setTimeout(() => onCloseRef.current?.(), 400)
     }, duration)
     return () => clearTimeout(t)
-  }, [visible, closing, duration, onClose])
+  }, [visible, closing, duration])
 
   const handleClose = () => {
     setClosing(true)
-    setTimeout(onClose, 400)
+    setTimeout(() => onCloseRef.current?.(), 400)
   }
 
   return (

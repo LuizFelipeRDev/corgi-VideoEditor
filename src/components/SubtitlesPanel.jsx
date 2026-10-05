@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { SUBTITLE_STYLE_LIST, SUBTITLE_POSITION_LIST } from '../lib/subtitleStyles'
 import SubtitleConfigModal from './SubtitleConfigModal'
@@ -101,20 +101,48 @@ function SubtitlesPanel({
     return parseInt(h) * 3600000 + parseInt(m) * 60000 + parseInt(s) * 1000 + parseInt(ms)
   }
 
+  const activeIndexRef = useRef(-1)
   const getCurrentSubtitleIndex = () => {
     if (!currentTime || subtitles.length === 0) return -1
     const nowMs = currentTime * 1000
+    // Playback is sequential and the list is ordered, so the active row is
+    // almost always the last one found (or the next). Probing those two first
+    // turns the O(N) scan — 2 regex parses per subtitle, on EVERY render — into
+    // O(1); the full scan stays as the fallback for a seek/jump.
+    const hint = activeIndexRef.current
+    if (hint >= 0 && hint < subtitles.length) {
+      const s = subtitles[hint]
+      if (nowMs >= parseSrtTime(s.start) && nowMs <= parseSrtTime(s.end)) return hint
+      const next = hint + 1
+      if (next < subtitles.length) {
+        const n = subtitles[next]
+        if (nowMs >= parseSrtTime(n.start) && nowMs <= parseSrtTime(n.end)) {
+          activeIndexRef.current = next
+          return next
+        }
+      }
+    }
     for (let i = 0; i < subtitles.length; i++) {
       const startMs = parseSrtTime(subtitles[i].start)
       const endMs = parseSrtTime(subtitles[i].end)
       if (nowMs >= startMs && nowMs <= endMs) {
+        activeIndexRef.current = i
         return i
       }
     }
+    activeIndexRef.current = -1
     return -1
   }
 
   const currentSubtitleIndex = getCurrentSubtitleIndex()
+
+  // Word count for the Replace Word modal: it walked EVERY word of EVERY
+  // subtitle with a regex per token, on every render of the panel (which follows
+  // the playhead). Recomputed only when the list or the search changes.
+  const replaceCount = useMemo(
+    () => (showReplace ? countInSubtitles(subtitles, replaceBefore, replaceIgnoreCase) : 0),
+    [showReplace, subtitles, replaceBefore, replaceIgnoreCase],
+  )
 
   useEffect(() => {
     if (currentSubtitleIndex >= 0 && listRef.current) {
@@ -522,7 +550,7 @@ function SubtitlesPanel({
           before={replaceBefore}
           after={replaceAfter}
           ignoreCase={replaceIgnoreCase}
-          count={countInSubtitles(subtitles, replaceBefore, replaceIgnoreCase)}
+          count={replaceCount}
           onChange={(field, value) => {
             if (field === 'before') setReplaceBefore(value)
             else if (field === 'after') setReplaceAfter(value)

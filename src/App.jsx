@@ -1246,7 +1246,9 @@ function App() {
             positionMode,
             positionPercent,
             autoLineWrap,
-            hMarginPct
+            hMarginPct,
+            // ?? so a 0 (no border) is not replaced by the style's value
+            styleCfg.outlineSize ?? undefined
           )
           if (assContent) {
             await window.api.writeFile(assPath, assContent)
@@ -1884,48 +1886,56 @@ function App() {
   // None of this fires while focus is in a text field (INPUT,
   // TEXTAREA, SELECT or contenteditable) — Ctrl+* still saves
   // the project even while editing a subtitle.
-  useEffect(() => {
-    const onKey = (e) => {
-      if (processing || generatingSubtitles) return
-      const tgt = e.target
-      const typing = !!tgt && (
-        tgt.tagName === 'INPUT' ||
-        tgt.tagName === 'TEXTAREA' ||
-        tgt.tagName === 'SELECT' ||
-        tgt.isContentEditable
-      )
+  // The handler lives in the body (so it always closes over the current state)
+  // and the LISTENER is registered once: this effect had no dependency array,
+  // so it removed and re-added the listener on every render — 60 times per
+  // second while media plays. The proxy always calls the latest closure.
+  const handleKeyDown = (e) => {
+    if (processing || generatingSubtitles) return
+    const tgt = e.target
+    const typing = !!tgt && (
+      tgt.tagName === 'INPUT' ||
+      tgt.tagName === 'TEXTAREA' ||
+      tgt.tagName === 'SELECT' ||
+      tgt.isContentEditable
+    )
 
-      if (e.ctrlKey || e.metaKey) {
-        const k = (e.key || '').toLowerCase()
-        if (k === 's') { e.preventDefault(); handleSaveProject() }
-        else if (k === 'o') { e.preventDefault(); handleOpenClick() }
-        else if (k === 'n') { e.preventDefault(); requestNewProject() }
-        else if (k === 'z') { e.preventDefault(); undoSubtitles() }
-        return
-      }
-
-      if (typing || e.altKey) return
-
-      if (e.key === ' ') {
-        e.preventDefault() // keeps the key from "clicking" the focused button
-        togglePlayPause()
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault()
-        nudgeSeek(-5)
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault()
-        nudgeSeek(5)
-      } else if (e.key === 'i' || e.key === 'I') {
-        setExportMarker('start')
-      } else if (e.key === 'o' || e.key === 'O') {
-        setExportMarker('end')
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        deleteSelectedMarker()
-      }
+    if (e.ctrlKey || e.metaKey) {
+      const k = (e.key || '').toLowerCase()
+      if (k === 's') { e.preventDefault(); handleSaveProject() }
+      else if (k === 'o') { e.preventDefault(); handleOpenClick() }
+      else if (k === 'n') { e.preventDefault(); requestNewProject() }
+      else if (k === 'z') { e.preventDefault(); undoSubtitles() }
+      return
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
+
+    if (typing || e.altKey) return
+
+    if (e.key === ' ') {
+      e.preventDefault() // keeps the key from "clicking" the focused button
+      togglePlayPause()
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      nudgeSeek(-5)
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      nudgeSeek(5)
+    } else if (e.key === 'i' || e.key === 'I') {
+      setExportMarker('start')
+    } else if (e.key === 'o' || e.key === 'O') {
+      setExportMarker('end')
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      deleteSelectedMarker()
+    }
+  }
+
+  const keyHandlerRef = useRef(null)
+  useEffect(() => { keyHandlerRef.current = handleKeyDown })
+  useEffect(() => {
+    const proxy = (e) => keyHandlerRef.current?.(e)
+    window.addEventListener('keydown', proxy)
+    return () => window.removeEventListener('keydown', proxy)
+  }, [])
 
   return (
     <div className="w-full h-full flex flex-col border-[4px] border-retro-black bg-retro-box">
@@ -2207,9 +2217,11 @@ function App() {
           cancelLabel={t('ducking.cancel')}
           onPrimary={() => {
             setShowDuckingConfirm(false)
-            // Enables the 2nd track and goes straight to the music picker (as agreed).
-            handleSaveSettings({ ducking_enabled: true })
-            handlePickMusic()
+            // Enables the 2nd track and NOTHING else: the OS file explorer does
+            // NOT open by itself anymore (pedido do mantenedor). The empty row shows
+            // the drop zone / SELECIONAR MÚSICA, exactly as the confirmation text
+            // says ("aparece abaixo da onda para carregar a música").
+            handleSaveSettings({ ducking_enabled: true})
           }}
           onCancel={() => setShowDuckingConfirm(false)}
         />
@@ -2219,14 +2231,12 @@ function App() {
           message={t('app.exportToast')}
           linkLabel={t('app.openFolder')}
           onLinkClick={() => window.api.openFolder(exportedFolderPath)}
-          duration={5000}
           onClose={() => setShowExportToast(false)}
         />
       )}
       {infoToast && (
         <Toast
           message={infoToast}
-          duration={5000}
           onClose={() => setInfoToast(null)}
         />
       )}
