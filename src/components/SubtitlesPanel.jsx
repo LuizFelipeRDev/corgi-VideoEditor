@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { SUBTITLE_STYLE_LIST, SUBTITLE_POSITION_LIST } from '../lib/subtitleStyles'
+import { SUBTITLE_STYLES, SUBTITLE_STYLE_LIST, SUBTITLE_POSITION_LIST } from '../lib/subtitleStyles'
 import SubtitleConfigModal from './SubtitleConfigModal'
 import ReplaceWordModal from './ReplaceWordModal'
 import { countInSubtitles } from '../lib/wordReplace'
@@ -135,6 +135,16 @@ function SubtitlesPanel({
   }
 
   const currentSubtitleIndex = getCurrentSubtitleIndex()
+
+  // A style marked `hidden` (the Headline, while it has issues) is out of the
+  // list, but if it is the one in use it still shows as the selected option —
+  // otherwise the select would display another style while the preview renders
+  // the hidden one.
+  const styleOptions = useMemo(() => (
+    SUBTITLE_STYLE_LIST.some((s) => s.id === subtitleStyle)
+      ? SUBTITLE_STYLE_LIST
+      : [...SUBTITLE_STYLE_LIST, SUBTITLE_STYLES[subtitleStyle]].filter(Boolean)
+  ), [subtitleStyle])
 
   // Word count for the Replace Word modal: it walked EVERY word of EVERY
   // subtitle with a regex per token, on every render of the panel (which follows
@@ -272,7 +282,7 @@ function SubtitlesPanel({
               onChange={(e) => onStyleChange(e.target.value)}
               className="w-full h-7 border-2 border-retro-black rounded bg-retro-bg shadow-retro-sm px-2 font-pixel text-[7px] text-retro-black outline-none appearance-none cursor-pointer"
             >
-              {SUBTITLE_STYLE_LIST.map((s) => (
+              {styleOptions.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>

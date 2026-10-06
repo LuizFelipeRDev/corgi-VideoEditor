@@ -229,8 +229,27 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
   const outlineUnits = Number.isFinite(cfg.outlineSize) ? cfg.outlineSize : stylePreset.outlineSize
   // Per-context dial (subtitleConfig.js): 1 = the same proportion as the file.
   const outlineCtx = fullscreen ? SUBTITLE_OUTLINE_FACTORS.fullscreen : SUBTITLE_OUTLINE_FACTORS.preview
-  const outlineEm = (Math.max(0, outlineUnits) * outlineCtx) / Math.max(1, configFontSize)
-  const outlineShadow = `0 0 ${(outlineEm * 0.5).toFixed(4)}em ${stylePreset.outlineColor}, 0 0 ${outlineEm.toFixed(4)}em ${stylePreset.outlineColor}`
+  // \bord and \blur are ABSOLUTE in the export (PlayRes units) while the font is
+  // scaled by the frame — so the ratio here has to use the font AS THE EXPORT
+  // USES IT at the nominal size of the chosen format: base x (nominalWidth /
+  // 1920) x portrait factor. Dividing by the bare base (as before) made the
+  // preview's border ~13% thicker than the file in portrait (measured: Simple
+  // Pop 3.33% in the preview vs 2.96% in the portrait export); in landscape the
+  // nominal IS 1920, so nothing changes there.
+  const playRefWidth = isPortrait ? SUBTITLE_EXPORT_NOMINAL.portrait.width : SUBTITLE_EXPORT_NOMINAL.landscape.width
+  const exportFontUnits = configFontSize * (playRefWidth / SUBTITLE_EXPORT_NOMINAL.landscape.width) * portraitTuning
+  const outlineEm = (Math.max(0, outlineUnits) * outlineCtx) / Math.max(1, exportFontUnits)
+
+  // GLOW (neon): the export's \blur on the border, in the SAME PlayRes unit as
+  // \bord — so the em here is glowBlur / the same font, the file's exact ratio.
+  // Styles without the field keep the old behaviour (the outline's own radius).
+  // Two layers (tight + wide) give the falloff a neon tube has.
+  const glowUnits = stylePreset.glowBlur > 0 ? stylePreset.glowBlur : outlineUnits
+  const glowActiveUnits = stylePreset.glowBlurActive > 0 ? stylePreset.glowBlurActive : glowUnits
+  const glowEm = glowUnits / Math.max(1, exportFontUnits)
+  const glowActiveEm = glowActiveUnits / Math.max(1, exportFontUnits)
+  const glowLayers = (em) => `0 0 ${em.toFixed(4)}em ${stylePreset.outlineColor}, 0 0 ${(em * 2).toFixed(4)}em ${stylePreset.outlineColor}`
+  const outlineShadow = glowLayers(glowEm)
 
   const blockStyle = {
     fontFamily,
@@ -372,6 +391,9 @@ const fontFamily = FONTS.find(f => f.id === fontId)?.family || `'${fontId}', san
         return {
           ...base,
           color: isActive ? highlightColor : primaryColor,
+          // NEON: the lit word's glow is STRONGER (the brighter LED), same hue as
+          // the line's — exactly what the export does with a bigger \blur.
+          ...(isActive && glowActiveEm > 0 ? { textShadow: glowLayers(glowActiveEm) } : {}),
         }
       }
 

@@ -37,6 +37,18 @@
  * SUBTITLE_POPLINE_BOX (height/top relative to the line's baseline),
  * applying to preview, fullscreen and export.
  *
+ * GLOW PROPERTIES (neon look) — optional, 0/absent = no glow:
+ *
+ *   glowBlur:        Gaussian blur on the border (the export's \blur) — the soft
+ *                    halo around the letters. In PlayRes units, the SAME unit as
+ *                    outlineSize, so the preview's em and the file's \blur are the
+ *                    same ratio.
+ *   glowBlurActive:  glow of the ACTIVE word (the 'highlight' animationType
+ *                    lights it up like a brighter LED). Without it the active
+ *                    word uses glowBlur.
+ *   The glow wears outlineColor (one hue), like the export: \blur changes the
+ *   softness, \c changes the fill.
+ *
  * To add a new style reusing an existing animationType, just define:
  *   animationType + popIntensity + popDuration + popSize
  * No need to change SubtitleOverlay.jsx or subtitleRender.js. A NEW
@@ -117,6 +129,10 @@ export const SUBTITLE_STYLES = {
   minimal: {
     id: 'minimal',
     name: 'Headline',
+    // Hidden from the user's style list while it has issues (asked by the
+    // maintainer). It KEEPS working: projects saved with it still render and
+    // export with it, and the panel still shows it as the selected option.
+    hidden: true,
     fontFamily: 'Bebas Neue, sans-serif',
     fontNameFallback: 'IBM Plex Sans, sans-serif',
     fontSize: 120,
@@ -152,7 +168,10 @@ export const SUBTITLE_STYLES = {
     shadowColor: '#000000',
     shadowAlpha: 128,
     outlineSize: 4.0,
-    shadowDepth: 3.0,
+    // No hard offset shadow: libass draws \shad as a SOLID copy, and together
+    // with the border it read heavier than in the preview (asked by the
+    // maintainer after the export looked like it had a stronger border).
+    shadowDepth: 0,
     bold: true,
     italic: false,
     letterSpacing: 3.0,
@@ -196,8 +215,44 @@ export const SUBTITLE_STYLES = {
     bestFor: 'TikTok & viral content',
   },
   */
+  neon: {
+    id: 'neon',
+    name: 'Neon',
+    // Rajdhani Bold: condensed, squared and techno — the face the maintainer
+    // asked for on the Neon style (it replaced Titan One, which read too
+    // "cartoon"). Added on request with its .ttf and the OFL 1.1 entry; the
+    // file is weight 700, so bold:true selects the real face on both sides.
+    fontFamily: 'Rajdhani, sans-serif',
+    fontNameFallback: 'IBM Plex Sans, sans-serif',
+    fontSize: 105,
+    // Body: a cold white. Lit word: magenta LED. The GLOW is outlineColor (cyan)
+    // in both the preview and the export — only its strength changes.
+    primaryColor: '#EAF7FF',
+    highlightColor: '#FF2D95',
+    outlineColor: '#00E5FF',
+    shadowColor: '#000000',
+    shadowAlpha: 0,
+    // The border here is a thin hard edge; the neon look is the GLOW.
+    outlineSize: 1.5,
+    shadowDepth: 0,
+    // The sentence already has a slight blur; the lit word burns brighter.
+    glowBlur: 6,
+    glowBlurActive: 16,
+    // Rajdhani ships as Bold only, and it IS the face we want: bold:true makes
+    // libass pick the Bold outline and the browser ask for weight 700 — the same
+    // face on both sides (no synthetic embolden).
+    bold: true,
+    italic: false,
+    letterSpacing: 0,
+    wordSpacing: 100,
+    // Same animation as Hormozi: the active word lights up.
+    animationType: 'highlight',
+    popIntensity: 0,
+    popDuration: 0,
+    popSize: 0,
+    bestFor: 'Cyberpunk & nightlife',
+  },
   simple: {
-    id: 'simple',
     name: 'Simple',
     fontFamily: 'Montserrat, sans-serif',
     fontNameFallback: 'IBM Plex Sans, sans-serif',
@@ -291,7 +346,12 @@ export const SUBTITLE_POSITIONS = {
   },
 }
 
-export const SUBTITLE_STYLE_LIST = Object.values(SUBTITLE_STYLES)
+// Styles with `hidden: true` are NOT listed for the user (they disappear from
+// SUBTITLE_STYLE_LIST) but keep working everywhere else: a project saved with
+// them still previews and exports with that style, and the panel keeps showing
+// it as the selected option so the select never lies about what is rendering.
+// The Headline is hidden while it has issues (mantenedor, 2026-10).
+export const SUBTITLE_STYLE_LIST = Object.values(SUBTITLE_STYLES).filter((s) => !s.hidden)
 export const SUBTITLE_POSITION_LIST = Object.values(SUBTITLE_POSITIONS)
 
 export const hasPopEffect = (styleId) => {

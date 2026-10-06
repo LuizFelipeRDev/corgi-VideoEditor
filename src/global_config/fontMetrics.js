@@ -42,6 +42,7 @@ export const FONT_RENDER_SCALE = {
   'Lobster': 0.6711, // Lobster-Regular.ttf: 1000/(1000+490)
   'Pacifico': 0.5168, // Pacifico-Regular.ttf: 1000/(1478+457)
   'Permanent Marker': 0.7009, // PermanentMarker-Regular.ttf: 1024/(1136+325)
+  'Rajdhani Bold': 0.7837, // Rajdhani-Bold.ttf: 1000/(930+346)
 }
 
 // Fallback para fontes fora da lista (estilos com familia propria).
@@ -84,6 +85,7 @@ export const FONT_WIN_ASCENT = {
   'Lobster': 0.6711, // 1000/(1000+490)
   'Pacifico': 0.7638, // 1478/(1478+457)
   'Permanent Marker': 0.7775, // 1136/(1136+325)
+  'Rajdhani Bold': 0.7287, // 930/(930+346)
 }
 
 // Fallback para fontes fora da lista (estilos com familia propria).

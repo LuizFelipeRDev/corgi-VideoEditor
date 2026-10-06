@@ -30,6 +30,9 @@ export const FONTS = [
   { id: 'Pacifico', name: 'Pacifico', family: 'Pacifico, sans-serif', assName: 'Pacifico' },
   { id: 'Caveat', name: 'Caveat', family: 'Caveat, sans-serif', assName: 'Caveat' },
   { id: 'Permanent Marker', name: 'Permanent Marker', family: 'Permanent Marker, sans-serif', assName: 'Permanent Marker' },
+  // Rajdhani Bold (weight 700): the Neon subtitle style's face. assName is the
+  // TTF's full name (nameID 4 = "Rajdhani Bold"), which is what libass reports.
+  { id: 'Rajdhani', name: 'Rajdhani', family: 'Rajdhani, sans-serif', assName: 'Rajdhani Bold' },
 ]
 
 export const DEFAULT_FONT_ID = 'Montserrat'

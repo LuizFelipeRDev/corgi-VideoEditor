@@ -136,7 +136,21 @@ export function generateAssContent(subtitles, styleId, position, videoWidth, vid
   // the landscape proportion, so it starts at 1 and only the maintainer tunes
   // it — landscape is never touched by this factor.
   const portraitTuning = playResY > playResX ? SUBTITLE_EXPORT_PORTRAIT_FACTOR : 1
-  const scaledFontSize = Math.round(getExportFontSize(baseFontSize, widthAsHeight) * portraitTuning)
+  // \fs has to be DIVIDED by the font's renderScale, not left at the nominal size.
+  // libass normalizes by the OS/2 winAscent+winDescent pair, so at \fs N it draws
+  // the glyphs at N*renderScale - only 77% of N for Bebas Neue, 73% for Montserrat,
+  // 61% for Komika Axis. The browser (preview/fullscreen) draws the same size in
+  // full, so before this the exported subtitles were smaller than what the editor
+  // shows, on EVERY style (measured 'H' on black: 66px of ink in the file at
+  // \fs 120 against 84px in the browser; after the fix 86px against 84px).
+  // Word widths keep working unchanged and now measure 1/renderScale LARGER,
+  // which is correct: the glyphs really are that much wider in the file now, so
+  // fewer words fit per line. \bord/\shad/\blur stay ABSOLUTE in PlayRes units
+  // (measured: constant 8px of ink for \bord 4 at \fs 105..240), which is what the
+  // preview wants too - the border now sits at the same ratio to the letters as
+  // in the editor instead of looking heavier on a shrunken glyph.
+  const assRenderScale = getFontRenderScale(assFontName)
+  const scaledFontSize = Math.round(getExportFontSize(baseFontSize, widthAsHeight) * portraitTuning / assRenderScale)
 
   const exportCtx = SUBTITLE_DISPLAY_DEFAULTS.export
   const effectivePositionMode = positionMode || exportCtx.positionMode || 'fixed'
@@ -628,7 +642,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           .join('')
       }
 
-      assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${text}\n`
+      // GLOW (neon): \blur is the Gaussian blur libass applies to the border —
+      // in PlayRes units, the SAME unit as \bord, so the preview's em and the
+      // file's \blur are the same ratio. Emitted at the START of the line, so a
+      // later tag (the lit word) can raise it.
+      const blurTag = styleConfig.glowBlur > 0 ? `{\\blur${styleConfig.glowBlur}}` : ''
+      assContent += `Dialogue: 0,${secondsToAssTime(eventStart)},${secondsToAssTime(eventEnd)},Default,,0,0,0,,${blurTag}${text}\n`
     }
   }
 
@@ -967,8 +986,12 @@ function getAnimationTag(styleConfig, highlightAss, word, eventDuration, measure
       return `{\\t(0,${growMs},\\fscx${popPeak}\\fscy${popPeak})\\c${highlightAss}}`
     }
     case 'highlight':
-    default:
-      return `{\\c${highlightAss}}`
+    default: {
+      // NEON: the lit word burns brighter — a bigger \blur than the line's.
+      // Same glow hue (outlineColor) in both renderers; only the strength moves.
+      const glowActive = styleConfig.glowBlurActive > 0 ? `\\blur${styleConfig.glowBlurActive}` : ''
+      return `{\\c${highlightAss}${glowActive}}`
+    }
   }
 }
 

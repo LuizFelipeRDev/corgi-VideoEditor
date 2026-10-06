@@ -40,6 +40,7 @@ reembalagem/re-release sem autorização; e a fonte jamais pode ser vendida ou c
 | `PermanentMarker-Regular.ttf` | Permanent Marker | OFL 1.1 | Copyright (c) 2010 by Font Diner, Inc. All rights reserved. |
 | `PlayfairDisplay-Bold.ttf` | Playfair Display | OFL 1.1 | Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name "Playfair Display" |
 | `Poppins-ExtraBold.ttf` | Poppins | OFL 1.1 | Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins) |
+| `Rajdhani-Bold.ttf` | Rajdhani | OFL 1.1 | Copyright (c) 2014 Indian Type Foundry (info@indiantypefoundry.com) |
 | `Raleway-Bold.ttf` | Raleway | OFL 1.1 | Copyright 2010 The Raleway Project Authors (impallari@gmail.com), with Reserved Font Name "Raleway" |
 | `Roboto-Black.ttf` | Roboto | OFL 1.1 | Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic) |
 | `Rubik-ExtraBold.ttf` | Rubik | OFL 1.1 | Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik) |

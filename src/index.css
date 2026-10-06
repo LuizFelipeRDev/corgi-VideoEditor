@@ -132,6 +132,15 @@
   font-style: normal;
 }
 
+/* Rajdhani Bold (weight 700 -> declared bold, so the browser does not
+   synthesize, matching libass). Added for the Neon subtitle style. */
+@font-face {
+  font-family: 'Rajdhani';
+  src: url('./global_config/fonts/Rajdhani-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
 /* Extra families added on request: weight follows the libass rule above
    (files >= 700 declared bold so the browser does not synthesize; 400-only
    files declared normal so both sides synthesize when bold is requested). */
